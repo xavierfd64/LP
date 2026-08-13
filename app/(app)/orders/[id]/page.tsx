@@ -8,10 +8,13 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { paymentSummary } from "@/lib/workflow";
 import { AddJobOrderForm } from "./add-jo-form";
 import { startProductionAction } from "@/app/actions/orders";
+import { releaseJobOrderAction } from "@/app/actions/payments";
+import { PaymentProofForm } from "./payment-proof-form";
+import { ReleaseExceptionForm } from "./release-exception-form";
 
 export default async function OrderDetailPage({
   params,
@@ -109,12 +112,65 @@ export default async function OrderDetailPage({
                 <span className="text-yellow-700">Awaiting partial payment</span>
               )}
             </p>
-            <Link href="/payments" className="text-sm underline text-slate-600">
-              View / record payments →
-            </Link>
+            {isStaffLike && (
+              <Link href="/payments" className="text-sm underline text-slate-600">
+                Record a payment →
+              </Link>
+            )}
+            <div className="pt-2 flex flex-col gap-2 items-start">
+              {!isStaffLike && <PaymentProofForm orderId={order.id} />}
+              {isStaffLike && !summary.fullyPaid && !order.releaseException && (
+                <ReleaseExceptionForm orderId={order.id} />
+              )}
+              {order.releaseException && (
+                <p className="text-xs text-slate-500">
+                  Release exception granted by {order.releaseExceptionBy}: {order.releaseExceptionReason}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {order.payments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment history</CardTitle>
+          </CardHeader>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Date</TH>
+                <TH>Amount</TH>
+                <TH>Method</TH>
+                <TH>Status</TH>
+                <TH>Proof</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {order.payments.map((p) => (
+                <TR key={p.id}>
+                  <TD>{formatDateTime(p.createdAt)}</TD>
+                  <TD>{formatCurrency(p.amount.toString())}</TD>
+                  <TD>{p.method.replace(/_/g, " ")}</TD>
+                  <TD>
+                    <StatusBadge status={p.status} />
+                  </TD>
+                  <TD>
+                    {p.proofFilePath ? (
+                      <a href={p.proofFilePath} target="_blank" className="text-sm underline text-slate-600">
+                        View
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -136,6 +192,7 @@ export default async function OrderDetailPage({
           <TBody>
             {order.jobOrders.map((jo) => {
               const start = startProductionAction.bind(null, jo.id);
+              const release = releaseJobOrderAction.bind(null, jo.id);
               return (
                 <TR key={jo.id}>
                   <TD className="font-medium text-slate-900">{jo.joNumber}</TD>
@@ -154,6 +211,13 @@ export default async function OrderDetailPage({
                       <form action={start}>
                         <Button type="submit" size="sm" variant="outline">
                           Start Production
+                        </Button>
+                      </form>
+                    )}
+                    {isStaffLike && jo.status === "READY" && (
+                      <form action={release}>
+                        <Button type="submit" size="sm" variant="outline">
+                          Release
                         </Button>
                       </form>
                     )}

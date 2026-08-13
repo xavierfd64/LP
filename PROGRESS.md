@@ -34,7 +34,18 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - "Start Production" wires straight into `lib/workflow.ts`'s `startProduction()` — this is Rule #1 from Section 7, enforced now rather than deferred to Phase 3, since the gate logic and the JO-creation flow are naturally the same piece of work. Verified end-to-end (Playwright-driven browser test against the running dev server + seeded DB): attempting to start production on an unpaid `STANDARD_PARTIAL` order is blocked with `On hold: requires 1000.00 confirmed partial payment (has 0.00), or an approved payment-terms exception.`, and the JO stays `ON_HOLD`.
 - Job Order detail page (baseline version): header info, full stage list from its template with the current stage highlighted, and stage-log history. Stage-advance UI, QC, files, and fulfillment are added in later phases.
 
-### Phase 3 — Payment & terms gate (next)
+### Phase 3 — Payment & terms gate ✅
+- `/payments`: staff/admin view of every payment across all orders, with a "Record Payment" form (creates a `CONFIRMED` payment directly) and Confirm/Reject actions for `PENDING` ones.
+- Customer-side "Upload Payment Proof" on the order detail page: amount + file upload, creates a `PENDING` payment with the proof file linked (`lib/upload.ts`); staff then confirms or rejects it from `/payments`.
+- Order detail page shows full payment history (date, amount, method, status, proof link) alongside the live payment summary from Phase 2.
+- Rule #2 (Section 7) — a JobOrder cannot be `RELEASED` without full payment or an authorized release exception — implemented as `assertCanRelease()` in `lib/workflow.ts` and wired to a "Release" action (shown once a JO reaches `READY`, from `/orders/[id]` and `/job-orders/[id]`).
+- "Grant Release Exception" form on the order page captures who authorized it and why (mirrors the approved-terms exception from Phase 2), audit-logged as `RELEASE_EXCEPTION_GRANTED`.
+- Verified end-to-end against the seeded DB (Playwright-driven browser runs, cross-checked against server logs and direct DB queries, then reverted the test mutations):
+  - Recording a `CASH`/etc. payment that meets the required partial % correctly unblocks "Start Production" (`ON_HOLD` → `IN_PROGRESS`).
+  - Attempting to release a `READY` JO on an order that's only 50% paid is blocked with `Cannot release: full payment required (7500.00 of 15000.00 confirmed), or an authorized release exception.` and the JO stays `READY`.
+  - Granting a release exception (audit-logged) immediately unblocks the same JO's release (`READY` → `RELEASED`), and the audit trail records both `RELEASE_EXCEPTION_GRANTED` and `JOB_ORDER_RELEASED`.
+
+### Phase 4 — Workflow templates + Production portal (next)
 ...
 
 ## Known Stubs

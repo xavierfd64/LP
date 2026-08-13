@@ -7,7 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { releaseJobOrderAction } from "@/app/actions/payments";
 
 export default async function JobOrderDetailPage({
   params,
@@ -34,6 +36,7 @@ export default async function JobOrderDetailPage({
   }
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
+  const release = releaseJobOrderAction.bind(null, jo.id);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -46,7 +49,16 @@ export default async function JobOrderDetailPage({
             {jo.order.orderNumber}
           </Link>
         </div>
-        <StatusBadge status={jo.status} />
+        <div className="flex items-center gap-3">
+          <StatusBadge status={jo.status} />
+          {isStaffLike && jo.status === "READY" && (
+            <form action={release}>
+              <Button type="submit" size="sm">
+                Release
+              </Button>
+            </form>
+          )}
+        </div>
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
