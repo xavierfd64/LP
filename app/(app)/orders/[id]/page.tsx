@@ -32,6 +32,7 @@ export default async function OrderDetailPage({
       quotation: true,
       jobOrders: { include: { workflowTemplate: true }, orderBy: { joNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
+      fulfillments: { orderBy: { createdAt: "desc" }, include: { jobOrder: true } },
     },
   });
   if (!order) notFound();
@@ -229,6 +230,34 @@ export default async function OrderDetailPage({
         </Table>
         {order.jobOrders.length === 0 && <EmptyState label="No job orders yet." />}
       </Card>
+
+      {order.fulfillments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Fulfillment & Tracking</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {order.fulfillments.map((f) => (
+              <div key={f.id} className="flex items-center justify-between rounded border border-slate-100 px-3 py-2 text-sm">
+                <div>
+                  <span className="font-medium">{f.jobOrder?.joNumber}</span>
+                  <span className="text-slate-500"> — {f.method}</span>
+                  {f.method === "DELIVERY" && f.trackingNumber && (
+                    <span className="text-slate-500">
+                      {" "}
+                      · {f.courier} #{f.trackingNumber}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {f.scheduledDate && <span className="text-slate-500">{formatDate(f.scheduledDate)}</span>}
+                  <StatusBadge status={f.status} />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -90,7 +90,12 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - `/admin/audit-log`: filterable table (entity type, actor, date range) over every `AuditLog` row written by the app so far — quotation approvals, payment recording, payment-terms/release exceptions, JO stage changes, QC results, rework created/closed, inventory movements, file uploads/approvals, fulfillment/release/completion events, and now user creation, satisfying every state-changing action listed in spec Section 5.12.
 - Verified end-to-end: confirmed a fresh reseed has zero audit rows (the seed script doesn't route through the app, so this is correct, not a bug), then created a user through the admin UI and confirmed it appeared in the audit log both unfiltered and when filtering by `entityType=User`.
 
-### Phase 11 — Customer Portal polish (next)
+### Phase 11 — Customer Portal polish ✅
+- Rebuilt `/dashboard` for the `CUSTOMER` role into a real dashboard per spec 5.13, pulling live data instead of the generic quick-link grid still used for staff: quotations awaiting approval, active orders count, balance due, reward points — all as clickable stat cards — plus an active-orders list with inline JO-level status chips, recent inquiries, and quotations awaiting approval.
+- Added a "Fulfillment & Tracking" section directly to the order detail page (previously tracking/courier info was only visible one level down on the job order detail page) — method, status, scheduled date, and courier/tracking number per JO's fulfillment record.
+- Confirmed every customer-facing action from spec 5.13 is reachable: submit inquiry, view/approve quotations, view order/JO progress, upload payment proof, view payment history, approve a pending design draft, view fulfillment/tracking, view rewards balance/history/redeem — all exercised via the earlier phases' end-to-end tests plus a fresh pass over the customer dashboard and order detail page against the seeded DB.
+
+### Phase 12 — Verify business rules + PROGRESS.md/README (next)
 ...
 
 ## Known Stubs
