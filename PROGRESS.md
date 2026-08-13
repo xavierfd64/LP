@@ -25,7 +25,16 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - Role-aware shell layout + sidebar nav (`components/layout/`).
 - Core cross-cutting libs used by every later phase: `lib/workflow.ts` (payment-gate + stage-advance business rules), `lib/numbering.ts` (order/JO/quote/lot numbering), `lib/audit.ts`, `lib/notify.ts` (stub), `lib/upload.ts`.
 
-### Phase 2 — Core lifecycle (in progress)
+### Phase 2 — Core lifecycle ✅
+- Inquiries: customer self-submit (or staff on behalf of a customer), list, detail, staff "Close Inquiry" action.
+- Quotations: staff creates from an inquiry (or from scratch) with a dynamic multi-line-item form (client-managed rows, total computed live), Draft → Send → Approve/Reject flow. Approving an inquiry-linked quotation flips the inquiry to `QUOTED`.
+- Orders: staff creates an order directly or from an approved quotation, choosing `STANDARD_PARTIAL` (with a configurable required-partial %) or `APPROVED_TERMS` (captures who authorized it and why — both logged to the audit trail). Auto-numbered `ORD-YYYY-####`.
+- Job Orders: staff adds one or more JOs to an order, each bound to an active Workflow Template; auto-numbered `JO-###` scoped to the order (fixed the schema to make `joNumber` unique per-order rather than globally, since every order legitimately starts its own `JO-001`).
+- Order detail page shows payment-term info, a live payment summary (confirmed vs. required-partial vs. total), and the JO list with a "Start Production" action per JO.
+- "Start Production" wires straight into `lib/workflow.ts`'s `startProduction()` — this is Rule #1 from Section 7, enforced now rather than deferred to Phase 3, since the gate logic and the JO-creation flow are naturally the same piece of work. Verified end-to-end (Playwright-driven browser test against the running dev server + seeded DB): attempting to start production on an unpaid `STANDARD_PARTIAL` order is blocked with `On hold: requires 1000.00 confirmed partial payment (has 0.00), or an approved payment-terms exception.`, and the JO stays `ON_HOLD`.
+- Job Order detail page (baseline version): header info, full stage list from its template with the current stage highlighted, and stage-log history. Stage-advance UI, QC, files, and fulfillment are added in later phases.
+
+### Phase 3 — Payment & terms gate (next)
 ...
 
 ## Known Stubs
