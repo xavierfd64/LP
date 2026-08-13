@@ -1,0 +1,120 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/session";
+import { logAudit } from "@/lib/audit";
+import { saveUploadedFile } from "@/lib/upload";
+import { notify } from "@/lib/notify";
+
+async function maybeCompleteOrder(orderId: string) {
+  const jobOrders = await prisma.jobOrder.findMany({ where: { orderId } });
+  if (jobOrders.length > 0 && jobOrders.every((j) => j.status === "COMPLETED")) {
+    await prisma.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } });
+    const { onOrderCompleted } = await import("@/lib/rewards");
+    await onOrderCompleted(orderId);
+  }
+}
+
+export async function createFulfillmentAction(jobOrderId: string, formData: FormData) {
+  const user = await requireRole(["STAFF", "ADMIN"]);
+  const jo = await prisma.jobOrder.findUniqueOrThrow({
+    where: { id: jobOrderId },
+    include: { workflowTemplate: { include: { stages: true } } },
+  });
+
+  if (jo.status !== "RELEASED") {
+    redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent("Job order must be RELEASED before fulfillment can be scheduled.")}`);
+  }
+
+  const method = formData.get("method") as "PICKUP" | "DELIVERY" | "INSTALLATION";
+  const scheduledDateRaw = formData.get("scheduledDate") as string | null;
+  const trackingNumber = (formData.get("trackingNumber") as string) || undefined;
+  const courier = (formData.get("courier") as string) || undefined;
+
+  if (method === "INSTALLATION" && !jo.workflowTemplate.stages.some((s) => s.isInstallStage)) {
+    redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent("This product's workflow has no installation stage.")}`);
+  }
+
+  const initialStatus = method === "DELIVERY" ? "BOOKED" : "SCHEDULED";
+
+  const fulfillment = await prisma.fulfillment.create({
+    data: {
+      orderId: jo.orderId,
+      jobOrderId: jo.id,
+      method,
+      status: initialStatus,
+      scheduledDate: scheduledDateRaw ? new Date(scheduledDateRaw) : undefined,
+      trackingNumber: method === "DELIVERY" ? trackingNumber : undefined,
+      courier: method === "DELIVERY" ? courier : undefined,
+    },
+  });
+
+  await prisma.order.updateMany({ where: { id: jo.orderId, status: { not: "COMPLETED" } }, data: { status: "FULFILLING" } });
+  await logAudit(user.id, "FULFILLMENT_CREATED", "Fulfillment", fulfillment.id, { method, jobOrderId });
+  notify("customer", `Your order ${jo.joNumber} is now being fulfilled via ${method.toLowerCase()}.`);
+
+  redirect(`/job-orders/${jobOrderId}`);
+}
+
+export async function advanceDeliveryAction(fulfillmentId: string, jobOrderId: string) {
+  const user = await requireRole(["STAFF", "ADMIN"]);
+  const f = await prisma.fulfillment.findUniqueOrThrow({ where: { id: fulfillmentId } });
+
+  const next = f.status === "BOOKED" ? "IN_TRANSIT" : f.status === "IN_TRANSIT" ? "DELIVERED" : null;
+  if (!next) redirect(`/job-orders/${jobOrderId}`);
+
+  await prisma.fulfillment.update({
+    where: { id: fulfillmentId },
+    data: { status: next!, completedAt: next === "DELIVERED" ? new Date() : undefined },
+  });
+  await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: next });
+
+  if (next === "DELIVERED") {
+    await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+    await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
+    await maybeCompleteOrder(f.orderId);
+  }
+
+  redirect(`/job-orders/${jobOrderId}`);
+}
+
+export async function uploadDeliveryProofAction(fulfillmentId: string, jobOrderId: string, formData: FormData) {
+  const user = await requireRole(["STAFF", "ADMIN"]);
+  const file = formData.get("proofFile") as File | null;
+  if (!file || file.size === 0) redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent("Choose a file first.")}`);
+
+  const saved = await saveUploadedFile(file!);
+  await prisma.fulfillment.update({ where: { id: fulfillmentId }, data: { proofFilePath: saved.path } });
+  await logAudit(user.id, "DELIVERY_PROOF_UPLOADED", "Fulfillment", fulfillmentId, {});
+
+  redirect(`/job-orders/${jobOrderId}`);
+}
+
+export async function markPickedUpAction(fulfillmentId: string, jobOrderId: string) {
+  const user = await requireRole(["STAFF", "ADMIN"]);
+  const f = await prisma.fulfillment.update({
+    where: { id: fulfillmentId },
+    data: { status: "RECEIVED", completedAt: new Date() },
+  });
+  await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+  await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: "RECEIVED" });
+  await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
+  await maybeCompleteOrder(f.orderId);
+
+  redirect(`/job-orders/${jobOrderId}`);
+}
+
+export async function markInstalledAction(fulfillmentId: string, jobOrderId: string) {
+  const user = await requireRole(["STAFF", "ADMIN"]);
+  const f = await prisma.fulfillment.update({
+    where: { id: fulfillmentId },
+    data: { status: "INSTALLED", completedAt: new Date() },
+  });
+  await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+  await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: "INSTALLED" });
+  await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
+  await maybeCompleteOrder(f.orderId);
+
+  redirect(`/job-orders/${jobOrderId}`);
+}

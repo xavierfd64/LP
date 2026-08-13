@@ -14,6 +14,13 @@ import { approveFileAction } from "@/app/actions/files";
 import { QCForm } from "./qc-form";
 import { UploadFileForm } from "./upload-file-form";
 import { Badge } from "@/components/ui/badge";
+import { CreateFulfillmentForm } from "./fulfillment-form";
+import { DeliveryProofForm } from "./delivery-proof-form";
+import {
+  advanceDeliveryAction,
+  markPickedUpAction,
+  markInstalledAction,
+} from "@/app/actions/fulfillment";
 
 export default async function JobOrderDetailPage({
   params,
@@ -32,6 +39,7 @@ export default async function JobOrderDetailPage({
       stageLogs: { orderBy: { stageOrder: "asc" } },
       qcResults: { orderBy: { createdAt: "desc" }, include: { inspector: true, reworkRecord: { include: { assignedTo: true } } } },
       files: { orderBy: [{ category: "asc" }, { version: "desc" }], include: { uploadedBy: true } },
+      fulfillments: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!jo) notFound();
@@ -261,6 +269,83 @@ export default async function JobOrderDetailPage({
                 )}
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {(jo.status === "RELEASED" || jo.fulfillments.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Fulfillment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {jo.fulfillments.map((f) => {
+              const advanceDelivery = advanceDeliveryAction.bind(null, f.id, jo.id);
+              const markPickedUp = markPickedUpAction.bind(null, f.id, jo.id);
+              const markInstalled = markInstalledAction.bind(null, f.id, jo.id);
+              return (
+                <div key={f.id} className="rounded-md border border-slate-200 p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">
+                      {f.method} — <StatusBadge status={f.status} />
+                    </span>
+                    <span className="text-slate-500">{formatDate(f.scheduledDate)}</span>
+                  </div>
+                  {f.method === "DELIVERY" && (
+                    <p className="mt-1 text-slate-600">
+                      {f.courier ?? "Courier TBD"} · Tracking: {f.trackingNumber ?? "—"}
+                    </p>
+                  )}
+                  {f.proofFilePath && (
+                    <a href={f.proofFilePath} target="_blank" className="mt-1 inline-block text-slate-600 underline">
+                      View proof of delivery
+                    </a>
+                  )}
+                  {isStaffLike && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {f.method === "PICKUP" && f.status === "SCHEDULED" && (
+                        <form action={markPickedUp}>
+                          <Button type="submit" size="sm">
+                            Mark Picked Up
+                          </Button>
+                        </form>
+                      )}
+                      {f.method === "DELIVERY" && f.status === "BOOKED" && (
+                        <form action={advanceDelivery}>
+                          <Button type="submit" size="sm">
+                            Mark In Transit
+                          </Button>
+                        </form>
+                      )}
+                      {f.method === "DELIVERY" && f.status === "IN_TRANSIT" && (
+                        <form action={advanceDelivery}>
+                          <Button type="submit" size="sm">
+                            Mark Delivered
+                          </Button>
+                        </form>
+                      )}
+                      {f.method === "DELIVERY" && f.status !== "DELIVERED" && (
+                        <DeliveryProofForm fulfillmentId={f.id} jobOrderId={jo.id} />
+                      )}
+                      {f.method === "INSTALLATION" && f.status === "SCHEDULED" && (
+                        <form action={markInstalled}>
+                          <Button type="submit" size="sm">
+                            Mark Installed
+                          </Button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {isStaffLike && jo.status === "RELEASED" && jo.fulfillments.length === 0 && (
+              <CreateFulfillmentForm
+                jobOrderId={jo.id}
+                allowInstall={jo.workflowTemplate.stages.some((s) => s.isInstallStage)}
+              />
+            )}
           </CardContent>
         </Card>
       )}

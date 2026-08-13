@@ -72,7 +72,13 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - "Approve" action flags a file `isApproved` and simultaneously un-approves any other file in the same JO+category (so exactly one version per category is ever flagged as the active/in-use one). Staff/admin/production can approve any category; customers can only approve `DESIGN_DRAFT` files — this is the design-approval action from spec 5.13 ("design approval action if a design is pending their review").
 - Verified end-to-end against the seeded DB: uploaded a new Design Draft v2 (auto-versioned correctly above the existing v1), then approved it as the customer — confirmed only that file flips to `isApproved=true` and no other category's approval state is disturbed. Tightened the customer-approval permission during testing (initially it let a customer approve any category, which doesn't match the spec's design-review framing) and re-verified the fix.
 
-### Phase 8 — Fulfillment (next)
+### Phase 8 — Fulfillment ✅
+- Fulfillment can only be scheduled once a JO is `RELEASED` (i.e. Rule #2's payment gate has already passed) — a "Schedule Fulfillment" form on the job order detail page offers Pickup, Delivery, or Installation, with Installation only available when the JO's workflow template actually has a stage flagged `isInstallStage` (Signage does; Jersey/Tarp/DTF Shirt don't).
+- Pickup: single "Mark Picked Up" action → `RECEIVED`. Delivery: `BOOKED → IN_TRANSIT → DELIVERED` with courier/tracking-number fields and a proof-of-delivery upload. Installation: scheduled date + "Mark Installed" → `INSTALLED`.
+- Reaching any terminal fulfillment status marks the JobOrder `COMPLETED`; once every JO on an Order is `COMPLETED`, the Order itself flips to `COMPLETED` and triggers `lib/rewards.ts`'s `onOrderCompleted()` — this pulls Phase 9's core "auto-earn on completion" logic forward since it's the natural trigger point, so Phase 9 is now mostly the reward-rule admin UI and the customer-facing rewards view.
+- Verified end-to-end against the seeded DB: released a JO, scheduled a Delivery fulfillment with courier/tracking, walked it through Booked → In Transit → Delivered, and confirmed the full cascade fired correctly — JobOrder → `COMPLETED`, Order → `COMPLETED`, a `RewardTransaction` (`EARN`, 125 points on a ₱12,500 order at the seeded 1pt/₱100 rule) created, and the customer's `rewardPointsBalance` incremented to match.
+
+### Phase 9 — Rewards (next)
 ...
 
 ## Known Stubs
