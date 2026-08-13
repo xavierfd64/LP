@@ -84,7 +84,13 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - Customer `/account/rewards`: points balance, full transaction history (EARN in green, REDEEM in slate, signed point deltas), and a "Redeem Points" form (points + free-text "what for") that validates the customer isn't redeeming more than their current balance before writing anything.
 - Verified end-to-end against the seeded DB: attempting to redeem 9999 points against a 400-point balance was correctly rejected with no transaction written; redeeming a valid 100 points immediately updated the balance to 300 and appended a `REDEEM` row. Separately, creating and activating a new reward rule from the admin UI correctly flipped the previously-active rule to inactive in the same action.
 
-### Phase 10 — Management Dashboard + Audit Trail (next)
+### Phase 10 — Management Dashboard + Audit Trail ✅
+- `/admin/users`: the "Create User" admin screen called for in Section 3 (Staff/Production/Admin accounts are admin-created; only Customer self-registers) — name/email/role/temp-password form, audit-logged as `USER_CREATED`.
+- `/admin/dashboard` rebuilt with live widgets, all pulled from real DB queries (no mock data): open quotations, JOs-by-stage breakdown, QC pass/fail rate, low-stock item count, total outstanding balance (with a drill-down list of which orders owe what), upcoming fulfillments (next 8 by scheduled date), new vs. returning customers this month, and reward points issued/redeemed this month.
+- `/admin/audit-log`: filterable table (entity type, actor, date range) over every `AuditLog` row written by the app so far — quotation approvals, payment recording, payment-terms/release exceptions, JO stage changes, QC results, rework created/closed, inventory movements, file uploads/approvals, fulfillment/release/completion events, and now user creation, satisfying every state-changing action listed in spec Section 5.12.
+- Verified end-to-end: confirmed a fresh reseed has zero audit rows (the seed script doesn't route through the app, so this is correct, not a bug), then created a user through the admin UI and confirmed it appeared in the audit log both unfiltered and when filtering by `entityType=User`.
+
+### Phase 11 — Customer Portal polish (next)
 ...
 
 ## Known Stubs
