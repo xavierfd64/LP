@@ -78,7 +78,13 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - Reaching any terminal fulfillment status marks the JobOrder `COMPLETED`; once every JO on an Order is `COMPLETED`, the Order itself flips to `COMPLETED` and triggers `lib/rewards.ts`'s `onOrderCompleted()` — this pulls Phase 9's core "auto-earn on completion" logic forward since it's the natural trigger point, so Phase 9 is now mostly the reward-rule admin UI and the customer-facing rewards view.
 - Verified end-to-end against the seeded DB: released a JO, scheduled a Delivery fulfillment with courier/tracking, walked it through Booked → In Transit → Delivered, and confirmed the full cascade fired correctly — JobOrder → `COMPLETED`, Order → `COMPLETED`, a `RewardTransaction` (`EARN`, 125 points on a ₱12,500 order at the seeded 1pt/₱100 rule) created, and the customer's `rewardPointsBalance` incremented to match.
 
-### Phase 9 — Rewards (next)
+### Phase 9 — Rewards ✅
+- Admin `/admin/rewards`: create reward rules (name, points earned per currency unit, e.g. "1 point per ₱100"), and toggle one active — activating a rule automatically deactivates every other one, so exactly one rule is ever in effect (enforced in `toggleRewardRuleAction`, not just the UI).
+- The earn side was already wired in Phase 8 (`lib/rewards.ts`'s `onOrderCompleted()`, called when an Order's last JO completes) — this phase is the admin config UI plus the customer-facing side.
+- Customer `/account/rewards`: points balance, full transaction history (EARN in green, REDEEM in slate, signed point deltas), and a "Redeem Points" form (points + free-text "what for") that validates the customer isn't redeeming more than their current balance before writing anything.
+- Verified end-to-end against the seeded DB: attempting to redeem 9999 points against a 400-point balance was correctly rejected with no transaction written; redeeming a valid 100 points immediately updated the balance to 300 and appended a `REDEEM` row. Separately, creating and activating a new reward rule from the admin UI correctly flipped the previously-active rule to inactive in the same action.
+
+### Phase 10 — Management Dashboard + Audit Trail (next)
 ...
 
 ## Known Stubs
