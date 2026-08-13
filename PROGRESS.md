@@ -66,7 +66,13 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - Verified end-to-end against the seeded DB: consuming 5 units against a 12-unit lot correctly brought it to 7, and immediately attempting to consume 100 more was rejected with `Cannot consume more than the remaining quantity in this lot (7 available)` — confirmed the lot's `remainingQty` was untouched and no `InventoryMovement` row was written for the rejected attempt.
 - Fixed a related seed inconsistency this phase surfaced: the seed had created an `ALLOCATE` movement without actually decrementing the lot's `remainingQty`/item's `currentQty` (a leftover from before movements had a defined signed-delta convention) — corrected the seed data to be internally consistent with how `recordMovementAction` actually accounts for stock.
 
-### Phase 7 — File Repository (next)
+### Phase 7 — File Repository ✅
+- Files tab on the job order detail page, grouped exactly in spec order: Customer Files → Design Versions → Approved Design → Production Files → QC Evidence. Each file shows filename, version, uploader, timestamp, an "Approved / In Use" badge, and a download link (served straight from `public/uploads/` via Next's static file handling).
+- Upload form (`app/actions/files.ts`): version auto-increments per job-order-per-category; customers are restricted to uploading `CUSTOMER_FILE`s, staff/admin/production can upload to any category.
+- "Approve" action flags a file `isApproved` and simultaneously un-approves any other file in the same JO+category (so exactly one version per category is ever flagged as the active/in-use one). Staff/admin/production can approve any category; customers can only approve `DESIGN_DRAFT` files — this is the design-approval action from spec 5.13 ("design approval action if a design is pending their review").
+- Verified end-to-end against the seeded DB: uploaded a new Design Draft v2 (auto-versioned correctly above the existing v1), then approved it as the customer — confirmed only that file flips to `isApproved=true` and no other category's approval state is disturbed. Tightened the customer-approval permission during testing (initially it let a customer approve any category, which doesn't match the spec's design-review framing) and re-verified the fix.
+
+### Phase 8 — Fulfillment (next)
 ...
 
 ## Known Stubs

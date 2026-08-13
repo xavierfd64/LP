@@ -10,7 +10,10 @@ import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/tab
 import { Button } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { releaseJobOrderAction } from "@/app/actions/payments";
+import { approveFileAction } from "@/app/actions/files";
 import { QCForm } from "./qc-form";
+import { UploadFileForm } from "./upload-file-form";
+import { Badge } from "@/components/ui/badge";
 
 export default async function JobOrderDetailPage({
   params,
@@ -28,6 +31,7 @@ export default async function JobOrderDetailPage({
       workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } },
       stageLogs: { orderBy: { stageOrder: "asc" } },
       qcResults: { orderBy: { createdAt: "desc" }, include: { inspector: true, reworkRecord: { include: { assignedTo: true } } } },
+      files: { orderBy: [{ category: "asc" }, { version: "desc" }], include: { uploadedBy: true } },
     },
   });
   if (!jo) notFound();
@@ -41,6 +45,24 @@ export default async function JobOrderDetailPage({
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const release = releaseJobOrderAction.bind(null, jo.id);
+
+  const FILE_CATEGORY_ORDER = ["CUSTOMER_FILE", "DESIGN_DRAFT", "APPROVED_DESIGN", "PRODUCTION_FILE", "QC_EVIDENCE"] as const;
+  const FILE_CATEGORY_LABELS: Record<string, string> = {
+    CUSTOMER_FILE: "Customer Files",
+    DESIGN_DRAFT: "Design Versions",
+    APPROVED_DESIGN: "Approved Design",
+    PRODUCTION_FILE: "Production Files",
+    QC_EVIDENCE: "QC Evidence",
+  };
+  const filesByCategory = FILE_CATEGORY_ORDER.map((cat) => ({
+    category: cat,
+    files: jo.files.filter((f) => f.category === cat),
+  })).filter((g) => g.files.length > 0);
+  function canApproveCategory(category: string) {
+    if (isProductionLike) return true;
+    if (user.role === "CUSTOMER") return category === "DESIGN_DRAFT";
+    return false;
+  }
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -106,6 +128,51 @@ export default async function JobOrderDetailPage({
             <span className="text-slate-500">Description: </span>
             {jo.description}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Files</CardTitle>
+          <UploadFileForm jobOrderId={jo.id} isCustomer={user.role === "CUSTOMER"} />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {filesByCategory.map((group) => (
+            <div key={group.category}>
+              <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                {FILE_CATEGORY_LABELS[group.category]}
+              </p>
+              <div className="space-y-1">
+                {group.files.map((f) => {
+                  const approve = approveFileAction.bind(null, f.id);
+                  return (
+                    <div key={f.id} className="flex items-center justify-between rounded border border-slate-100 px-3 py-1.5 text-sm">
+                      <div className="flex items-center gap-2">
+                        <a href={f.path} target="_blank" className="font-medium text-slate-900 underline">
+                          {f.filename}
+                        </a>
+                        <span className="text-xs text-slate-400">v{f.version}</span>
+                        {f.isApproved && <Badge tone="green">Approved / In Use</Badge>}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <span>
+                          {f.uploadedBy.name} · {formatDateTime(f.createdAt)}
+                        </span>
+                        {!f.isApproved && canApproveCategory(f.category) && (
+                          <form action={approve}>
+                            <Button type="submit" size="sm" variant="outline">
+                              Approve
+                            </Button>
+                          </form>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {filesByCategory.length === 0 && <EmptyState label="No files uploaded yet." />}
         </CardContent>
       </Card>
 
