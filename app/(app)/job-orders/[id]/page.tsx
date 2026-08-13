@@ -10,6 +10,7 @@ import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/tab
 import { Button } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { releaseJobOrderAction } from "@/app/actions/payments";
+import { QCForm } from "./qc-form";
 
 export default async function JobOrderDetailPage({
   params,
@@ -26,9 +27,12 @@ export default async function JobOrderDetailPage({
       order: { include: { customer: true } },
       workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } },
       stageLogs: { orderBy: { stageOrder: "asc" } },
+      qcResults: { orderBy: { createdAt: "desc" }, include: { inspector: true, reworkRecord: { include: { assignedTo: true } } } },
     },
   });
   if (!jo) notFound();
+
+  const isProductionLike = user.role === "PRODUCTION" || isStaffLike;
 
   if (!isStaffLike && user.role === "CUSTOMER") {
     const customer = await getCurrentCustomer(user.id);
@@ -62,6 +66,24 @@ export default async function JobOrderDetailPage({
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
+
+      {jo.status === "QC" && isProductionLike && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Record QC result</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <QCForm
+              jobOrderId={jo.id}
+              quantity={jo.quantity}
+              stages={jo.workflowTemplate.stages.filter((s) => !s.isQCStage)}
+              defaultAssignedStage={
+                jo.workflowTemplate.stages.find((s) => s.order === jo.currentStageOrder - 1)?.name
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -141,6 +163,40 @@ export default async function JobOrderDetailPage({
         </Table>
         {jo.stageLogs.length === 0 && <EmptyState label="Production hasn't started yet." />}
       </Card>
+
+      {jo.qcResults.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>QC history</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {jo.qcResults.map((qc) => (
+              <div key={qc.id} className="rounded-md border border-slate-200 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">
+                    {qc.stageName} — <StatusBadge status={qc.result} />
+                  </span>
+                  <span className="text-slate-500">{formatDateTime(qc.createdAt)}</span>
+                </div>
+                <p className="mt-1 text-slate-600">
+                  Checked {qc.quantityChecked}, failed {qc.quantityFailed} · Inspector: {qc.inspector.name}
+                </p>
+                {qc.defectNotes && <p className="mt-1 text-slate-700">{qc.defectNotes}</p>}
+                {qc.reworkRecord && (
+                  <div className="mt-2 rounded bg-red-50 p-2 text-red-800">
+                    <p className="font-medium">
+                      Rework — <StatusBadge status={qc.reworkRecord.status} />
+                    </p>
+                    <p>
+                      Routed to <span className="font-medium">{qc.reworkRecord.assignedStage}</span>: {qc.reworkRecord.defectDescription} ({qc.reworkRecord.quantityAffected} pcs)
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -446,7 +446,7 @@ async function main() {
       description: "20x DTF shirt, dept. B design",
       quantity: 20,
       workflowTemplateId: dtfTemplate.id,
-      currentStageOrder: 4,
+      currentStageOrder: 3,
       status: "REWORK",
       deadline: new Date("2026-08-22"),
     },
@@ -455,7 +455,8 @@ async function main() {
     data: [
       { jobOrderId: order2jo2.id, stageName: "Design", stageOrder: 1, status: "COMPLETED", startedAt: new Date("2026-08-03"), completedAt: new Date("2026-08-04"), assignedToId: staff2.id },
       { jobOrderId: order2jo2.id, stageName: "DTF Printing", stageOrder: 2, status: "COMPLETED", startedAt: new Date("2026-08-04"), completedAt: new Date("2026-08-06"), assignedToId: prod2.id },
-      { jobOrderId: order2jo2.id, stageName: "Pressing", stageOrder: 3, status: "COMPLETED", startedAt: new Date("2026-08-06"), completedAt: new Date("2026-08-07"), assignedToId: prod2.id, notes: "Reopened for rework of misaligned prints." },
+      { jobOrderId: order2jo2.id, stageName: "Pressing", stageOrder: 3, status: "COMPLETED", startedAt: new Date("2026-08-06"), completedAt: new Date("2026-08-07"), assignedToId: prod2.id },
+      { jobOrderId: order2jo2.id, stageName: "Pressing", stageOrder: 3, status: "IN_PROGRESS", startedAt: new Date("2026-08-08"), assignedToId: prod2.id, notes: "Reopened for rework of misaligned prints." },
     ],
   });
   const qc2 = await prisma.qCResult.create({

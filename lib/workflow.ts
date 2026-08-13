@@ -136,6 +136,9 @@ export async function completeCurrentStage(
         where: { id: jobOrderId },
         data: { status: "QC", currentStageOrder: qcStage.order },
       });
+      await tx.jobOrderStageLog.create({
+        data: { jobOrderId, stageName: qcStage.name, stageOrder: qcStage.order, status: "READY" },
+      });
       await tx.reworkRecord.updateMany({
         where: { jobOrderId, status: { in: ["OPEN", "IN_PROGRESS"] } },
         data: { status: "DONE" },
@@ -177,6 +180,9 @@ export async function completeCurrentStage(
     stage: log.stageName,
     reworkCompletion: isReworkCompletion,
   });
+  if (isReworkCompletion) {
+    await logAudit(actorId, "REWORK_CLOSED", "JobOrder", jobOrderId, { stage: log.stageName });
+  }
 }
 
 export async function setStageLogStatus(
@@ -187,4 +193,119 @@ export async function setStageLogStatus(
   const data: Prisma.JobOrderStageLogUpdateInput = { status, assignedTo: { connect: { id: actorId } } };
   if (status === "IN_PROGRESS") data.startedAt = new Date();
   await prisma.jobOrderStageLog.update({ where: { id: stageLogId }, data });
+}
+
+/**
+ * Record a QCResult at a JobOrder's QC stage.
+ * PASS: closes out the QC stage log and advances to the next stage (or
+ * READY, for fulfillment, if QC was the last stage) — Rule #4.
+ * FAIL: always creates a ReworkRecord and routes the JO back to the
+ * responsible stage, blocking forward progress until rework passes QC
+ * again — Rule #3.
+ */
+export async function recordQCResult(
+  jobOrderId: string,
+  actorId: string,
+  input: {
+    result: "PASS" | "FAIL";
+    quantityChecked: number;
+    quantityFailed: number;
+    defectNotes?: string;
+    assignedStage?: string;
+  }
+) {
+  const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
+  if (jo.status !== "QC") throw new RuleViolation("Job order is not at the QC stage.");
+
+  const stages = await getTemplateStages(jo.workflowTemplateId);
+  const qcStage = stages.find((s) => s.isQCStage);
+  if (!qcStage || qcStage.order !== jo.currentStageOrder) {
+    throw new RuleViolation("QC stage mismatch for this job order.");
+  }
+
+  const currentLog = await prisma.jobOrderStageLog.findFirst({
+    where: { jobOrderId, stageOrder: qcStage.order, status: { not: "COMPLETED" } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const { logAudit } = await import("@/lib/audit");
+
+  const qc = await prisma.qCResult.create({
+    data: {
+      jobOrderId,
+      stageName: qcStage.name,
+      inspectorId: actorId,
+      result: input.result,
+      quantityChecked: input.quantityChecked,
+      quantityFailed: input.quantityFailed,
+      defectNotes: input.defectNotes,
+    },
+  });
+
+  await logAudit(actorId, "QC_RESULT_RECORDED", "JobOrder", jobOrderId, {
+    result: input.result,
+    quantityChecked: input.quantityChecked,
+    quantityFailed: input.quantityFailed,
+  });
+
+  await prisma.$transaction(async (tx) => {
+    if (currentLog) {
+      await tx.jobOrderStageLog.update({
+        where: { id: currentLog.id },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      });
+    }
+
+    if (input.result === "FAIL") {
+      const idx = stages.findIndex((s) => s.order === qcStage.order);
+      const fallback = stages[idx - 1] ?? qcStage;
+      const assignedStageObj = stages.find((s) => s.name === input.assignedStage) ?? fallback;
+
+      await tx.reworkRecord.create({
+        data: {
+          qcResultId: qc.id,
+          jobOrderId,
+          defectDescription: input.defectNotes || "Failed QC inspection.",
+          quantityAffected: input.quantityFailed,
+          assignedStage: assignedStageObj.name,
+          status: "OPEN",
+        },
+      });
+      await tx.jobOrder.update({
+        where: { id: jobOrderId },
+        data: { status: "REWORK", currentStageOrder: assignedStageObj.order },
+      });
+      await tx.jobOrderStageLog.create({
+        data: {
+          jobOrderId,
+          stageName: assignedStageObj.name,
+          stageOrder: assignedStageObj.order,
+          status: "READY",
+        },
+      });
+      return;
+    }
+
+    // PASS
+    const idx = stages.findIndex((s) => s.order === qcStage.order);
+    const next = stages[idx + 1];
+    if (!next) {
+      await tx.jobOrder.update({ where: { id: jobOrderId }, data: { status: "READY" } });
+      return;
+    }
+    await tx.jobOrder.update({
+      where: { id: jobOrderId },
+      data: { status: "IN_PROGRESS", currentStageOrder: next.order },
+    });
+    await tx.jobOrderStageLog.create({
+      data: { jobOrderId, stageName: next.name, stageOrder: next.order, status: "READY" },
+    });
+  });
+
+  if (input.result === "FAIL") {
+    await logAudit(actorId, "REWORK_CREATED", "JobOrder", jobOrderId, {
+      assignedStage: input.assignedStage,
+      quantityAffected: input.quantityFailed,
+    });
+  }
 }
