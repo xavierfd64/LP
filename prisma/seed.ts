@@ -375,7 +375,7 @@ async function main() {
       totalAmount: 12500,
     },
   });
-  const order1jo1 = await prisma.jobOrder.create({
+  await prisma.jobOrder.create({
     data: {
       orderId: order1.id,
       joNumber: "JO-001",

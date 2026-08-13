@@ -95,8 +95,36 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - Added a "Fulfillment & Tracking" section directly to the order detail page (previously tracking/courier info was only visible one level down on the job order detail page) — method, status, scheduled date, and courier/tracking number per JO's fulfillment record.
 - Confirmed every customer-facing action from spec 5.13 is reachable: submit inquiry, view/approve quotations, view order/JO progress, upload payment proof, view payment history, approve a pending design draft, view fulfillment/tracking, view rewards balance/history/redeem — all exercised via the earlier phases' end-to-end tests plus a fresh pass over the customer dashboard and order detail page against the seeded DB.
 
-### Phase 12 — Verify business rules + PROGRESS.md/README (next)
-...
+### Phase 12 — Verify business rules ✅
+
+Manual test checklist for every rule in spec Section 7, each one actually driven through the running app against the seeded/reset dev DB (not just read from the code) and then reverted so demo data stays clean:
+
+| # | Rule | How it's enforced | Verified |
+|---|---|---|---|
+| 1 | JO can't leave `ON_HOLD` without partial payment or an approved-terms exception | `lib/workflow.ts` `assertCanStartProduction()`, called from `startProduction()` | Unpaid standard-partial order: "Start Production" blocked with `On hold: requires 1000.00 confirmed partial payment (has 0.00)...`. Recording a payment that meets the required % immediately unblocks it. |
+| 2 | JO can't be `RELEASED` without full payment or an authorized release exception | `assertCanRelease()`, called from `releaseJobOrderAction` | A `READY` JO on a 50%-paid order: release blocked with `Cannot release: full payment required (7500.00 of 15000.00 confirmed)...`. Granting a release exception (audit-logged) immediately unblocks it. |
+| 3 | Failed QC always creates a `ReworkRecord` and blocks forward progress | `recordQCResult()` | A QC Fail created a new `OPEN` `ReworkRecord` and routed the JO back to the assigned stage (`status=REWORK`), blocking it from re-entering QC until that stage is redone. |
+| 4 | Stage completion always advances exactly one step — never skips | `completeCurrentStage()`'s `stageOrder !== jo.currentStageOrder` guard | Direct test: fabricated an out-of-sequence stage log and confirmed `completeCurrentStage()` throws `This stage is not the job order's current stage.`; completing the real current stage advanced `currentStageOrder` by exactly 1. |
+| 5 | `SupplyLot.remainingQty` must never go negative | `recordMovementAction`'s pre-write remaining-quantity check | Consuming 5 of 12 units succeeded (→7); immediately attempting to consume 100 more was rejected with no DB write, `remainingQty` unchanged at 7. |
+| 6 | Every state-changing action from Section 5.12 writes an `AuditLog` entry | `logAudit()` called from every mutating server action | Grepped every action file for `logAudit` calls and cross-checked against the Section 5.12 list; found and fixed one gap — marking a stage `IN_PROGRESS` (start-of-stage) wasn't logged, only completion was. Added `STAGE_STATUS_UPDATED` logging to `setStageLogStatus()`. |
+
+Also did a full route crawl (every nav link for all 4 roles, plus a sample of detail pages — orders, inventory items, job orders, workflow templates) confirming `npm run dev` serves every page with no 500s or thrown errors, per the Section 9 phase-closing requirement.
+
+## Known Stubs
+
+- **SMS/Email notifications** — `lib/notify.ts` just does `console.log('[STUB NOTIFY] ...')`. A real build would wire this to Twilio/SendGrid.
+- **Payment gateway** — payments are manually recorded by staff or uploaded as proof by the customer; nothing talks to an actual payment processor.
+- **Password reset / email verification** — not implemented.
+- **Courier tracking** — tracking number/courier are free-text fields, no live courier API integration.
+- **Invoice/PDF generation** — not built (spec marks this optional).
+- **Object storage** — files are written to local disk (`public/uploads/`) with metadata in the `File` table; a production deployment would swap this for S3-compatible storage behind the same `lib/upload.ts` interface.
+- **Single active reward rule** — the schema allows multiple `RewardRule` rows, but only one is ever "active" at a time (activating one deactivates the rest) to keep the earn calculation unambiguous, matching the spec's "a simple RewardRule" framing.
+- **System-triggered audit entries have a null actor** — e.g. the reward-earn transaction fired automatically when an order completes has no human actor, so `AuditLog.actorId` is `null` for that one entry type; everything else is attributed to whoever performed the action.
+
+## Final status
+
+All 12 build phases are complete. `npm run dev` / `docker-compose up` both run cleanly, every nav link across all four roles resolves without error, and every rule in Section 7 has been driven through the real app (not just unit-tested in isolation) and confirmed to actually block what it should.
+
 
 ## Known Stubs
 

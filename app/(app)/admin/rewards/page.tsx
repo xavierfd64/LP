@@ -17,7 +17,7 @@ export default async function AdminRewardsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Reward Rules</h1>
-          <p className="text-sm text-slate-500">Only one rule is active at a time; it's applied automatically when an order completes.</p>
+          <p className="text-sm text-slate-500">Only one rule is active at a time; it&apos;s applied automatically when an order completes.</p>
         </div>
         <RewardRuleForm />
       </div>

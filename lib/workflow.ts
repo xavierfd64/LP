@@ -192,7 +192,13 @@ export async function setStageLogStatus(
 ) {
   const data: Prisma.JobOrderStageLogUpdateInput = { status, assignedTo: { connect: { id: actorId } } };
   if (status === "IN_PROGRESS") data.startedAt = new Date();
-  await prisma.jobOrderStageLog.update({ where: { id: stageLogId }, data });
+  const log = await prisma.jobOrderStageLog.update({ where: { id: stageLogId }, data });
+
+  const { logAudit } = await import("@/lib/audit");
+  await logAudit(actorId, "STAGE_STATUS_UPDATED", "JobOrder", log.jobOrderId, {
+    stage: log.stageName,
+    status,
+  });
 }
 
 /**

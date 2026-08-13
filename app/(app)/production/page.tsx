@@ -48,7 +48,7 @@ export default async function ProductionQueuePage({ searchParams }: PageProps<"/
                 (l) => l.stageOrder === jo.currentStageOrder && l.status !== "COMPLETED"
               );
               const markIP = currentLog
-                ? markStageInProgressAction.bind(null, currentLog.id, jo.id)
+                ? markStageInProgressAction.bind(null, currentLog.id)
                 : undefined;
 
               return (
