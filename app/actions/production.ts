@@ -1,0 +1,27 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { requireRole } from "@/lib/session";
+import { setStageLogStatus, completeCurrentStage, RuleViolation } from "@/lib/workflow";
+
+export async function markStageInProgressAction(stageLogId: string, jobOrderId: string) {
+  const user = await requireRole(["PRODUCTION", "STAFF", "ADMIN"]);
+  await setStageLogStatus(stageLogId, "IN_PROGRESS", user.id);
+  redirect(`/production`);
+}
+
+export async function completeStageAction(jobOrderId: string, stageLogId: string, formData: FormData) {
+  const user = await requireRole(["PRODUCTION", "STAFF", "ADMIN"]);
+  const notes = (formData.get("notes") as string) || undefined;
+
+  try {
+    await completeCurrentStage(jobOrderId, stageLogId, user.id, notes);
+  } catch (e) {
+    if (e instanceof RuleViolation) {
+      redirect(`/production?error=${encodeURIComponent(e.message)}`);
+    }
+    throw e;
+  }
+
+  redirect(`/production`);
+}

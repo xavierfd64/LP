@@ -45,7 +45,13 @@ Followed the recommended stack with a couple of environment-driven adjustments:
   - Attempting to release a `READY` JO on an order that's only 50% paid is blocked with `Cannot release: full payment required (7500.00 of 15000.00 confirmed), or an authorized release exception.` and the JO stays `READY`.
   - Granting a release exception (audit-logged) immediately unblocks the same JO's release (`READY` → `RELEASED`), and the audit trail records both `RELEASE_EXCEPTION_GRANTED` and `JOB_ORDER_RELEASED`.
 
-### Phase 4 — Workflow templates + Production portal (next)
+### Phase 4 — Workflow templates + Production portal ✅
+- Admin CRUD for Workflow Templates at `/admin/workflow-templates`: create/edit a template's name and its ordered stage list (add/remove/reorder rows client-side, one stage flagged as the QC stage, any stage flaggable as the install stage), plus an active/inactive toggle. New product types are addable with zero code changes, per spec.
+- Production queue at `/production`: every JobOrder currently `IN_PROGRESS`, `REWORK`, or `QC`, sorted by deadline, showing product/qty/customer/deadline/current stage. `QC`-status JOs link to the job order detail page (QC recording UI lands in Phase 5); everything else gets `READY → IN_PROGRESS → COMPLETED` stage actions inline.
+- Stage advancement is driven entirely by `lib/workflow.ts`'s `completeCurrentStage()` (built in Phase 1, now wired to real UI): it always advances exactly one stage per the template's order (Rule #4), routes into `QC` status automatically when the next stage is the QC stage, and flips the JO to `READY` when the last stage completes.
+- Verified end-to-end against the seeded DB: completing the seeded order's `Pressing` stage (the stage right before `QC` in the DTF Shirt template) correctly moved the JO to `status=QC`, `currentStageOrder=4`, and opened a fresh `QC` stage log in `READY` — confirmed via the DB and the audit trail, then reverted so the seed data matches its documented starting state.
+
+### Phase 5 — QC & Rework (next)
 ...
 
 ## Known Stubs
