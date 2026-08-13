@@ -186,7 +186,7 @@ async function main() {
     data: { sku: "JERSEY-DRIFIT", name: "Dri-Fit Jersey Fabric", unit: "yard", reorderThreshold: 50, currentQty: 200 },
   });
   const dtfFilm = await prisma.inventoryItem.create({
-    data: { sku: "DTF-FILM", name: "DTF Transfer Film", unit: "roll", reorderThreshold: 5, currentQty: 12 },
+    data: { sku: "DTF-FILM", name: "DTF Transfer Film", unit: "roll", reorderThreshold: 5, currentQty: 10 },
   });
   const sintraBoard = await prisma.inventoryItem.create({
     data: { sku: "SINTRA-3MM", name: "Sintra Board 3mm", unit: "sheet", reorderThreshold: 10, currentQty: 25 },
@@ -217,7 +217,7 @@ async function main() {
       inventoryItemId: dtfFilm.id,
       lotCode: "DTF-202608-001",
       receivedQty: 12,
-      remainingQty: 12,
+      remainingQty: 10,
       supplier: "PrintSupply Co",
       receivedDate: new Date("2026-08-03"),
     },
@@ -504,7 +504,7 @@ async function main() {
   // Inventory movements for order2
   const jerseyLot = await prisma.supplyLot.findFirstOrThrow({ where: { inventoryItemId: dtfFilm.id } });
   await prisma.inventoryMovement.create({
-    data: { supplyLotId: jerseyLot.id, jobOrderId: order2jo1.id, type: "ALLOCATE", qty: 2, createdById: prod1.id },
+    data: { supplyLotId: jerseyLot.id, jobOrderId: order2jo1.id, type: "ALLOCATE", qty: -2, createdById: prod1.id },
   });
 
   // ---------- Order 3: fulfilled/completed, approved terms, rewards ----------

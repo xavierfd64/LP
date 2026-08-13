@@ -58,7 +58,15 @@ Followed the recommended stack with a couple of environment-driven adjustments:
 - Fixed a seed-data/business-logic mismatch this phase surfaced: the seeded "QC + rework in progress" job order had `currentStageOrder` pointing at the QC stage while its `ReworkRecord.assignedStage` said "Pressing" — inconsistent with how `recordQCResult()` actually routes rework. Corrected the seed so `currentStageOrder` follows the assigned stage and the in-progress rework attempt has its own active stage log, matching what the real flow produces.
 - Verified end-to-end against the seeded DB, in both directions: completing the seeded in-progress rework (Pressing) correctly closed the `ReworkRecord`, re-entered QC, and a subsequent Pass advanced the JO to the next stage (`Packing`) with full stage-log history preserved (`STAGE_COMPLETED` → `REWORK_CLOSED` in the audit log). Separately, driving a fresh JO through Pressing → QC → **Fail** correctly created a new `OPEN` `ReworkRecord` (assigned stage `Pressing`, qty 5) and set the JO back to `REWORK` at `currentStageOrder=3`, blocking it from progressing. Reset the dev DB to a clean reseed afterward so demo data matches the documented seed state.
 
-### Phase 6 — Inventory & Supply Lots (next)
+### Phase 6 — Inventory & Supply Lots ✅
+- `/inventory`: item list with current stock, reorder threshold, a low-stock banner, an "Add Item" form, and a recent-consumption-by-JO report pulling from `InventoryMovement`.
+- `/inventory/[itemId]`: per-item supply lots (lot code, received date/qty/supplier, remaining qty), a "Receive New Lot" form that auto-generates the lot code via `lib/numbering.ts`'s `nextLotCode()` (pattern `{itemShortCode}-{YYYYMM}-{sequence}`, e.g. `DTF-202608-002`) and creates a `RECEIVE` movement, and per-lot "Record Movement" forms covering Allocate/Consume/Reject/Waste (always against a job order for the first two) and Adjust (a signed correction).
+- All movements are stored as a signed `qty` delta against the lot (`RECEIVE`/positive-`ADJUST` increase, `ALLOCATE`/`CONSUME`/`REJECT`/`WASTE`/negative-`ADJUST` decrease), applied atomically to both `SupplyLot.remainingQty` and the parent `InventoryItem.currentQty` in `app/actions/inventory.ts`.
+- Rule #5 (Section 7) — `remainingQty` must never go negative — enforced by computing the new remaining quantity before writing anything and returning a clear validation error (no DB write at all) if it would go negative.
+- Verified end-to-end against the seeded DB: consuming 5 units against a 12-unit lot correctly brought it to 7, and immediately attempting to consume 100 more was rejected with `Cannot consume more than the remaining quantity in this lot (7 available)` — confirmed the lot's `remainingQty` was untouched and no `InventoryMovement` row was written for the rejected attempt.
+- Fixed a related seed inconsistency this phase surfaced: the seed had created an `ALLOCATE` movement without actually decrementing the lot's `remainingQty`/item's `currentQty` (a leftover from before movements had a defined signed-delta convention) — corrected the seed data to be internally consistent with how `recordMovementAction` actually accounts for stock.
+
+### Phase 7 — File Repository (next)
 ...
 
 ## Known Stubs
