@@ -1,0 +1,447 @@
+// Printing Business Management System — Prisma schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  ADMIN
+  STAFF
+  PRODUCTION
+  CUSTOMER
+}
+
+enum InquiryStatus {
+  NEW
+  QUOTED
+  CLOSED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+}
+
+enum PaymentTermType {
+  STANDARD_PARTIAL
+  APPROVED_TERMS
+}
+
+enum OrderStatus {
+  OPEN
+  IN_PRODUCTION
+  FULFILLING
+  COMPLETED
+  CANCELLED
+}
+
+enum JobOrderStatus {
+  ON_HOLD
+  IN_PROGRESS
+  QC
+  REWORK
+  READY
+  RELEASED
+  COMPLETED
+}
+
+enum StageLogStatus {
+  READY
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum FileCategory {
+  CUSTOMER_FILE
+  DESIGN_DRAFT
+  APPROVED_DESIGN
+  PRODUCTION_FILE
+  QC_EVIDENCE
+  PAYMENT_PROOF
+  DELIVERY_PROOF
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  GCASH
+  CHEQUE
+  OTHER
+}
+
+enum QCOutcome {
+  PASS
+  FAIL
+}
+
+enum ReworkStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
+enum MovementType {
+  RECEIVE
+  ALLOCATE
+  CONSUME
+  REJECT
+  WASTE
+  ADJUST
+}
+
+enum FulfillmentMethod {
+  PICKUP
+  DELIVERY
+  INSTALLATION
+}
+
+enum FulfillmentStatus {
+  SCHEDULED
+  BOOKED
+  IN_TRANSIT
+  DELIVERED
+  INSTALLED
+  RECEIVED
+  CANCELLED
+}
+
+enum RewardTxnType {
+  EARN
+  REDEEM
+}
+
+// ---------- Core ----------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer         Customer?
+  stageLogs        JobOrderStageLog[]
+  uploadedFiles    File[]
+  recordedPayments Payment[]          @relation("PaymentRecordedBy")
+  qcResults        QCResult[]
+  reworkAssigned   ReworkRecord[]
+  inventoryMoves   InventoryMovement[]
+  auditLogs        AuditLog[]
+}
+
+model Customer {
+  id                  String   @id @default(cuid())
+  userId              String?  @unique
+  user                User?    @relation(fields: [userId], references: [id])
+  name                String
+  companyName         String?
+  isQualifiedForTerms Boolean  @default(false)
+  rewardPointsBalance Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  inquiries    Inquiry[]
+  quotations   Quotation[]
+  orders       Order[]
+  rewardTxns   RewardTransaction[]
+}
+
+model Inquiry {
+  id             String        @id @default(cuid())
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  description    String
+  desiredProduct String
+  roughQty       Int?
+  status         InquiryStatus @default(NEW)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  quotations Quotation[]
+}
+
+model Quotation {
+  id          String          @id @default(cuid())
+  inquiryId   String?
+  inquiry     Inquiry?        @relation(fields: [inquiryId], references: [id])
+  customerId  String
+  customer    Customer        @relation(fields: [customerId], references: [id])
+  quoteNumber String          @unique
+  status      QuotationStatus @default(DRAFT)
+  validUntil  DateTime?
+  total       Decimal         @default(0) @db.Decimal(12, 2)
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  lineItems QuotationLineItem[]
+  orders    Order[]
+}
+
+model QuotationLineItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productType String
+  description String
+  qty         Int
+  unitPrice   Decimal   @db.Decimal(12, 2)
+  notes       String?
+}
+
+model Order {
+  id               String          @id @default(cuid())
+  quotationId      String?
+  quotation        Quotation?      @relation(fields: [quotationId], references: [id])
+  customerId       String
+  customer         Customer        @relation(fields: [customerId], references: [id])
+  orderNumber      String          @unique
+  status           OrderStatus     @default(OPEN)
+  paymentTermType  PaymentTermType @default(STANDARD_PARTIAL)
+  termsApprovedBy  String?
+  termsReason      String?
+  requiredPartialPct Int           @default(50)
+  totalAmount      Decimal         @default(0) @db.Decimal(12, 2)
+  releaseException Boolean         @default(false)
+  releaseExceptionBy String?
+  releaseExceptionReason String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  jobOrders    JobOrder[]
+  payments     Payment[]
+  fulfillments Fulfillment[]
+  rewardTxns   RewardTransaction[]
+}
+
+model WorkflowTemplate {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stages    WorkflowStage[]
+  jobOrders JobOrder[]
+}
+
+model WorkflowStage {
+  id           String            @id @default(cuid())
+  templateId   String
+  template     WorkflowTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name         String
+  order        Int
+  isQCStage    Boolean           @default(false)
+  isInstallStage Boolean         @default(false)
+
+  @@unique([templateId, order])
+}
+
+model JobOrder {
+  id            String         @id @default(cuid())
+  orderId       String
+  order         Order          @relation(fields: [orderId], references: [id])
+  joNumber      String
+  productType   String
+  description   String
+  quantity      Int
+  workflowTemplateId String
+  workflowTemplate   WorkflowTemplate @relation(fields: [workflowTemplateId], references: [id])
+  currentStageOrder  Int         @default(1)
+  status        JobOrderStatus @default(ON_HOLD)
+  deadline      DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  stageLogs     JobOrderStageLog[]
+  files         File[]
+  qcResults     QCResult[]
+  reworkRecords ReworkRecord[]
+  inventoryMoves InventoryMovement[]
+  fulfillments  Fulfillment[]
+
+  @@unique([orderId, joNumber])
+}
+
+model JobOrderStageLog {
+  id          String         @id @default(cuid())
+  jobOrderId  String
+  jobOrder    JobOrder       @relation(fields: [jobOrderId], references: [id])
+  stageName   String
+  stageOrder  Int
+  status      StageLogStatus @default(READY)
+  assignedToId String?
+  assignedTo  User?          @relation(fields: [assignedToId], references: [id])
+  startedAt   DateTime?
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime       @default(now())
+}
+
+model File {
+  id          String       @id @default(cuid())
+  jobOrderId  String?
+  jobOrder    JobOrder?    @relation(fields: [jobOrderId], references: [id])
+  uploadedById String
+  uploadedBy  User         @relation(fields: [uploadedById], references: [id])
+  category    FileCategory
+  version     Int          @default(1)
+  isApproved  Boolean      @default(false)
+  filename    String
+  path        String
+  createdAt   DateTime     @default(now())
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  orderId      String
+  order        Order         @relation(fields: [orderId], references: [id])
+  amount       Decimal       @db.Decimal(12, 2)
+  method       PaymentMethod
+  proofFilePath String?
+  status       PaymentStatus @default(PENDING)
+  recordedById String
+  recordedBy   User          @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  notes        String?
+  createdAt    DateTime      @default(now())
+}
+
+model QCResult {
+  id              String     @id @default(cuid())
+  jobOrderId      String
+  jobOrder        JobOrder   @relation(fields: [jobOrderId], references: [id])
+  stageName       String
+  inspectorId     String
+  inspector       User       @relation(fields: [inspectorId], references: [id])
+  result          QCOutcome
+  quantityChecked Int
+  quantityFailed  Int        @default(0)
+  defectNotes     String?
+  createdAt       DateTime   @default(now())
+
+  reworkRecord ReworkRecord?
+}
+
+model ReworkRecord {
+  id                String       @id @default(cuid())
+  qcResultId        String       @unique
+  qcResult          QCResult     @relation(fields: [qcResultId], references: [id])
+  jobOrderId        String
+  jobOrder          JobOrder     @relation(fields: [jobOrderId], references: [id])
+  defectDescription String
+  quantityAffected  Int
+  assignedStage     String
+  assignedToId      String?
+  assignedTo        User?        @relation(fields: [assignedToId], references: [id])
+  status            ReworkStatus @default(OPEN)
+  reworkQcResultId  String?      @unique
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model InventoryItem {
+  id                String   @id @default(cuid())
+  sku               String   @unique
+  name              String
+  unit              String
+  reorderThreshold  Int      @default(0)
+  currentQty        Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  supplyLots SupplyLot[]
+}
+
+model SupplyLot {
+  id              String   @id @default(cuid())
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  lotCode         String   @unique
+  receivedDate    DateTime @default(now())
+  receivedQty     Int
+  remainingQty    Int
+  supplier        String?
+  createdAt       DateTime @default(now())
+
+  movements InventoryMovement[]
+}
+
+model InventoryMovement {
+  id          String       @id @default(cuid())
+  supplyLotId String
+  supplyLot   SupplyLot    @relation(fields: [supplyLotId], references: [id])
+  jobOrderId  String?
+  jobOrder    JobOrder?    @relation(fields: [jobOrderId], references: [id])
+  type        MovementType
+  qty         Int
+  createdById String
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  notes       String?
+  createdAt   DateTime     @default(now())
+}
+
+model Fulfillment {
+  id                String            @id @default(cuid())
+  orderId           String
+  order             Order             @relation(fields: [orderId], references: [id])
+  jobOrderId        String?
+  jobOrder          JobOrder?         @relation(fields: [jobOrderId], references: [id])
+  method            FulfillmentMethod
+  status            FulfillmentStatus @default(SCHEDULED)
+  scheduledDate     DateTime?
+  trackingNumber    String?
+  courier           String?
+  proofFilePath     String?
+  completedAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model RewardRule {
+  id                 String   @id @default(cuid())
+  name               String
+  pointsPerCurrencyUnit Decimal @default(0) @db.Decimal(8, 4)
+  currencyUnit       Decimal  @default(100) @db.Decimal(12, 2)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+}
+
+model RewardTransaction {
+  id         String        @id @default(cuid())
+  customerId String
+  customer   Customer      @relation(fields: [customerId], references: [id])
+  orderId    String?
+  order      Order?        @relation(fields: [orderId], references: [id])
+  points     Int
+  type       RewardTxnType
+  description String?
+  createdAt  DateTime      @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  changes    Json?
+  createdAt  DateTime @default(now())
+}
