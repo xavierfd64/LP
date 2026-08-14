@@ -23,6 +23,12 @@ async function writeSampleFile(name: string, content: string) {
 async function main() {
   console.log("Seeding database...");
 
+  const existing = await prisma.user.findUnique({ where: { email: "admin@lp.test" } });
+  if (existing) {
+    console.log("Database already seeded, skipping.");
+    return;
+  }
+
   // ---------- Users ----------
   const admin = await prisma.user.create({
     data: {
