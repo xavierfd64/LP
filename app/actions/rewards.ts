@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole, requireUser } from "@/lib/session";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
+import { nextVoucherCode } from "@/lib/numbering";
 
 const ruleSchema = z.object({
   name: z.string().min(1),
@@ -48,44 +49,89 @@ export async function toggleRewardRuleAction(ruleId: string) {
   redirect(`/admin/rewards`);
 }
 
-const redeemSchema = z.object({
-  points: z.coerce.number().int().positive(),
-  description: z.string().min(1, "Describe what you're redeeming for."),
+const tierSchema = z.object({
+  pointsCost: z.coerce.number().int().positive(),
+  voucherValue: z.coerce.number().int().positive(),
+  minimumSpend: z.coerce.number().int().positive(),
 });
 
+/** Admin-configurable redemption tiers (points cost -> voucher value -> minimum order to use it). Multiple tiers can be active at once, unlike the single-active RewardRule. */
+export async function createRedemptionTierAction(_prevState: string | undefined, formData: FormData) {
+  const user = await requireRole(["ADMIN"]);
+
+  const parsed = tierSchema.safeParse({
+    pointsCost: formData.get("pointsCost"),
+    voucherValue: formData.get("voucherValue"),
+    minimumSpend: formData.get("minimumSpend"),
+  });
+  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+
+  const tier = await prisma.redemptionTier.create({ data: { ...parsed.data, active: true } });
+  await logAudit(user.id, "REDEMPTION_TIER_CREATED", "RedemptionTier", tier.id, parsed.data);
+
+  redirect(`/admin/rewards`);
+}
+
+export async function toggleRedemptionTierAction(tierId: string) {
+  const user = await requireRole(["ADMIN"]);
+  const tier = await prisma.redemptionTier.findUniqueOrThrow({ where: { id: tierId } });
+
+  await prisma.redemptionTier.update({ where: { id: tierId }, data: { active: !tier.active } });
+  await logAudit(user.id, "REDEMPTION_TIER_TOGGLED", "RedemptionTier", tierId, { active: !tier.active });
+
+  redirect(`/admin/rewards`);
+}
+
+const redeemSchema = z.object({
+  tierId: z.string().min(1),
+});
+
+/** Customer redeems points for a voucher at a fixed admin-configured tier — this is the only way points leave the balance now (no more free-text redemption). */
 export async function redeemPointsAction(_prevState: string | undefined, formData: FormData) {
   const user = await requireUser();
   if (user.role !== "CUSTOMER") throw new Error("Not allowed.");
 
-  const parsed = redeemSchema.safeParse({
-    points: formData.get("points"),
-    description: formData.get("description"),
-  });
-  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+  const parsed = redeemSchema.safeParse({ tierId: formData.get("tierId") });
+  if (!parsed.success) return "Please choose a voucher to redeem.";
 
   const customer = await getCurrentCustomer(user.id);
-  if (parsed.data.points > customer.rewardPointsBalance) {
+  const tier = await prisma.redemptionTier.findUniqueOrThrow({ where: { id: parsed.data.tierId } });
+  if (!tier.active) return "This voucher tier is no longer available.";
+  if (tier.pointsCost > customer.rewardPointsBalance) {
     return `You only have ${customer.rewardPointsBalance} points available.`;
   }
 
-  await prisma.$transaction([
-    prisma.rewardTransaction.create({
+  const code = await nextVoucherCode();
+
+  await prisma.$transaction(async (tx) => {
+    const txn = await tx.rewardTransaction.create({
       data: {
         customerId: customer.id,
-        points: -parsed.data.points,
+        points: -tier.pointsCost,
         type: "REDEEM",
-        description: parsed.data.description,
+        description: `Redeemed for a ${tier.voucherValue} voucher (${code})`,
       },
-    }),
-    prisma.customer.update({
+    });
+    await tx.customer.update({
       where: { id: customer.id },
-      data: { rewardPointsBalance: { decrement: parsed.data.points } },
-    }),
-  ]);
+      data: { rewardPointsBalance: { decrement: tier.pointsCost } },
+    });
+    await tx.voucher.create({
+      data: {
+        code,
+        customerId: customer.id,
+        tierId: tier.id,
+        value: tier.voucherValue,
+        minimumSpend: tier.minimumSpend,
+        rewardTransactionId: txn.id,
+      },
+    });
+  });
 
   await logAudit(user.id, "REWARD_POINTS_REDEEMED", "Customer", customer.id, {
-    points: parsed.data.points,
-    description: parsed.data.description,
+    pointsCost: tier.pointsCost,
+    voucherValue: tier.voucherValue,
+    code,
   });
 
   redirect(`/account/rewards`);

@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/session";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { saveUploadedFile } from "@/lib/upload";
 import { logAudit } from "@/lib/audit";
-import { notify } from "@/lib/notify";
+import { notifyCustomer } from "@/lib/notifications";
 
 const FILE_CATEGORIES = [
   "CUSTOMER_FILE",
@@ -55,7 +55,12 @@ export async function uploadJobOrderFileAction(jobOrderId: string, formData: For
 
   await logAudit(user.id, "FILE_UPLOADED", "File", created.id, { jobOrderId, category, version: created.version });
   if (category === "DESIGN_DRAFT") {
-    notify("customer", `A new design draft is ready for your review on JO ${jo.joNumber}.`);
+    await notifyCustomer(
+      jo.order.customerId,
+      "DESIGN_DRAFT_UPLOADED",
+      `A new design draft is ready for your review on JO ${jo.joNumber}.`,
+      `/job-orders/${jobOrderId}`
+    );
   }
 
   redirect(`/job-orders/${jobOrderId}`);

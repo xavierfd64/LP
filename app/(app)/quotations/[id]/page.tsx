@@ -6,18 +6,32 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { sendQuotationAction, approveQuotationAction, rejectQuotationAction } from "@/app/actions/quotations";
+import { RevisionRequestForm } from "./revision-request-form";
+import { EditQuotationForm } from "./edit-quotation-form";
+import { CancelQuotationForm } from "./cancel-quotation-form";
+import { ForceApproveForm } from "./force-approve-form";
 
-export default async function QuotationDetailPage({ params }: PageProps<"/quotations/[id]">) {
+export default async function QuotationDetailPage({ params, searchParams }: PageProps<"/quotations/[id]">) {
   const { id } = await params;
+  const sp = await searchParams;
   const user = await requireUser();
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
 
   const quotation = await prisma.quotation.findUnique({
     where: { id },
-    include: { customer: true, lineItems: true, orders: true, inquiry: true },
+    include: {
+      customer: true,
+      lineItems: true,
+      orders: true,
+      inquiry: true,
+      revisionRequests: { orderBy: { createdAt: "desc" } },
+      cancelledBy: true,
+      approvedByStaff: true,
+    },
   });
   if (!quotation) notFound();
 
@@ -26,10 +40,12 @@ export default async function QuotationDetailPage({ params }: PageProps<"/quotat
     if (quotation.customerId !== customer.id) redirect("/quotations");
   }
 
+  const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const send = sendQuotationAction.bind(null, quotation.id);
   const approve = approveQuotationAction.bind(null, quotation.id);
   const reject = rejectQuotationAction.bind(null, quotation.id);
   const hasOrder = quotation.orders.length > 0;
+  const editable = ["DRAFT", "SENT", "REVISION_REQUESTED"].includes(quotation.status);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -40,6 +56,19 @@ export default async function QuotationDetailPage({ params }: PageProps<"/quotat
         </div>
         <StatusBadge status={quotation.status} />
       </div>
+
+      {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
+
+      {quotation.status === "CANCELLED" && (
+        <Alert tone="error">
+          Cancelled by {quotation.cancelledBy?.name ?? "staff"}: {quotation.cancelReason}
+        </Alert>
+      )}
+      {quotation.approvedByStaff && (
+        <Alert tone="warning">
+          Approved on the customer&apos;s behalf by {quotation.approvedByStaff.name} (rush): {quotation.approvalBypassReason}
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>
@@ -86,8 +115,24 @@ export default async function QuotationDetailPage({ params }: PageProps<"/quotat
         </Card>
       )}
 
+      {quotation.revisionRequests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Change requests</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {quotation.revisionRequests.map((r) => (
+              <div key={r.id} className="rounded bg-slate-50 p-2 text-sm">
+                <p className="text-slate-800">{r.message}</p>
+                <p className="mt-1 text-xs text-slate-400">{formatDateTime(r.createdAt)}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex flex-wrap gap-2">
-        {isStaffLike && quotation.status === "DRAFT" && (
+        {isStaffLike && (quotation.status === "DRAFT" || quotation.status === "REVISION_REQUESTED") && (
           <form action={send}>
             <Button type="submit">Send to Customer</Button>
           </form>
@@ -102,16 +147,31 @@ export default async function QuotationDetailPage({ params }: PageProps<"/quotat
                 Reject
               </Button>
             </form>
+            <RevisionRequestForm quotationId={quotation.id} />
           </>
         )}
         {isStaffLike && quotation.status === "SENT" && (
           <p className="text-sm text-slate-500 self-center">Awaiting customer approval.</p>
         )}
+        {isStaffLike && quotation.status === "SENT" && <ForceApproveForm quotationId={quotation.id} />}
         {isStaffLike && quotation.status === "APPROVED" && !hasOrder && (
           <Link href={`/orders/new?quotationId=${quotation.id}`}>
             <Button>Create Order</Button>
           </Link>
         )}
+        {isStaffLike && editable && (
+          <EditQuotationForm
+            quotationId={quotation.id}
+            lineItems={quotation.lineItems.map((li) => ({
+              productType: li.productType,
+              description: li.description,
+              qty: li.qty,
+              unitPrice: Number(li.unitPrice),
+            }))}
+            notes={quotation.notes}
+          />
+        )}
+        {isStaffLike && editable && <CancelQuotationForm quotationId={quotation.id} />}
       </div>
 
       {hasOrder && (

@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { uploadPaymentProofAction } from "@/app/actions/payments";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 
 export function PaymentProofForm({ orderId }: { orderId: string }) {
@@ -13,7 +13,7 @@ export function PaymentProofForm({ orderId }: { orderId: string }) {
   if (!open) {
     return (
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Upload Payment Proof
+        Pay via E-Wallet / Bank Transfer
       </Button>
     );
   }
@@ -22,6 +22,15 @@ export function PaymentProofForm({ orderId }: { orderId: string }) {
     <form action={formAction} className="space-y-3 rounded-md border border-slate-200 p-4">
       <input type="hidden" name="orderId" value={orderId} />
       {error && <Alert tone="error">{error}</Alert>}
+      <div>
+        <Label htmlFor="method">Payment method</Label>
+        <Select id="method" name="method" defaultValue="GCASH" required>
+          <option value="GCASH">GCash</option>
+          <option value="MAYA">Maya</option>
+          <option value="BANK_TRANSFER">Bank Transfer</option>
+          <option value="OTHER">Other</option>
+        </Select>
+      </div>
       <div>
         <Label htmlFor="amount">Amount paid (PHP)</Label>
         <Input id="amount" name="amount" type="number" min={0.01} step="0.01" required />

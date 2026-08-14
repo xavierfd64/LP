@@ -6,11 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import { formatDateTime } from "@/lib/utils";
-import { closeInquiryAction } from "@/app/actions/inquiries";
+import { closeInquiryAction, cancelInquiryAction } from "@/app/actions/inquiries";
+import { InquiryEditForm } from "./inquiry-edit-form";
 
-export default async function InquiryDetailPage({ params }: PageProps<"/inquiries/[id]">) {
+export default async function InquiryDetailPage({ params, searchParams }: PageProps<"/inquiries/[id]">) {
   const { id } = await params;
+  const sp = await searchParams;
   const user = await requireUser();
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
 
@@ -25,7 +28,11 @@ export default async function InquiryDetailPage({ params }: PageProps<"/inquirie
     if (inquiry.customerId !== customer.id) redirect("/inquiries");
   }
 
+  const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const closeAction = closeInquiryAction.bind(null, inquiry.id);
+  const cancelAction = cancelInquiryAction.bind(null, inquiry.id);
+  const canConvert = inquiry.status !== "CLOSED" && inquiry.status !== "CANCELLED";
+  const canCustomerEdit = user.role === "CUSTOMER" && inquiry.status === "NEW";
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -33,6 +40,8 @@ export default async function InquiryDetailPage({ params }: PageProps<"/inquirie
         <h1 className="text-2xl font-bold text-slate-900">{inquiry.desiredProduct}</h1>
         <StatusBadge status={inquiry.status} />
       </div>
+
+      {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
       <Card>
         <CardHeader>
@@ -80,18 +89,36 @@ export default async function InquiryDetailPage({ params }: PageProps<"/inquirie
 
       {isStaffLike && (
         <div className="flex gap-2">
-          {inquiry.status !== "CLOSED" && (
+          {canConvert && (
             <Link href={`/quotations/new?inquiryId=${inquiry.id}`}>
               <Button>Convert to Quotation</Button>
             </Link>
           )}
-          {inquiry.status !== "CLOSED" && (
+          {inquiry.status !== "CLOSED" && inquiry.status !== "CANCELLED" && (
             <form action={closeAction}>
               <Button variant="outline" type="submit">
                 Close Inquiry
               </Button>
             </form>
           )}
+        </div>
+      )}
+
+      {canCustomerEdit && (
+        <div className="space-y-3">
+          <InquiryEditForm
+            inquiry={{
+              id: inquiry.id,
+              description: inquiry.description,
+              desiredProduct: inquiry.desiredProduct,
+              roughQty: inquiry.roughQty,
+            }}
+          />
+          <form action={cancelAction}>
+            <Button variant="destructive" size="sm" type="submit">
+              Cancel Inquiry
+            </Button>
+          </form>
         </div>
       )}
     </div>

@@ -3,16 +3,21 @@
 import { useActionState, useState } from "react";
 import { redeemPointsAction } from "@/app/actions/rewards";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Label, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { formatCurrency } from "@/lib/utils";
 
-export function RedeemForm({ balance }: { balance: number }) {
+type Tier = { id: string; pointsCost: number; voucherValue: number; minimumSpend: number };
+
+export function RedeemForm({ balance, tiers }: { balance: number; tiers: Tier[] }) {
   const [error, formAction, pending] = useActionState(redeemPointsAction, undefined);
   const [open, setOpen] = useState(false);
 
+  const affordable = tiers.filter((t) => t.pointsCost <= balance);
+
   if (!open) {
     return (
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={balance <= 0}>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={affordable.length === 0}>
         Redeem Points
       </Button>
     );
@@ -26,12 +31,14 @@ export function RedeemForm({ balance }: { balance: number }) {
         </div>
       )}
       <div>
-        <Label htmlFor="points">Points to redeem</Label>
-        <Input id="points" name="points" type="number" min={1} max={balance} required className="w-28" />
-      </div>
-      <div>
-        <Label htmlFor="description">What for?</Label>
-        <Input id="description" name="description" required placeholder="e.g. Discount voucher" />
+        <Label htmlFor="tierId">Voucher</Label>
+        <Select id="tierId" name="tierId" required>
+          {affordable.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.pointsCost} pts → {formatCurrency(t.voucherValue)} voucher (min. order {formatCurrency(t.minimumSpend)})
+            </option>
+          ))}
+        </Select>
       </div>
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Redeeming..." : "Redeem"}

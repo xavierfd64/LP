@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { saveUploadedFile } from "@/lib/upload";
-import { notify } from "@/lib/notify";
+import { notifyCustomer } from "@/lib/notifications";
 
 async function maybeCompleteOrder(orderId: string) {
   const jobOrders = await prisma.jobOrder.findMany({ where: { orderId } });
@@ -20,7 +20,7 @@ export async function createFulfillmentAction(jobOrderId: string, formData: Form
   const user = await requireRole(["STAFF", "ADMIN"]);
   const jo = await prisma.jobOrder.findUniqueOrThrow({
     where: { id: jobOrderId },
-    include: { workflowTemplate: { include: { stages: true } } },
+    include: { workflowTemplate: { include: { stages: true } }, order: true },
   });
 
   if (jo.status !== "RELEASED") {
@@ -52,7 +52,12 @@ export async function createFulfillmentAction(jobOrderId: string, formData: Form
 
   await prisma.order.updateMany({ where: { id: jo.orderId, status: { not: "COMPLETED" } }, data: { status: "FULFILLING" } });
   await logAudit(user.id, "FULFILLMENT_CREATED", "Fulfillment", fulfillment.id, { method, jobOrderId });
-  notify("customer", `Your order ${jo.joNumber} is now being fulfilled via ${method.toLowerCase()}.`);
+  await notifyCustomer(
+    jo.order.customerId,
+    "FULFILLMENT_CREATED",
+    `Your order ${jo.joNumber} is now being fulfilled via ${method.toLowerCase()}.`,
+    `/job-orders/${jobOrderId}`
+  );
 
   redirect(`/job-orders/${jobOrderId}`);
 }
@@ -73,6 +78,8 @@ export async function advanceDeliveryAction(fulfillmentId: string, jobOrderId: s
   if (next === "DELIVERED") {
     await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
     await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: f.orderId } });
+    await notifyCustomer(order.customerId, "FULFILLMENT_DELIVERED", `Your order has been delivered.`, `/orders/${order.id}`);
     await maybeCompleteOrder(f.orderId);
   }
 
@@ -100,6 +107,10 @@ export async function markPickedUpAction(fulfillmentId: string, jobOrderId: stri
   await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
   await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: "RECEIVED" });
   await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
+  {
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: f.orderId } });
+    await notifyCustomer(order.customerId, "FULFILLMENT_RECEIVED", `Your pickup has been marked as received.`, `/orders/${order.id}`);
+  }
   await maybeCompleteOrder(f.orderId);
 
   redirect(`/job-orders/${jobOrderId}`);
@@ -114,6 +125,10 @@ export async function markInstalledAction(fulfillmentId: string, jobOrderId: str
   await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
   await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: "INSTALLED" });
   await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
+  {
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: f.orderId } });
+    await notifyCustomer(order.customerId, "FULFILLMENT_INSTALLED", `Your installation is complete.`, `/orders/${order.id}`);
+  }
   await maybeCompleteOrder(f.orderId);
 
   redirect(`/job-orders/${jobOrderId}`);

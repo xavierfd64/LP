@@ -35,6 +35,7 @@ export function PaymentForm({ orders }: { orders: Order[] }) {
           <option value="CASH">Cash</option>
           <option value="BANK_TRANSFER">Bank Transfer</option>
           <option value="GCASH">GCash</option>
+          <option value="MAYA">Maya</option>
           <option value="CHEQUE">Cheque</option>
           <option value="OTHER">Other</option>
         </Select>

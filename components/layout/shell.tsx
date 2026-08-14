@@ -1,18 +1,26 @@
 import { SidebarNav } from "./sidebar-nav";
 import { LogoutButton } from "./logout-button";
+import { NotificationBell } from "./notification-bell";
 import { navForRole } from "./nav-config";
 import { Badge } from "@/components/ui/badge";
+import { prisma } from "@/lib/prisma";
 
-export function Shell({
+export async function Shell({
   role,
   name,
+  userId,
   children,
 }: {
   role: string;
   name: string;
+  userId: string;
   children: React.ReactNode;
 }) {
   const items = navForRole(role);
+  const [notifications, unreadCount] = await Promise.all([
+    prisma.notification.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 15 }),
+    prisma.notification.count({ where: { userId, read: false } }),
+  ]);
 
   return (
     <div className="flex min-h-screen">
@@ -27,6 +35,7 @@ export function Shell({
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
           <div className="md:hidden font-bold text-slate-900">LP Printing</div>
           <div className="flex items-center gap-3 ml-auto">
+            <NotificationBell notifications={notifications} unreadCount={unreadCount} />
             <div className="text-right">
               <p className="text-sm font-medium text-slate-900">{name}</p>
               <Badge tone="slate">{role}</Badge>

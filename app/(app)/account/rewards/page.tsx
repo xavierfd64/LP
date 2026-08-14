@@ -4,18 +4,22 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
-import { formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { RedeemForm } from "./redeem-form";
 
 export default async function CustomerRewardsPage() {
   const user = await requireRole(["CUSTOMER"]);
   const customer = await getCurrentCustomer(user.id);
 
-  const transactions = await prisma.rewardTransaction.findMany({
-    where: { customerId: customer.id },
-    orderBy: { createdAt: "desc" },
-    include: { order: true },
-  });
+  const [transactions, tiers, vouchers] = await Promise.all([
+    prisma.rewardTransaction.findMany({
+      where: { customerId: customer.id },
+      orderBy: { createdAt: "desc" },
+      include: { order: true },
+    }),
+    prisma.redemptionTier.findMany({ where: { active: true }, orderBy: { voucherValue: "asc" } }),
+    prisma.voucher.findMany({ where: { customerId: customer.id }, orderBy: { createdAt: "desc" } }),
+  ]);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -27,8 +31,47 @@ export default async function CustomerRewardsPage() {
             <p className="text-sm text-slate-500">Points balance</p>
             <p className="text-3xl font-bold text-slate-900">{customer.rewardPointsBalance}</p>
           </div>
-          <RedeemForm balance={customer.rewardPointsBalance} />
+          <RedeemForm
+            balance={customer.rewardPointsBalance}
+            tiers={tiers.map((t) => ({
+              id: t.id,
+              pointsCost: t.pointsCost,
+              voucherValue: t.voucherValue,
+              minimumSpend: t.minimumSpend,
+            }))}
+          />
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>My vouchers</CardTitle>
+        </CardHeader>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Code</TH>
+              <TH>Value</TH>
+              <TH>Min. order</TH>
+              <TH>Status</TH>
+              <TH>Issued</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {vouchers.map((v) => (
+              <TR key={v.id}>
+                <TD className="font-mono text-xs">{v.code}</TD>
+                <TD className="font-medium text-slate-900">{formatCurrency(v.value)}</TD>
+                <TD>{formatCurrency(v.minimumSpend)}</TD>
+                <TD>
+                  <Badge tone={v.status === "AVAILABLE" ? "green" : "slate"}>{v.status}</Badge>
+                </TD>
+                <TD>{formatDateTime(v.createdAt)}</TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+        {vouchers.length === 0 && <EmptyState label="No vouchers yet — redeem points to get one." />}
       </Card>
 
       <Card>

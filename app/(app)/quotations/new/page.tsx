@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert } from "@/components/ui/alert";
 import { QuotationForm } from "./quotation-form";
 
 export default async function NewQuotationPage({ searchParams }: PageProps<"/quotations/new">) {
@@ -17,9 +18,26 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
     ? await prisma.inquiry.findUnique({ where: { id: inquiryId } })
     : null;
 
+  // If this inquiry was reopened by a customer's revision request, prefill
+  // the new quotation with the previous one's line items for convenience.
+  const priorQuotation = inquiryId
+    ? await prisma.quotation.findFirst({
+        where: { inquiryId, status: { in: ["REVISION_REQUESTED", "CANCELLED"] } },
+        include: { lineItems: true, revisionRequests: { orderBy: { createdAt: "desc" }, take: 1 } },
+        orderBy: { createdAt: "desc" },
+      })
+    : null;
+
   return (
     <div className="max-w-2xl space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">New Quotation</h1>
+
+      {priorQuotation?.revisionRequests[0] && (
+        <Alert tone="warning">
+          Customer requested changes to {priorQuotation.quoteNumber}: &ldquo;{priorQuotation.revisionRequests[0].message}&rdquo;
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>{inquiry ? `From inquiry: ${inquiry.desiredProduct}` : "Create quotation"}</CardTitle>
@@ -30,6 +48,12 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
             inquiryId={inquiry?.id}
             defaultCustomerId={inquiry?.customerId}
             defaultProductType={inquiry?.desiredProduct}
+            defaultLineItems={priorQuotation?.lineItems.map((li) => ({
+              productType: li.productType,
+              description: li.description,
+              qty: li.qty,
+              unitPrice: Number(li.unitPrice),
+            }))}
           />
         </CardContent>
       </Card>

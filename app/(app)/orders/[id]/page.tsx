@@ -15,6 +15,8 @@ import { startProductionAction } from "@/app/actions/orders";
 import { releaseJobOrderAction } from "@/app/actions/payments";
 import { PaymentProofForm } from "./payment-proof-form";
 import { ReleaseExceptionForm } from "./release-exception-form";
+import { ApplyVoucherForm } from "./apply-voucher-form";
+import { MessageThread } from "./message-thread";
 
 export default async function OrderDetailPage({
   params,
@@ -33,13 +35,20 @@ export default async function OrderDetailPage({
       jobOrders: { include: { workflowTemplate: true }, orderBy: { joNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
       fulfillments: { orderBy: { createdAt: "desc" }, include: { jobOrder: true } },
+      messages: { orderBy: { createdAt: "asc" }, include: { sender: true } },
     },
   });
   if (!order) notFound();
 
+  let availableVouchers: { id: string; code: string; value: number; minimumSpend: number }[] = [];
   if (!isStaffLike) {
     const customer = await getCurrentCustomer(user.id);
     if (order.customerId !== customer.id) redirect("/orders");
+    const vouchers = await prisma.voucher.findMany({
+      where: { customerId: customer.id, status: "AVAILABLE", minimumSpend: { lte: Number(order.totalAmount) } },
+      orderBy: { createdAt: "desc" },
+    });
+    availableVouchers = vouchers;
   }
 
   const summary = await paymentSummary(order.id);
@@ -119,7 +128,10 @@ export default async function OrderDetailPage({
               </Link>
             )}
             <div className="pt-2 flex flex-col gap-2 items-start">
-              {!isStaffLike && <PaymentProofForm orderId={order.id} />}
+              {!isStaffLike && !summary.fullyPaid && <PaymentProofForm orderId={order.id} />}
+              {!isStaffLike && !summary.fullyPaid && (
+                <ApplyVoucherForm orderId={order.id} vouchers={availableVouchers} />
+              )}
               {isStaffLike && !summary.fullyPaid && !order.releaseException && (
                 <ReleaseExceptionForm orderId={order.id} />
               )}
@@ -258,6 +270,15 @@ export default async function OrderDetailPage({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Messages</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MessageThread orderId={order.id} currentUserId={user.id} messages={order.messages} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

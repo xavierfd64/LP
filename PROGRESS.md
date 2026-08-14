@@ -121,18 +121,61 @@ Also did a full route crawl (every nav link for all 4 roles, plus a sample of de
 - **Single active reward rule** — the schema allows multiple `RewardRule` rows, but only one is ever "active" at a time (activating one deactivates the rest) to keep the earn calculation unambiguous, matching the spec's "a simple RewardRule" framing.
 - **System-triggered audit entries have a null actor** — e.g. the reward-earn transaction fired automatically when an order completes has no human actor, so `AuditLog.actorId` is `null` for that one entry type; everything else is attributed to whoever performed the action.
 
-## Final status
+## Final status (original 12-phase MVP)
 
 All 12 build phases are complete. `npm run dev` / `docker-compose up` both run cleanly, every nav link across all four roles resolves without error, and every rule in Section 7 has been driven through the real app (not just unit-tested in isolation) and confirmed to actually block what it should.
 
+---
+
+## Post-MVP batch — customer-side functionality expansion
+
+A follow-up batch of customer-facing functionality, requested after the 12-phase MVP shipped. Schema-first: one migration adds every new model/field, then each domain was wired end-to-end and verified against the running app + seeded DB before moving to the next.
+
+### Inquiry: customer self-service (edit + cancel)
+- Added `InquiryStatus.CANCELLED`. Customers can edit (`updateInquiryAction`) or cancel (`cancelInquiryAction`) their own inquiry only while it's still `NEW` — once staff converts it to a quotation (`QUOTED`) it locks. Both actions are audit-logged (`INQUIRY_UPDATED` / `INQUIRY_CANCELLED`).
+- Verified: edited an inquiry's product/qty/description and confirmed the DB updated; cancelled it and confirmed the edit/cancel UI disappears once `status != NEW`.
+
+### Quotation: revision cycle, staff edit/cancel, rush bypass
+- Added `QuotationStatus.REVISION_REQUESTED` / `CANCELLED`, a `QuotationRevisionRequest` log model, and `cancelledById`/`cancelReason`/`approvedByStaffId`/`approvalBypassReason` fields on `Quotation`.
+- **Customer "Request Changes"** (`requestQuotationRevisionAction`, SENT only): logs the request message, sets the quotation to `REVISION_REQUESTED`, and **converts it back into an Inquiry** — reopening the originally-linked inquiry to `NEW`, or creating one on the fly (product types pulled from the quotation's line items) if the quotation wasn't inquiry-sourced. Staff then re-quotes through the existing Inquiry → Quotation pipeline; `/quotations/new` detects a superseded quotation on the inquiry and prefills its line items plus shows the customer's request message.
+- **Staff "Edit Quotation"** (`editQuotationAction`): DRAFT/SENT/REVISION_REQUESTED only — replaces line items and recalculates the total. Locked once `APPROVED`.
+- **Staff "Cancel Quotation"** (`cancelQuotationAction`): requires a reason, available any time before approval — covers both "customer asked to cancel" and "pricing mistake" per the request.
+- **Staff "Approve for Rush"** (`forceApproveQuotationAction`): bypasses waiting on the customer's own click for rush jobs. Requires a reason, stores who approved it and why, and is audit-logged as `QUOTATION_FORCE_APPROVED` — deliberately distinct from a genuine customer `QUOTATION_APPROVED` so the audit trail never conflates the two. Tightened `approveQuotationAction`/`rejectQuotationAction` to customer-only now that this exists as the staff path.
+- Verified end-to-end: customer requested changes on a SENT quote → quotation flipped to `REVISION_REQUESTED` and a new linked Inquiry appeared at `NEW` with the right product type inferred from line items → staff edited the line items (qty change reflected in the recalculated total) → sent it → force-approved it with a reason → audit log showed all four actions in order (`QUOTATION_REVISION_REQUESTED`, `QUOTATION_EDITED`, `QUOTATION_SENT`, `QUOTATION_FORCE_APPROVED`). Separately verified a plain staff cancel with reason.
+
+### Orders/Payments: more methods, proof only where it's needed, vouchers as a payment method
+- Added `PaymentMethod.MAYA` and `PaymentMethod.VOUCHER`.
+- Customer's payment-proof upload now offers a method choice (GCash / Maya / Bank Transfer / Other) — proof is only ever required for these; Cash stays a staff-only direct-record method (`recordPaymentAction`), and Voucher redemption is self-verifying so it skips proof entirely (see below).
+- **Apply Voucher** (`applyVoucherAction`, new): customer picks one of their `AVAILABLE` vouchers from a dropdown filtered to ones whose minimum-spend is met by the order; applying it auto-`CONFIRM`s a `Payment` (method `VOUCHER`) for `min(voucher.value, balance due)` and flips the voucher to `USED`. *Assumption not explicitly confirmed by the business owner and worth double-checking*: minimum-spend is checked against the order's **total** amount, and a voucher can't push the order into credit — it's capped at what's still owed, no "change" credited back.
+- Verified end-to-end: applied a ₱200 voucher to a ₱1,200 order — payment recorded, voucher flipped to `USED`, a second unrelated voucher on the same account stayed `AVAILABLE`.
+
+### Rewards: admin-configurable redemption tiers + real vouchers
+- New `RedemptionTier` model (`pointsCost`, `voucherValue`, `minimumSpend`, `active`) with full admin CRUD at `/admin/rewards` — this replaces what would otherwise have been a hardcoded denomination table, per explicit request. Unlike the single-active `RewardRule` (earn rate), **multiple redemption tiers can be active at once** (the customer picks one from a dropdown), which is the key behavioral difference between the two config sections on that page.
+- New `Voucher` model — customer redemption now goes through `redeemPointsAction` → picks a tier → burns `tier.pointsCost` points → mints a `Voucher` (unique code via `nextVoucherCode()`) carrying that tier's value and minimum-spend, snapshotted at redemption time so later tier-config edits never retroactively change an already-issued voucher.
+- Seeded rate: 1 point per ₱500 spent (updated from the MVP's placeholder 1/₱100), 1 point = ₱1, with the four requested tiers (100/200/500/1,000 points → matching-value vouchers, minimum spends ₱500/₱1,000/₱5,000/₱10,000).
+- Verified: redeemed a 200-point tier as a customer, got a fresh unique-coded `AVAILABLE` voucher and a correctly decremented balance; confirmed the "Redeem" button is correctly disabled when balance is below every tier's cost (caught this from the seed data itself — a good sign the affordability gate works, not a bug).
+
+### Messaging + notifications (built now, not deferred)
+- New `Message` model — a lightweight per-order thread (not full internal email — simpler, no mail infra, and keeps context tied to the order it's about) that both the customer and staff/admin can post to from the order detail page. Posting notifies the other side.
+- New `Notification` model + `lib/notifications.ts` (replaces the old `lib/notify.ts` stub) — every notification-worthy event (new inquiry, quotation sent/approved/rejected/revision-requested/cancelled, payment proof uploaded/confirmed/rejected, design draft ready, fulfillment scheduled/delivered/installed/received, new message) now persists a real per-user `Notification` row in addition to the existing `[STUB NOTIFY]` console-log stand-in for SMS/email.
+- A notification bell in the Shell header (visible on every page, all roles) shows an unread-count badge, a dropdown of recent notifications, click-to-navigate-and-mark-read, and "mark all read".
+- Verified end-to-end: the seeded unread message notification showed the correct badge count for the customer, opening the dropdown and clicking it navigated to the order and flipped it to read in the DB; sending a fresh message created a new unread notification for the other party.
+
+### Seed data additions
+Added to demonstrate every new flow on first run without any manual setup: a `REVISION_REQUESTED` quotation with its reopened inquiry and logged request message, a staff-`CANCELLED` quotation with reason, four `RedemptionTier` rows, an `AVAILABLE` voucher plus enough bonus points for a customer to redeem a second one live, a sample two-message thread on an existing order, and a few unread notifications so the bell isn't empty on first login.
+
+### Also fixed while in here
+`.gitignore`'s blanket `.env*` pattern was silently swallowing `.env.example` too, so it had never actually been committed despite the README instructing `cp .env.example .env` — added a `!.env.example` exception and committed the file for real.
 
 ## Known Stubs
 
-- **SMS/Email notifications** — `lib/notify.ts` just does `console.log('[STUB NOTIFY] ...')`. A real build would wire this to Twilio/SendGrid.
-- **Payment gateway** — payments are manually recorded by staff or uploaded as proof by the customer; nothing talks to an actual payment processor.
-- **Password reset / email verification** — not implemented; note only.
+- **SMS/Email notifications** — `lib/notifications.ts` persists a real `Notification` row per recipient (backing the in-app bell) but still just `console.log`s a `[STUB NOTIFY]` line for the actual SMS/email send. A real build would wire that half to Twilio/SendGrid.
+- **Payment gateway** — payments are manually recorded by staff, uploaded as proof by the customer, or paid via voucher (internal ledger only); nothing talks to an actual payment processor or e-wallet API.
+- **Password reset / email verification** — not implemented.
 - **Courier tracking** — tracking number/courier are free-text fields, no live courier API integration.
 - **Invoice/PDF generation** — not built (spec marks this optional).
 - **Object storage** — files are written to local disk (`public/uploads/`) with metadata in the `File` table; a production deployment would swap this for S3-compatible storage behind the same `lib/upload.ts` interface.
-
-(This section will be expanded as later phases add their own stubs.)
+- **Single active reward *earn* rule** — only one `RewardRule` (earn rate) is active at a time; redemption tiers, by contrast, support multiple simultaneously active tiers by design.
+- **System-triggered audit entries have a null actor** — e.g. the reward-earn transaction fired automatically when an order completes has no human actor, so `AuditLog.actorId` is `null` for that one entry type.
+- **Messaging is per-order only** — no pre-order (inquiry-level) messaging thread yet; could be extended the same way if needed.
+- **Voucher minimum-spend / cap assumption** — see the Orders/Payments section above; this was a default choice, not an explicitly confirmed business rule.

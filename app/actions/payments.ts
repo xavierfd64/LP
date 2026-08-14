@@ -7,15 +7,20 @@ import { requireRole, requireUser } from "@/lib/session";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
 import { saveUploadedFile } from "@/lib/upload";
-import { assertCanRelease, RuleViolation } from "@/lib/workflow";
-import { notify } from "@/lib/notify";
+import { assertCanRelease, paymentSummary, RuleViolation } from "@/lib/workflow";
+import { notifyCustomer, notifyStaff } from "@/lib/notifications";
 
 const recordPaymentSchema = z.object({
   orderId: z.string().min(1),
   amount: z.coerce.number().positive(),
-  method: z.enum(["CASH", "BANK_TRANSFER", "GCASH", "CHEQUE", "OTHER"]),
+  method: z.enum(["CASH", "BANK_TRANSFER", "GCASH", "MAYA", "CHEQUE", "OTHER"]),
   notes: z.string().optional(),
 });
+
+// Customers upload proof for these methods only; Cash is recorded directly
+// by staff (no proof to upload), and Voucher redemption is self-verifying
+// (see applyVoucherAction) so it never needs a proof upload either.
+const CUSTOMER_PROOF_METHODS = ["GCASH", "MAYA", "BANK_TRANSFER", "OTHER"] as const;
 
 export async function recordPaymentAction(_prevState: string | undefined, formData: FormData) {
   const user = await requireRole(["STAFF", "ADMIN"]);
@@ -51,10 +56,15 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
 
   const orderId = String(formData.get("orderId") ?? "");
   const amountRaw = formData.get("amount");
+  const methodRaw = formData.get("method");
   const file = formData.get("proofFile") as File | null;
 
   const amount = Number(amountRaw);
   if (!orderId || !amount || amount <= 0) return "Please enter a valid amount.";
+  if (!CUSTOMER_PROOF_METHODS.includes(methodRaw as (typeof CUSTOMER_PROOF_METHODS)[number])) {
+    return "Please choose a payment method.";
+  }
+  const method = methodRaw as (typeof CUSTOMER_PROOF_METHODS)[number];
   if (!file || file.size === 0) return "Please attach a proof of payment file.";
 
   const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
@@ -67,7 +77,7 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
     data: {
       orderId,
       amount,
-      method: "GCASH",
+      method,
       status: "PENDING",
       proofFilePath: saved.path,
       recordedById: user.id,
@@ -75,23 +85,43 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
     },
   });
 
-  await logAudit(user.id, "PAYMENT_PROOF_UPLOADED", "Payment", payment.id, { orderId, amount });
-  notify("staff", `Customer uploaded payment proof for order ${orderId}.`);
+  await logAudit(user.id, "PAYMENT_PROOF_UPLOADED", "Payment", payment.id, { orderId, amount, method });
+  await notifyStaff("PAYMENT_PROOF_UPLOADED", `Customer uploaded a payment proof for order ${order.orderNumber}.`, `/orders/${orderId}`);
 
   redirect(`/orders/${orderId}`);
 }
 
 export async function confirmPaymentAction(paymentId: string) {
   const user = await requireRole(["STAFF", "ADMIN"]);
-  const payment = await prisma.payment.update({ where: { id: paymentId }, data: { status: "CONFIRMED" } });
+  const payment = await prisma.payment.update({
+    where: { id: paymentId },
+    data: { status: "CONFIRMED" },
+    include: { order: true },
+  });
   await logAudit(user.id, "PAYMENT_CONFIRMED", "Payment", paymentId, { orderId: payment.orderId });
+  await notifyCustomer(
+    payment.order.customerId,
+    "PAYMENT_CONFIRMED",
+    `Your payment of ${Number(payment.amount).toFixed(2)} for order ${payment.order.orderNumber} was confirmed.`,
+    `/orders/${payment.orderId}`
+  );
   redirect(`/payments`);
 }
 
 export async function rejectPaymentAction(paymentId: string) {
   const user = await requireRole(["STAFF", "ADMIN"]);
-  const payment = await prisma.payment.update({ where: { id: paymentId }, data: { status: "REJECTED" } });
+  const payment = await prisma.payment.update({
+    where: { id: paymentId },
+    data: { status: "REJECTED" },
+    include: { order: true },
+  });
   await logAudit(user.id, "PAYMENT_REJECTED", "Payment", paymentId, { orderId: payment.orderId });
+  await notifyCustomer(
+    payment.order.customerId,
+    "PAYMENT_REJECTED",
+    `Your payment of ${Number(payment.amount).toFixed(2)} for order ${payment.order.orderNumber} was rejected. Please check the proof and try again.`,
+    `/orders/${payment.orderId}`
+  );
   redirect(`/payments`);
 }
 
@@ -148,4 +178,72 @@ export async function releaseJobOrderAction(jobOrderId: string) {
   await logAudit(user.id, "JOB_ORDER_RELEASED", "JobOrder", jobOrderId, {});
 
   redirect(`/job-orders/${jobOrderId}`);
+}
+
+const applyVoucherSchema = z.object({
+  orderId: z.string().min(1),
+  voucherId: z.string().min(1),
+});
+
+/**
+ * Customer applies one of their AVAILABLE vouchers to an order's balance.
+ * Self-verifying (it's deducted from the customer's own already-confirmed
+ * points ledger), so unlike other customer-initiated payments it's
+ * CONFIRMED immediately — no staff review needed.
+ *
+ * Default (not explicitly confirmed by the business owner): the voucher's
+ * minimum-spend requirement is checked against the order's total amount,
+ * and at most the remaining balance due is applied (no "change" credited
+ * back if the voucher is worth more than what's owed).
+ */
+export async function applyVoucherAction(_prevState: string | undefined, formData: FormData) {
+  const user = await requireUser();
+  if (user.role !== "CUSTOMER") throw new Error("Not allowed.");
+
+  const parsed = applyVoucherSchema.safeParse({
+    orderId: formData.get("orderId"),
+    voucherId: formData.get("voucherId"),
+  });
+  if (!parsed.success) return "Please select a voucher.";
+
+  const customer = await getCurrentCustomer(user.id);
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: parsed.data.orderId } });
+  if (order.customerId !== customer.id) throw new Error("Not allowed.");
+
+  const voucher = await prisma.voucher.findUniqueOrThrow({ where: { id: parsed.data.voucherId } });
+  if (voucher.customerId !== customer.id) throw new Error("Not allowed.");
+  if (voucher.status !== "AVAILABLE") return "This voucher has already been used.";
+  if (Number(order.totalAmount) < voucher.minimumSpend) {
+    return `This voucher requires a minimum order of ${voucher.minimumSpend}.`;
+  }
+
+  const summary = await paymentSummary(order.id);
+  const balanceDue = summary.total - summary.confirmed;
+  if (balanceDue <= 0) return "This order has no remaining balance.";
+
+  const appliedAmount = Math.min(voucher.value, balanceDue);
+
+  const payment = await prisma.$transaction(async (tx) => {
+    const p = await tx.payment.create({
+      data: {
+        orderId: order.id,
+        amount: appliedAmount,
+        method: "VOUCHER",
+        status: "CONFIRMED",
+        voucherId: voucher.id,
+        recordedById: user.id,
+        notes: `Voucher ${voucher.code} applied`,
+      },
+    });
+    await tx.voucher.update({ where: { id: voucher.id }, data: { status: "USED" } });
+    return p;
+  });
+
+  await logAudit(user.id, "VOUCHER_APPLIED", "Payment", payment.id, {
+    orderId: order.id,
+    voucherId: voucher.id,
+    appliedAmount,
+  });
+
+  redirect(`/orders/${order.id}`);
 }

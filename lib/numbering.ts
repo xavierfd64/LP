@@ -43,3 +43,15 @@ export async function nextLotCode(
   const seq = String(count + 1).padStart(3, "0");
   return `${prefix}${seq}`;
 }
+
+export async function nextVoucherCode(): Promise<string> {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars (0/O, 1/I)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let suffix = "";
+    for (let i = 0; i < 8; i++) suffix += chars[Math.floor(Math.random() * chars.length)];
+    const code = `VCH-${suffix}`;
+    const existing = await prisma.voucher.findUnique({ where: { code } });
+    if (!existing) return code;
+  }
+  throw new Error("Could not generate a unique voucher code.");
+}

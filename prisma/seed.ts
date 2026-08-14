@@ -364,9 +364,70 @@ async function main() {
     },
   });
 
+  // A quotation the customer asked changes to — converted back into an
+  // inquiry (reopened to NEW) awaiting a re-quote, per the revision cycle.
+  const revisionInquiry = await prisma.inquiry.create({
+    data: {
+      customerId: customer2.id,
+      description: "Need signage for our new branch opening, roughly 2 large boards.",
+      desiredProduct: "Signage",
+      roughQty: 2,
+      status: "NEW",
+    },
+  });
+  const revisionQuote = await prisma.quotation.create({
+    data: {
+      inquiryId: revisionInquiry.id,
+      customerId: customer2.id,
+      quoteNumber: "QUO-2026-0006",
+      status: "REVISION_REQUESTED",
+      total: 20000,
+      lineItems: {
+        create: [{ productType: "Signage", description: "Branch opening signage board", qty: 2, unitPrice: 10000 }],
+      },
+    },
+  });
+  await prisma.quotationRevisionRequest.create({
+    data: {
+      quotationId: revisionQuote.id,
+      customerId: customer2.id,
+      message: "Can we get 3 boards instead of 2, and add an LED backlight option? Please requote.",
+    },
+  });
+
+  // A quotation staff cancelled directly (pricing mistake) rather than customer-requested.
+  await prisma.quotation.create({
+    data: {
+      customerId: customer1.id,
+      quoteNumber: "QUO-2026-0007",
+      status: "CANCELLED",
+      total: 8000,
+      cancelledById: admin.id,
+      cancelReason: "Pricing error on unit cost — corrected quote to follow.",
+      lineItems: {
+        create: [{ productType: "Tarp", description: "Event backdrop tarpaulin", qty: 4, unitPrice: 2000 }],
+      },
+    },
+  });
+
   // ---------- Reward Rule ----------
+  // 1 point per PHP500 spent, 1 point = PHP1 (matches business rule).
   const rewardRule = await prisma.rewardRule.create({
-    data: { name: "Standard Earn Rate", pointsPerCurrencyUnit: 1, currencyUnit: 100, active: true },
+    data: { name: "Standard Earn Rate", pointsPerCurrencyUnit: 1, currencyUnit: 500, active: true },
+  });
+
+  // ---------- Redemption Tiers (voucher denominations) ----------
+  const tier100 = await prisma.redemptionTier.create({
+    data: { pointsCost: 100, voucherValue: 100, minimumSpend: 500, active: true },
+  });
+  await prisma.redemptionTier.create({
+    data: { pointsCost: 200, voucherValue: 200, minimumSpend: 1000, active: true },
+  });
+  await prisma.redemptionTier.create({
+    data: { pointsCost: 500, voucherValue: 500, minimumSpend: 5000, active: true },
+  });
+  await prisma.redemptionTier.create({
+    data: { pointsCost: 1000, voucherValue: 1000, minimumSpend: 10000, active: true },
   });
 
   // ---------- Order 1: ON_HOLD unpaid ----------
@@ -627,17 +688,72 @@ async function main() {
     },
   });
 
-  // Rewards for completed order3
+  // Rewards for completed order3 (rate: 1 pt per PHP500 spent -> 90 pts)
   const pointsEarned = Math.floor((45000 / Number(rewardRule.currencyUnit)) * Number(rewardRule.pointsPerCurrencyUnit));
   await prisma.rewardTransaction.create({
     data: { customerId: customer3.id, orderId: order3.id, points: pointsEarned, type: "EARN", description: "Order ORD-2026-0003 completed" },
   });
+  // Legacy redemption from before the voucher-tier system existed (kept as history, no linked Voucher).
   await prisma.rewardTransaction.create({
     data: { customerId: customer3.id, points: -50, type: "REDEEM", description: "Redeemed for tarpaulin discount voucher" },
   });
+  await prisma.rewardTransaction.create({
+    data: { customerId: customer3.id, points: 300, type: "EARN", description: "Loyalty welcome bonus" },
+  });
+  // A live redemption through the tier system, producing an AVAILABLE voucher to demo the order-payment flow.
+  const demoRedeemTxn = await prisma.rewardTransaction.create({
+    data: { customerId: customer3.id, points: -tier100.pointsCost, type: "REDEEM", description: `Redeemed for a ${tier100.voucherValue} voucher (VCH-DEMO0001)` },
+  });
+  await prisma.voucher.create({
+    data: {
+      code: "VCH-DEMO0001",
+      customerId: customer3.id,
+      tierId: tier100.id,
+      value: tier100.voucherValue,
+      minimumSpend: tier100.minimumSpend,
+      status: "AVAILABLE",
+      rewardTransactionId: demoRedeemTxn.id,
+    },
+  });
   await prisma.customer.update({
     where: { id: customer3.id },
-    data: { rewardPointsBalance: pointsEarned - 50 },
+    data: { rewardPointsBalance: pointsEarned - 50 + 300 - tier100.pointsCost },
+  });
+
+  // ---------- Messages (sample thread on order2) ----------
+  await prisma.message.createMany({
+    data: [
+      { orderId: order2.id, senderId: custUser2.id, body: "Hi, can I get an update on the DTF shirts?" },
+      {
+        orderId: order2.id,
+        senderId: staff1.id,
+        body: "Hi Maria! JO-001 is currently in Pressing, on track for your deadline. JO-002 had a minor QC issue we're reworking now.",
+      },
+    ],
+  });
+
+  // ---------- Notifications (sample, unread) ----------
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: custUser2.id,
+        type: "NEW_MESSAGE",
+        message: "New message on order ORD-2026-0002.",
+        link: `/orders/${order2.id}`,
+      },
+      {
+        userId: staff1.id,
+        type: "PAYMENT_PROOF_UPLOADED",
+        message: "Customer uploaded a payment proof for order ORD-2026-0001.",
+        link: `/orders/${order1.id}`,
+      },
+      {
+        userId: custUser3.id,
+        type: "FULFILLMENT_INSTALLED",
+        message: "Your installation is complete.",
+        link: `/orders/${order3.id}`,
+      },
+    ],
   });
 
   console.log("Seed complete.");

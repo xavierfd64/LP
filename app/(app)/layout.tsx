@@ -5,7 +5,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireUser();
 
   return (
-    <Shell role={user.role} name={user.name ?? user.email ?? "User"}>
+    <Shell role={user.role} name={user.name ?? user.email ?? "User"} userId={user.id}>
       {children}
     </Shell>
   );

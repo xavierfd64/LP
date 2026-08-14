@@ -60,6 +60,9 @@ const STATUS_TONE: Record<string, Tone> = {
   DELIVERED: "green",
   INSTALLED: "green",
   RECEIVED: "green",
+  REVISION_REQUESTED: "yellow",
+  AVAILABLE: "green",
+  USED: "slate",
 };
 
 export function StatusBadge({ status }: { status: string }) {
