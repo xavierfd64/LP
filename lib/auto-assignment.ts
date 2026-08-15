@@ -53,6 +53,8 @@ async function assignAndNotify(conversationId: string, staffId: string, note: st
       senderRole: message.sender.role,
       messageType: "SYSTEM",
       createdAt: message.createdAt.toISOString(),
+      attachment: null,
+      reference: null,
     },
   });
   await notifyUser(staffId, "CONVERSATION_ASSIGNED", "A new customer conversation has been automatically assigned to you.", `/messages/${conversationId}`);

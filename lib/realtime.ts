@@ -22,6 +22,12 @@ export type RealtimeMessageEvent = {
     senderRole: string;
     messageType: "TEXT" | "SYSTEM";
     createdAt: string;
+    attachment: { path: string; name: string; mime: string; size: number } | null;
+    reference:
+      | { type: "INQUIRY"; id: string; label: string; status: string }
+      | { type: "QUOTATION"; id: string; label: string; status: string; amount: string; customerName: string }
+      | { type: "JOB_ORDER"; id: string; label: string; status: string }
+      | null;
   };
 };
 

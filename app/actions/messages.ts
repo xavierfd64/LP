@@ -78,18 +78,21 @@ async function createAndPublishMessage(params: {
   recipientUserIds: string[];
 }) {
   const { recipientUserIds, ...data } = params;
-  const message = await prisma.message.create({ data, include: { sender: true } });
+  const message = await prisma.message.create({ data, include: { sender: true, ...MESSAGE_REF_INCLUDE } });
+  const serialized = serializeMessage(message);
   publishToUsers(recipientUserIds, {
     type: "message",
     conversationId: params.conversationId,
     message: {
-      id: message.id,
-      body: message.body,
-      senderId: message.senderId,
+      id: serialized.id,
+      body: serialized.body,
+      senderId: serialized.senderId,
       senderName: message.sender.name,
       senderRole: message.sender.role,
-      messageType: message.type,
-      createdAt: message.createdAt.toISOString(),
+      messageType: serialized.type,
+      createdAt: serialized.createdAt,
+      attachment: serialized.attachment,
+      reference: serialized.reference,
     },
   });
   return message;
@@ -565,6 +568,60 @@ export type MessageReference =
   | { type: "QUOTATION"; id: string; label: string; status: string; amount: string; customerName: string }
   | { type: "JOB_ORDER"; id: string; label: string; status: string };
 
+type MessageWithRelations = {
+  id: string;
+  body: string;
+  type: "TEXT" | "SYSTEM";
+  createdAt: Date;
+  senderId: string;
+  sender: { name: string; role: string };
+  attachmentPath: string | null;
+  attachmentName: string | null;
+  attachmentMime: string | null;
+  attachmentSize: number | null;
+  refType: "INQUIRY" | "QUOTATION" | "JOB_ORDER" | null;
+  refInquiry: { id: string; desiredProduct: string; status: string } | null;
+  refQuotation: { id: string; quoteNumber: string; status: string; total: { toString(): string }; customer: { name: string } } | null;
+  refJobOrder: { id: string; joNumber: string; status: string } | null;
+};
+
+const MESSAGE_REF_INCLUDE = {
+  refInquiry: { select: { id: true, desiredProduct: true, status: true } },
+  refQuotation: { select: { id: true, quoteNumber: true, status: true, total: true, customer: { select: { name: true } } } },
+  refJobOrder: { select: { id: true, joNumber: true, status: true } },
+} as const;
+
+/** Shared by getConversationMessagesAction's page-load fetch and createAndPublishMessage's live broadcast, so a message looks identical whether it arrived cold or over SSE — attachments and transaction references included either way. */
+function serializeMessage(m: MessageWithRelations) {
+  let reference: MessageReference | null = null;
+  if (m.refType === "INQUIRY" && m.refInquiry) {
+    reference = { type: "INQUIRY", id: m.refInquiry.id, label: m.refInquiry.desiredProduct, status: m.refInquiry.status };
+  } else if (m.refType === "QUOTATION" && m.refQuotation) {
+    reference = {
+      type: "QUOTATION",
+      id: m.refQuotation.id,
+      label: m.refQuotation.quoteNumber,
+      status: m.refQuotation.status,
+      amount: m.refQuotation.total.toString(),
+      customerName: m.refQuotation.customer.name,
+    };
+  } else if (m.refType === "JOB_ORDER" && m.refJobOrder) {
+    reference = { type: "JOB_ORDER", id: m.refJobOrder.id, label: m.refJobOrder.joNumber, status: m.refJobOrder.status };
+  }
+  return {
+    id: m.id,
+    body: m.body,
+    type: m.type,
+    createdAt: m.createdAt.toISOString(),
+    senderId: m.senderId,
+    sender: { name: m.sender.name, role: m.sender.role },
+    attachment: m.attachmentPath
+      ? { path: m.attachmentPath, name: m.attachmentName ?? "file", mime: m.attachmentMime ?? "", size: m.attachmentSize ?? 0 }
+      : null,
+    reference,
+  };
+}
+
 export async function getConversationMessagesAction(conversationId: string) {
   const user = await requireUser();
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
@@ -612,12 +669,7 @@ export async function getConversationMessagesAction(conversationId: string) {
   const messages = await prisma.message.findMany({
     where: { conversationId },
     orderBy: { createdAt: "asc" },
-    include: {
-      sender: true,
-      refInquiry: { select: { id: true, desiredProduct: true, status: true } },
-      refQuotation: { select: { id: true, quoteNumber: true, status: true, total: true, customer: { select: { name: true } } } },
-      refJobOrder: { select: { id: true, joNumber: true, status: true } },
-    },
+    include: { sender: true, ...MESSAGE_REF_INCLUDE },
   });
   await markConversationRead(conversationId, user.id);
 
@@ -635,35 +687,7 @@ export async function getConversationMessagesAction(conversationId: string) {
     title,
     presence,
     sourceLink: conversationSourceLink(conversation),
-    messages: messages.map((m) => {
-      let reference: MessageReference | null = null;
-      if (m.refType === "INQUIRY" && m.refInquiry) {
-        reference = { type: "INQUIRY", id: m.refInquiry.id, label: m.refInquiry.desiredProduct, status: m.refInquiry.status };
-      } else if (m.refType === "QUOTATION" && m.refQuotation) {
-        reference = {
-          type: "QUOTATION",
-          id: m.refQuotation.id,
-          label: m.refQuotation.quoteNumber,
-          status: m.refQuotation.status,
-          amount: m.refQuotation.total.toString(),
-          customerName: m.refQuotation.customer.name,
-        };
-      } else if (m.refType === "JOB_ORDER" && m.refJobOrder) {
-        reference = { type: "JOB_ORDER", id: m.refJobOrder.id, label: m.refJobOrder.joNumber, status: m.refJobOrder.status };
-      }
-      return {
-        id: m.id,
-        body: m.body,
-        type: m.type,
-        createdAt: m.createdAt.toISOString(),
-        senderId: m.senderId,
-        sender: { name: m.sender.name, role: m.sender.role },
-        attachment: m.attachmentPath
-          ? { path: m.attachmentPath, name: m.attachmentName ?? "file", mime: m.attachmentMime ?? "", size: m.attachmentSize ?? 0 }
-          : null,
-        reference,
-      };
-    }),
+    messages: messages.map(serializeMessage),
   };
 }
 

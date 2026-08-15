@@ -36,6 +36,8 @@ type RealtimeMessageDetail = {
     senderRole: string;
     messageType: "TEXT" | "SYSTEM";
     createdAt: string;
+    attachment: MessageItem["attachment"];
+    reference: MessageReference | null;
   };
 };
 
@@ -160,8 +162,8 @@ export function MessageThread({
             createdAt: detail.message.createdAt,
             senderId: detail.message.senderId,
             sender: { name: detail.message.senderName, role: detail.message.senderRole },
-            attachment: null,
-            reference: null,
+            attachment: detail.message.attachment,
+            reference: detail.message.reference,
           },
         ];
       });
