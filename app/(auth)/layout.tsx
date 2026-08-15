@@ -1,6 +1,13 @@
 import Image from "next/image";
 import { getBusinessSettings } from "@/lib/business-settings";
 
+// Login/register show admin-configured branding (name/logo/tagline). Force
+// dynamic rendering so that data is always fetched fresh at request time —
+// otherwise Next.js would statically prerender these pages at build time
+// (baking in whatever branding existed then) and, in deploy pipelines where
+// the database isn't up yet during `next build`, the prerender would fail.
+export const dynamic = "force-dynamic";
+
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
   const settings = await getBusinessSettings();
 
