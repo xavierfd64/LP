@@ -93,7 +93,7 @@ export function NotificationBell({
                       type="submit"
                       className={cn(
                         "block w-full border-b border-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-50",
-                        !n.read && "bg-blue-50/60"
+                        !n.read && "bg-brand-50/60"
                       )}
                     >
                       <p className={cn("text-slate-800", !n.read && "font-medium")}>{n.message}</p>

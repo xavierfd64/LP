@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Montserrat, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { getBusinessSettings } from "@/lib/business-settings";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 const geistMono = Geist_Mono({
@@ -12,16 +14,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "LP Printing — Business Management",
-  description: "Printing business management system prototype",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getBusinessSettings();
+  return {
+    title: `${settings.businessName} — Business Management`,
+    description: settings.description ?? "Printing business management system",
+    icons: settings.faviconPath
+      ? [{ url: settings.faviconPath }]
+      : settings.logoPath
+        ? [{ url: settings.logoPath }]
+        : undefined,
+  };
+}
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${montserrat.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

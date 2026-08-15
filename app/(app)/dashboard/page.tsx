@@ -3,7 +3,7 @@ import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import Link from "next/link";
 
 export default async function DashboardPage() {
@@ -25,13 +25,13 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Welcome, {user.name}</h1>
-        <p className="text-sm text-slate-500">Here&apos;s a quick jump-off point.</p>
+        <p className="mt-1 text-sm text-slate-500">Here&apos;s a quick jump-off point.</p>
       </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         {links.map((l) => (
           <Link key={l.href} href={l.href}>
-            <Card className="transition-shadow hover:shadow-md">
-              <CardContent className="py-6 text-center font-medium text-slate-800">{l.label}</CardContent>
+            <Card className="border-l-4 border-l-brand-600 transition-shadow hover:shadow-md">
+              <CardContent className="py-6 text-center font-semibold text-slate-800">{l.label}</CardContent>
             </Card>
           </Link>
         ))}
@@ -64,17 +64,20 @@ async function CustomerDashboard({ userId, name }: { userId: string; name: strin
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Welcome, {name}</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Welcome, {name}</h1>
+        <p className="mt-1 text-sm text-slate-500">Here&apos;s where things stand on your account.</p>
+      </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Link href="/quotations">
-          <StatCard label="Quotations awaiting approval" value={quotationsAwaiting.length} tone={quotationsAwaiting.length > 0 ? "yellow" : undefined} />
+          <StatCard label="Quotations awaiting approval" value={quotationsAwaiting.length} tone={quotationsAwaiting.length > 0 ? "attention" : undefined} />
         </Link>
         <Link href="/orders">
           <StatCard label="Active orders" value={activeOrders.length} />
         </Link>
         <Link href="/payments">
-          <StatCard label="Balance due" value={formatCurrency(balanceDue)} tone={balanceDue > 0 ? "yellow" : undefined} />
+          <StatCard label="Balance due" value={formatCurrency(balanceDue)} tone={balanceDue > 0 ? "attention" : undefined} />
         </Link>
         <Link href="/account/rewards">
           <StatCard label="Reward points" value={customer.rewardPointsBalance} />
@@ -149,12 +152,17 @@ async function CustomerDashboard({ userId, name }: { userId: string; name: strin
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: string | number; tone?: "yellow" }) {
+function StatCard({ label, value, tone }: { label: string; value: string | number; tone?: "attention" }) {
   return (
-    <Card className={tone === "yellow" ? "border-yellow-300 transition-shadow hover:shadow-md" : "transition-shadow hover:shadow-md"}>
+    <Card
+      className={cn(
+        "border-l-4 transition-shadow hover:shadow-md",
+        tone === "attention" ? "border-l-amber-400" : "border-l-brand-600"
+      )}
+    >
       <CardContent className="py-4">
-        <p className="text-xs text-slate-500">{label}</p>
-        <p className="text-2xl font-bold text-slate-900">{value}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="mt-1 text-2xl font-bold text-slate-900 md:text-3xl">{value}</p>
       </CardContent>
     </Card>
   );

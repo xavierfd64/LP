@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
 function startOfMonth() {
   const d = new Date();
@@ -15,17 +15,20 @@ export default async function AdminDashboardPage() {
   const monthStart = startOfMonth();
 
   const [
+    newInquiries,
     openQuotations,
     jobOrdersByStatus,
     qcResults,
     lowStockItems,
     openOrders,
+    pendingPayments,
     upcomingFulfillments,
     newCustomersThisMonth,
     ordersThisMonthCustomerIds,
     rewardEarnedAgg,
     rewardRedeemedAgg,
   ] = await Promise.all([
+    prisma.inquiry.count({ where: { status: "NEW" } }),
     prisma.quotation.count({ where: { status: { in: ["DRAFT", "SENT"] } } }),
     prisma.jobOrder.groupBy({ by: ["status"], _count: { _all: true } }),
     prisma.qCResult.groupBy({ by: ["result"], _count: { _all: true } }),
@@ -36,6 +39,7 @@ export default async function AdminDashboardPage() {
       where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
       include: { customer: true, payments: { where: { status: "CONFIRMED" } } },
     }),
+    prisma.payment.count({ where: { status: "PENDING" } }),
     prisma.fulfillment.findMany({
       where: { status: { in: ["SCHEDULED", "BOOKED", "IN_TRANSIT"] } },
       include: { order: { include: { customer: true } }, jobOrder: true },
@@ -70,10 +74,12 @@ export default async function AdminDashboardPage() {
       <h1 className="text-2xl font-bold text-slate-900">Management Dashboard</h1>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <StatCard label="New Inquiries" value={newInquiries} href="/inquiries" tone={newInquiries > 0 ? "attention" : undefined} />
         <StatCard label="Open Quotations" value={openQuotations} href="/quotations" />
-        <StatCard label="QC Pass Rate" value={qcPassRate !== null ? `${qcPassRate}%` : "—"} sub={`${qcPass} pass / ${qcFail} fail`} />
-        <StatCard label="Low-Stock Items" value={lowStockItems.length} href="/inventory" tone={lowStockItems.length > 0 ? "yellow" : undefined} />
+        <StatCard label="Pending Payments" value={pendingPayments} href="/payments" tone={pendingPayments > 0 ? "attention" : undefined} />
         <StatCard label="Outstanding Balance" value={formatCurrency(totalOutstanding)} href="/payments" />
+        <StatCard label="QC Pass Rate" value={qcPassRate !== null ? `${qcPassRate}%` : "—"} sub={`${qcPass} pass / ${qcFail} fail`} />
+        <StatCard label="Low-Stock Items" value={lowStockItems.length} href="/inventory" tone={lowStockItems.length > 0 ? "attention" : undefined} />
         <StatCard label="New Customers (mo.)" value={newCustomersThisMonth} />
         <StatCard label="Returning Customers (mo.)" value={returningCustomersThisMonth} />
         <StatCard label="Points Issued (mo.)" value={rewardEarnedAgg._sum.points ?? 0} href="/admin/rewards" />
@@ -149,14 +155,19 @@ function StatCard({
   value: string | number;
   sub?: string;
   href?: string;
-  tone?: "yellow";
+  tone?: "attention";
 }) {
   const content = (
-    <Card className={tone === "yellow" ? "border-yellow-300" : undefined}>
+    <Card
+      className={cn(
+        "border-l-4 transition-shadow hover:shadow-md",
+        tone === "attention" ? "border-l-amber-400" : "border-l-brand-600"
+      )}
+    >
       <CardContent className="py-4">
-        <p className="text-xs text-slate-500">{label}</p>
-        <p className="text-2xl font-bold text-slate-900">{value}</p>
-        {sub && <p className="text-xs text-slate-400">{sub}</p>}
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="mt-1 text-2xl font-bold text-slate-900 md:text-3xl">{value}</p>
+        {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
       </CardContent>
     </Card>
   );

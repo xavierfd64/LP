@@ -663,3 +663,32 @@ model AuditLog {
   changes    Json?
   createdAt  DateTime @default(now())
 }
+
+/**
+ * Singleton row (always id="default") holding the centralized business
+ * identity/branding/contact info admin can edit from Admin -> Business
+ * Settings, instead of it being hard-coded across pages. Every field is
+ * optional except businessName so the app still renders sensibly before
+ * an admin has filled everything in.
+ */
+model BusinessSettings {
+  id String @id @default("default")
+
+  businessName String  @default("LP Printing")
+  tagline      String?
+  description  String?
+  logoPath     String?
+  faviconPath  String?
+
+  contactNumber String?
+  email         String?
+  facebookUrl   String?
+  website       String?
+
+  addressLine String?
+  city        String?
+  province    String?
+  postalCode  String?
+
+  updatedAt DateTime @updatedAt
+}
