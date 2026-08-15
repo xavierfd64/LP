@@ -75,7 +75,7 @@ export default async function JobOrderDetailPage({
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
             {jo.joNumber} — {jo.productType}
@@ -141,7 +141,7 @@ export default async function JobOrderDetailPage({
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Files</CardTitle>
           <UploadFileForm jobOrderId={jo.id} isCustomer={user.role === "CUSTOMER"} />
         </CardHeader>
@@ -248,7 +248,7 @@ export default async function JobOrderDetailPage({
           <CardContent className="space-y-4">
             {jo.qcResults.map((qc) => (
               <div key={qc.id} className="rounded-md border border-slate-200 p-3 text-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
                     {qc.stageName} — <StatusBadge status={qc.result} />
                   </span>
@@ -286,7 +286,7 @@ export default async function JobOrderDetailPage({
               const markInstalled = markInstalledAction.bind(null, f.id, jo.id);
               return (
                 <div key={f.id} className="rounded-md border border-slate-200 p-3 text-sm">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">
                       {f.method} — <StatusBadge status={f.status} />
                     </span>

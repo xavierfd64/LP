@@ -80,7 +80,7 @@ export default async function AdminDashboardPage() {
         <StatCard label="Points Redeemed (mo.)" value={Math.abs(rewardRedeemedAgg._sum.points ?? 0)} href="/admin/rewards" />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Job Orders by Stage</CardTitle>

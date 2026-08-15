@@ -1,4 +1,5 @@
 import { SidebarNav } from "./sidebar-nav";
+import { MobileNav } from "./mobile-nav";
 import { LogoutButton } from "./logout-button";
 import { NotificationBell } from "./notification-bell";
 import { navForRole } from "./nav-config";
@@ -31,19 +32,22 @@ export async function Shell({
         </div>
         <SidebarNav items={items} />
       </aside>
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-          <div className="md:hidden font-bold text-slate-900">LP Printing</div>
-          <div className="flex items-center gap-3 ml-auto">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-3 sm:px-6">
+          <div className="flex items-center gap-2">
+            <MobileNav items={items} />
+            <div className="font-bold text-slate-900 md:hidden">LP Printing</div>
+          </div>
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <NotificationBell notifications={notifications} unreadCount={unreadCount} />
-            <div className="text-right">
+            <div className="hidden text-right sm:block">
               <p className="text-sm font-medium text-slate-900">{name}</p>
               <Badge tone="slate">{role}</Badge>
             </div>
             <LogoutButton />
           </div>
         </header>
-        <main className="flex-1 px-6 py-6">{children}</main>
+        <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-6">{children}</main>
       </div>
     </div>
   );

@@ -69,7 +69,7 @@ export default async function OrderDetailPage({
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{order.orderNumber}</h1>
           {isStaffLike && <p className="text-sm text-slate-500">{order.customer.name}</p>}
@@ -79,7 +79,7 @@ export default async function OrderDetailPage({
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Payment terms</CardTitle>
@@ -205,7 +205,7 @@ export default async function OrderDetailPage({
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Job Orders</CardTitle>
           {isStaffLike && <AddJobOrderForm orderId={order.id} templates={templates} />}
         </CardHeader>

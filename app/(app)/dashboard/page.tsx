@@ -88,7 +88,7 @@ async function CustomerDashboard({ userId, name }: { userId: string; name: strin
         <CardContent className="space-y-3">
           {activeOrders.map((o) => (
             <div key={o.id} className="rounded-md border border-slate-100 p-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link href={`/orders/${o.id}`} className="font-medium text-slate-900 underline">
                   {o.orderNumber}
                 </Link>
@@ -107,7 +107,7 @@ async function CustomerDashboard({ userId, name }: { userId: string; name: strin
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Recent inquiries</CardTitle>

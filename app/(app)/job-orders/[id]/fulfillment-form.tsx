@@ -24,7 +24,7 @@ export function CreateFulfillmentForm({ jobOrderId, allowInstall }: { jobOrderId
         <Input id="scheduledDate" name="scheduledDate" type="date" />
       </div>
       {method === "DELIVERY" && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div>
             <Label htmlFor="courier">Courier</Label>
             <Input id="courier" name="courier" placeholder="e.g. LBC" />

@@ -37,7 +37,7 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/admin/a
       <h1 className="text-2xl font-bold text-slate-900">Audit Log</h1>
 
       <Card>
-        <form className="grid grid-cols-5 items-end gap-3 p-4">
+        <form className="grid grid-cols-1 items-end gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <Label htmlFor="entityType">Entity</Label>
             <Select id="entityType" name="entityType" defaultValue={entityType ?? ""}>

@@ -36,7 +36,7 @@ export async function ConversationCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle>Messages</CardTitle>
         {unreadCount > 0 && <Badge tone="red">{unreadCount} unread</Badge>}
       </CardHeader>

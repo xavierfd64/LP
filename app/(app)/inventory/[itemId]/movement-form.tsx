@@ -28,7 +28,7 @@ export function MovementForm({ lotId, remainingQty, jobOrders }: { lotId: string
       <input type="hidden" name="lotId" value={lotId} />
       {error && <Alert tone="error">{error}</Alert>}
       <p className="text-xs text-slate-500">Remaining in lot: {remainingQty}</p>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div>
           <Label htmlFor="type">Type</Label>
           <Select id="type" name="type" value={type} onChange={(e) => setType(e.target.value)}>

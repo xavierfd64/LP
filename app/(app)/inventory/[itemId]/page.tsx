@@ -32,7 +32,7 @@ export default async function InventoryItemPage({ params }: PageProps<"/inventor
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{item.name}</h1>
           <p className="text-sm font-mono text-slate-500">{item.sku}</p>
@@ -46,14 +46,14 @@ export default async function InventoryItemPage({ params }: PageProps<"/inventor
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Supply lots</CardTitle>
           <ReceiveLotForm itemId={item.id} />
         </CardHeader>
         <CardContent className="space-y-4">
           {item.supplyLots.map((lot) => (
             <div key={lot.id} className="rounded-md border border-slate-200 p-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="font-mono text-sm font-semibold text-slate-900">{lot.lotCode}</p>
                   <p className="text-xs text-slate-500">

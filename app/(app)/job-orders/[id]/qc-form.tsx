@@ -34,7 +34,7 @@ export function QCForm({
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="quantityChecked">Quantity checked</Label>
           <Input id="quantityChecked" name="quantityChecked" type="number" min={1} max={quantity} defaultValue={quantity} required />

@@ -24,7 +24,7 @@ export function AddJobOrderForm({ orderId, templates }: { orderId: string; templ
     <form action={formAction} className="space-y-3 rounded-md border border-slate-200 p-4">
       <input type="hidden" name="orderId" value={orderId} />
       {error && <Alert tone="error">{error}</Alert>}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="workflowTemplateId">Workflow template</Label>
           <Select id="workflowTemplateId" name="workflowTemplateId" required>

@@ -51,7 +51,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{quotation.quoteNumber}</h1>
           {isStaffLike && <p className="text-sm text-slate-500">{quotation.customer.name}</p>}

@@ -20,7 +20,7 @@ export default async function AdminRewardsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Reward Rules</h1>
             <p className="text-sm text-slate-500">Only one earn rule is active at a time; it&apos;s applied automatically when an order completes.</p>
@@ -67,7 +67,7 @@ export default async function AdminRewardsPage() {
       </div>
 
       <div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-xl font-bold text-slate-900">Voucher Redemption Tiers</h2>
             <p className="text-sm text-slate-500">

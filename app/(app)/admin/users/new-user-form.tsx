@@ -15,9 +15,12 @@ export function NewUserForm() {
   }
 
   return (
-    <form action={formAction} className="grid grid-cols-5 items-end gap-2 rounded-md border border-slate-200 p-3">
+    <form
+      action={formAction}
+      className="grid grid-cols-1 items-end gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-2 lg:grid-cols-5"
+    >
       {error && (
-        <div className="col-span-5">
+        <div className="sm:col-span-2 lg:col-span-5">
           <Alert tone="error">{error}</Alert>
         </div>
       )}
