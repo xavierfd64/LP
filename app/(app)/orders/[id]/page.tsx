@@ -18,7 +18,8 @@ import { PaymentProofForm } from "./payment-proof-form";
 import { ReleaseExceptionForm } from "./release-exception-form";
 import { ApplyVoucherForm } from "./apply-voucher-form";
 import { MessageThread } from "@/components/messaging/message-thread";
-import { getOrCreateConversation, markConversationRead } from "@/lib/conversations";
+import { getOrCreateConversation } from "@/lib/conversations";
+import { getConversationMessagesAction } from "@/app/actions/messages";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 
@@ -69,12 +70,7 @@ export default async function OrderDetailPage({
     : [];
 
   const conversation = await getOrCreateConversation(order.customerId, "ORDER", order.id);
-  const messages = await prisma.message.findMany({
-    where: { conversationId: conversation.id },
-    orderBy: { createdAt: "asc" },
-    include: { sender: true },
-  });
-  await markConversationRead(conversation.id, user.id);
+  const commsData = !isStaffLike || canViewComms ? await getConversationMessagesAction(conversation.id) : null;
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
 
@@ -302,13 +298,20 @@ export default async function OrderDetailPage({
         </Card>
       )}
 
-      {(!isStaffLike || canViewComms) && (
+      {commsData && (
         <Card>
           <CardHeader>
             <CardTitle>Messages</CardTitle>
           </CardHeader>
           <CardContent>
-            <MessageThread conversationId={conversation.id} currentUserId={user.id} messages={messages} />
+            <MessageThread
+              conversationId={conversation.id}
+              currentUserId={user.id}
+              messages={commsData.messages}
+              canSend={commsData.canSend}
+              canAttach={commsData.canAttach}
+              canReference={commsData.canReference}
+            />
           </CardContent>
         </Card>
       )}
