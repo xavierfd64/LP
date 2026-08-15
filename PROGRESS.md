@@ -292,3 +292,26 @@ This stack is plain PostgreSQL via Prisma (not Supabase), so there's no built-in
 
 ### Known limitation
 Single-server-instance pub/sub (see `lib/realtime.ts`'s own doc comment) — correct for the current deployment, would need a shared bus if ever scaled to multiple Render instances behind a load balancer.
+
+---
+
+## August 15 — 4th update: Floating Messenger-style chat widget
+
+Replaces the "go to a dedicated Messages page" flow with a Facebook-Messenger-style floating widget for the CUSTOMER portal, built entirely on the existing Conversation/Message/real-time infrastructure — no parallel chat system, and the full `/messages` pages stay exactly as they were (still linked from the widget's list view as "View full message history").
+
+### What was added
+- `FloatingChatWidget` (`components/messaging/floating-chat-widget.tsx`), mounted once in `Shell` only when `role === "CUSTOMER"` — visible on every Customer Portal page (Dashboard, My Inquiries, My Quotations, My Orders, Payment, My Rewards) without a route change.
+- A circular button fixed bottom-right with an unread badge (💬), fetched on mount so it's accurate even before the customer ever opens it. Clicking opens the panel; clicking again minimizes it (same button, same handler — matches "click again to minimize").
+- Panel has two views sharing one component: a compact **conversation list** (subject label, last-message preview, per-conversation unread badge, "New General Message", a link to the full `/messages` page) and a **thread view** that embeds the *existing* `MessageThread` component unmodified in behavior — same bubbles, same real-time listener, same composer. Opening the widget for the first time in a session jumps straight into the most recently active conversation (matching how Messenger itself behaves when you have something to catch up on); a back arrow in the header returns to the list to switch threads.
+- New read-only data actions in `app/actions/messages.ts` (`getMyConversationsAction`, `getConversationMessagesAction`, `markConversationReadAction`, `openOrCreateGeneralConversationAction`) — same queries/shapes the `/messages` pages already used, just exposed as plain callable Server Actions so the globally-mounted client widget can fetch on demand instead of relying on a server-rendered page load. No new tables, no new fan-out logic.
+- Real-time behavior is inherited, not rebuilt: the widget listens to the same `realtime:message` window event `RealtimeProvider` already broadcasts. On every event it re-fetches the conversation list (keeping the badge and previews authoritative) and, if the event is for the conversation currently open in the widget, marks it read server-side so it doesn't stay "unread" while actively being looked at.
+- Mobile: the button stays fixed bottom-right at every viewport size; the open panel is `fixed inset-0` (near-fullscreen) below the `sm` breakpoint and a bounded `24rem`-wide, `32rem`-tall floating box above it — matching "expanding to most or all of the screen" on mobile vs. a proper floating widget on desktop/tablet.
+- Polish fix: `MessageThread` gained an opt-in `fillHeight` prop (default off) that swaps its fixed `max-h-96` message area for a `flex-1` one so it stretches to fill the widget's bounded panel instead of leaving dead space below the composer on the mobile fullscreen layout. Off by default, so the Order page's inline thread and the full `/messages/[id]` page — which don't have a definite parent height — render exactly as before; verified via screenshot that neither changed.
+
+### Verified
+- Widget button present on every customer page tested (Dashboard, Inquiries, Quotations, Orders, Payments, Rewards); confirmed absent for STAFF.
+- Open → auto-jumps into the most recent thread → minimize (click again) hides it → reopen restores the same thread (not back to the list).
+- Two-session real-time test: staff replies via the full `/messages/[id]` page → appears in the customer's already-open widget instantly; customer sends from inside the widget → appears on staff's page instantly and shows correctly attributed on the customer's own side.
+- Minimized-widget unread badge increments live when a new message arrives while the widget is closed, with the correct count.
+- Mobile (375px): zero horizontal overflow in the closed, open-thread, and list states; screenshots confirm the thread now fills the available height with the composer pinned to the bottom instead of a dead gap.
+- Full route crawl re-run across every role/permission combination from the earlier updates: zero regressions.

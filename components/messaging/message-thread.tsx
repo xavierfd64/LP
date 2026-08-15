@@ -31,10 +31,13 @@ export function MessageThread({
   conversationId,
   currentUserId,
   messages: initialMessages,
+  fillHeight = false,
 }: {
   conversationId: string;
   currentUserId: string;
   messages: MessageItem[];
+  /** Stretch to fill a parent with a definite height (the floating widget) instead of the fixed max-h-96 used everywhere else. */
+  fillHeight?: boolean;
 }) {
   const [messages, setMessages] = useState(initialMessages);
   const action = sendMessageAction.bind(null, conversationId);
@@ -84,8 +87,14 @@ export function MessageThread({
   }, [pending, error]);
 
   return (
-    <div className="space-y-3">
-      <div ref={scrollRef} className="max-h-96 space-y-2 overflow-y-auto rounded-md border border-slate-100 p-3">
+    <div className={cn("flex flex-col gap-3", fillHeight && "h-full")}>
+      <div
+        ref={scrollRef}
+        className={cn(
+          "space-y-2 overflow-y-auto rounded-md border border-slate-100 p-3",
+          fillHeight ? "flex-1 min-h-0" : "max-h-96"
+        )}
+      >
         {messages.length === 0 && <p className="text-sm text-slate-400">No messages yet — say hello.</p>}
         {messages.map((m) => {
           const mine = m.senderId === currentUserId;

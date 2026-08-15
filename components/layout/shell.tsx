@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { getStaffPermissions } from "@/lib/permissions-guard";
 import { RealtimeProvider } from "@/components/realtime/realtime-provider";
+import { FloatingChatWidget } from "@/components/messaging/floating-chat-widget";
 
 export async function Shell({
   role,
@@ -53,6 +54,7 @@ export async function Shell({
         </header>
         <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-6">{children}</main>
       </div>
+      {role === "CUSTOMER" && <FloatingChatWidget currentUserId={userId} />}
     </div>
   );
 }

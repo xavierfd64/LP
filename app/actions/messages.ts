@@ -22,6 +22,87 @@ export async function startGeneralConversationAction() {
   redirect(`/messages/${conversation.id}`);
 }
 
+/** Data-returning variant of startGeneralConversationAction for the floating widget, which stays on the current page instead of navigating to /messages/[id]. */
+export async function openOrCreateGeneralConversationAction() {
+  const user = await requireUser();
+  if (user.role !== "CUSTOMER") throw new Error("Not allowed.");
+  const customer = await getCurrentCustomer(user.id);
+  const conversation = await getOrCreateConversation(customer.id, "GENERAL");
+  return { id: conversation.id };
+}
+
+/** Conversation previews for the current customer, same shape/logic as the /messages inbox list, for the floating widget. */
+export async function getMyConversationsAction() {
+  const user = await requireUser();
+  if (user.role !== "CUSTOMER") throw new Error("Not allowed.");
+  const customer = await getCurrentCustomer(user.id);
+
+  const conversations = await prisma.conversation.findMany({
+    where: { customerId: customer.id },
+    include: {
+      messages: { orderBy: { createdAt: "desc" }, take: 1, include: { sender: true } },
+      reads: { where: { userId: user.id } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const withMeta = await Promise.all(
+    conversations.map(async (c) => {
+      const lastMessage = c.messages[0];
+      const lastReadAt = c.reads[0]?.lastReadAt ?? new Date(0);
+      const unreadCount = await prisma.message.count({
+        where: { conversationId: c.id, senderId: { not: user.id }, createdAt: { gt: lastReadAt } },
+      });
+      return {
+        id: c.id,
+        subjectType: c.subjectType,
+        lastMessage: lastMessage
+          ? { body: lastMessage.body, senderName: lastMessage.sender.name, createdAt: lastMessage.createdAt.toISOString() }
+          : null,
+        unreadCount,
+        updatedAt: (lastMessage?.createdAt ?? c.createdAt).toISOString(),
+      };
+    })
+  );
+
+  withMeta.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return withMeta;
+}
+
+/** Messages for one conversation, marking it read — for the floating widget's thread view. */
+export async function getConversationMessagesAction(conversationId: string) {
+  const user = await requireUser();
+  const conversation = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+
+  if (user.role === "CUSTOMER") {
+    const customer = await getCurrentCustomer(user.id);
+    if (conversation.customerId !== customer.id) throw new Error("Not allowed.");
+  } else if (user.role !== "STAFF" && user.role !== "ADMIN") {
+    throw new Error("Not allowed.");
+  }
+
+  const messages = await prisma.message.findMany({
+    where: { conversationId },
+    orderBy: { createdAt: "asc" },
+    include: { sender: true },
+  });
+  await markConversationRead(conversationId, user.id);
+
+  return messages.map((m) => ({
+    id: m.id,
+    body: m.body,
+    createdAt: m.createdAt.toISOString(),
+    senderId: m.senderId,
+    sender: { name: m.sender.name, role: m.sender.role },
+  }));
+}
+
+/** Marks a conversation read without fetching messages — used when the widget's already-open thread receives a live message. */
+export async function markConversationReadAction(conversationId: string) {
+  const user = await requireUser();
+  await markConversationRead(conversationId, user.id);
+}
+
 export async function sendMessageAction(conversationId: string, _prevState: string | undefined, formData: FormData) {
   const user = await requireUser();
   const conversation = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
