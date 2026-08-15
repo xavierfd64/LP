@@ -16,6 +16,7 @@ import {
 import { publishToUsers } from "@/lib/realtime";
 import { saveUploadedFile } from "@/lib/upload";
 import { presenceStatus, type PresenceStatus } from "@/lib/staff-presence";
+import { autoAssignOnNewCustomerMessage } from "@/lib/auto-assignment";
 
 const messageSchema = z.object({ body: z.string().max(4000).optional() });
 
@@ -175,6 +176,7 @@ export async function sendMessageAction(conversationId: string, _prevState: stri
   }
 
   const wasUnassigned = conversation.type === "CUSTOMER" && isStaffLike && !conversation.assignedStaffId;
+  const customerSentIntoUnassigned = conversation.type === "CUSTOMER" && !isStaffLike && !conversation.assignedStaffId;
 
   // Recipients: everyone who should get this pushed live / notified.
   const recipientUserIds = new Set<string>([user.id]);
@@ -249,6 +251,13 @@ export async function sendMessageAction(conversationId: string, _prevState: stri
       where: { id: conversationId },
       data: { lastCustomerMessageAt: isStaffLike ? null : new Date() },
     });
+  }
+
+  // Automatic assignment (if Business Settings has it enabled) — a no-op
+  // under MANUAL, and MANUAL_WITH_AUTO_FALLBACK is handled by the sweep
+  // instead of firing immediately here.
+  if (customerSentIntoUnassigned) {
+    await autoAssignOnNewCustomerMessage(conversationId);
   }
 
   await markConversationRead(conversationId, user.id);

@@ -1,6 +1,8 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
+export type StaffAssignmentMode = "MANUAL" | "AUTOMATIC" | "MANUAL_WITH_AUTO_FALLBACK";
+
 export type BusinessSettings = {
   id: string;
   businessName: string;
@@ -16,6 +18,7 @@ export type BusinessSettings = {
   city: string | null;
   province: string | null;
   postalCode: string | null;
+  assignmentMode: StaffAssignmentMode;
 };
 
 const FALLBACK: BusinessSettings = {
@@ -33,6 +36,7 @@ const FALLBACK: BusinessSettings = {
   city: null,
   province: null,
   postalCode: null,
+  assignmentMode: "MANUAL",
 };
 
 /**

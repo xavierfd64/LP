@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import Image from "next/image";
 import { updateBusinessSettingsAction } from "@/app/actions/business-settings";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Textarea } from "@/components/ui/input";
+import { Input, Label, Textarea, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import type { BusinessSettings } from "@/lib/business-settings";
 
@@ -95,6 +95,21 @@ export function BusinessSettingsForm({ settings }: { settings: BusinessSettings 
             <Label htmlFor="postalCode">Postal / ZIP code</Label>
             <Input id="postalCode" name="postalCode" defaultValue={settings.postalCode ?? ""} />
           </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-700">Communication</h2>
+        <div>
+          <Label htmlFor="assignmentMode">Chatbox conversation assignment</Label>
+          <Select id="assignmentMode" name="assignmentMode" defaultValue={settings.assignmentMode} className="max-w-sm">
+            <option value="MANUAL">Manual — Staff pick up unassigned conversations themselves</option>
+            <option value="AUTOMATIC">Automatic — system assigns an eligible Staff member immediately</option>
+            <option value="MANUAL_WITH_AUTO_FALLBACK">Manual, with automatic fallback if unclaimed for 15 minutes</option>
+          </Select>
+          <p className="mt-1 text-xs text-slate-400">
+            Controls how new customer conversations get their first responsible Staff member. Applies to the floating Chatbox.
+          </p>
         </div>
       </section>
 

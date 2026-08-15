@@ -19,6 +19,7 @@ const settingsSchema = z.object({
   city: z.string().optional(),
   province: z.string().optional(),
   postalCode: z.string().optional(),
+  assignmentMode: z.enum(["MANUAL", "AUTOMATIC", "MANUAL_WITH_AUTO_FALLBACK"]),
 });
 
 function emptyToUndefined(v: FormDataEntryValue | null) {
@@ -41,6 +42,7 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
     city: emptyToUndefined(formData.get("city")),
     province: emptyToUndefined(formData.get("province")),
     postalCode: emptyToUndefined(formData.get("postalCode")),
+    assignmentMode: formData.get("assignmentMode"),
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
@@ -56,6 +58,7 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
     city: parsed.data.city ?? null,
     province: parsed.data.province ?? null,
     postalCode: parsed.data.postalCode ?? null,
+    assignmentMode: parsed.data.assignmentMode,
   };
 
   const logoFile = formData.get("logo") as File | null;
