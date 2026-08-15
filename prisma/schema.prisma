@@ -189,6 +189,12 @@ enum Permission {
   COMMUNICATION_VIEW
   COMMUNICATION_SEND
   COMMUNICATION_MANAGE
+  COMMUNICATION_TRANSFER
+  COMMUNICATION_ASSIGN
+  COMMUNICATION_GROUP
+  COMMUNICATION_ATTACHMENT
+  COMMUNICATION_REFERENCE_TRANSACTION
+  COMMUNICATION_SEARCH_CUSTOMER
 
   REPORTS_VIEW
   REPORTS_EXPORT
@@ -208,15 +214,16 @@ enum Permission {
 // ---------- Core ----------
 
 model User {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String    @unique
   passwordHash String
   role         Role
   phone        String?
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  active       Boolean   @default(true)
+  lastActiveAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   customer         Customer?
   stageLogs        JobOrderStageLog[]
@@ -233,6 +240,9 @@ model User {
   quotationsCreated       Quotation[] @relation("QuotationCreatedBy")
   conversationReads       ConversationRead[]
   staffPermissions        StaffPermission[]
+  conversationsAssigned   Conversation[]              @relation("ConversationAssignedStaff")
+  conversationsCreated    Conversation[]               @relation("ConversationCreatedBy")
+  conversationParticipant ConversationParticipant[]
 }
 
 // Existence of a row = granted. Only meaningful for role=STAFF users — ADMIN
@@ -280,6 +290,7 @@ model Inquiry {
 
   quotations Quotation[]
   conversations Conversation[]
+  referencedInMessages Message[]
 }
 
 model Quotation {
@@ -308,6 +319,7 @@ model Quotation {
   orders           Order[]
   revisionRequests QuotationRevisionRequest[]
   conversations    Conversation[]
+  referencedInMessages Message[]
 }
 
 model QuotationRevisionRequest {
@@ -403,6 +415,7 @@ model JobOrder {
   inventoryMoves InventoryMovement[]
   fulfillments  Fulfillment[]
   conversations Conversation[]
+  referencedInMessages Message[]
 
   @@unique([orderId, joNumber])
 }
@@ -602,23 +615,87 @@ enum ConversationSubjectType {
   GENERAL
 }
 
-model Conversation {
-  id          String                  @id @default(cuid())
-  customerId  String
-  customer    Customer                @relation(fields: [customerId], references: [id])
-  subjectType ConversationSubjectType
-  inquiryId   String?
-  inquiry     Inquiry?                @relation(fields: [inquiryId], references: [id])
-  quotationId String?
-  quotation   Quotation?              @relation(fields: [quotationId], references: [id])
-  orderId     String?
-  order       Order?                  @relation(fields: [orderId], references: [id])
-  jobOrderId  String?
-  jobOrder    JobOrder?               @relation(fields: [jobOrderId], references: [id])
-  createdAt   DateTime                @default(now())
+/**
+ * CUSTOMER: a customer + assigned Staff/Admin — ownership/assignment rules
+ * apply (see Conversation.assignedStaffId). Covers the per-transaction rows
+ * created before this update (subjectType INQUIRY/QUOTATION/ORDER/JOB_ORDER)
+ * and the customer's ongoing GENERAL conversation, which is now the primary
+ * hub the floating Chatbox drives Staff/Admin toward.
+ * CUSTOMER_GROUP: a customer plus multiple Staff/Admin participants, no
+ * single-owner lock (see ConversationParticipant).
+ * PRIVATE: exactly two Staff/Admin participants (Staff<->Admin).
+ * GROUP: an internal multi-participant Staff/Admin room.
+ */
+enum ConversationType {
+  CUSTOMER
+  CUSTOMER_GROUP
+  PRIVATE
+  GROUP
+}
 
-  messages Message[]
-  reads    ConversationRead[]
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+enum MessageRefType {
+  INQUIRY
+  QUOTATION
+  JOB_ORDER
+}
+
+enum StaffAssignmentMode {
+  MANUAL
+  AUTOMATIC
+  MANUAL_WITH_AUTO_FALLBACK
+}
+
+model Conversation {
+  id          String                   @id @default(cuid())
+  type        ConversationType         @default(CUSTOMER)
+  title       String?
+  customerId  String?
+  customer    Customer?                @relation(fields: [customerId], references: [id])
+  subjectType ConversationSubjectType?
+  inquiryId   String?
+  inquiry     Inquiry?                 @relation(fields: [inquiryId], references: [id])
+  quotationId String?
+  quotation   Quotation?               @relation(fields: [quotationId], references: [id])
+  orderId     String?
+  order       Order?                   @relation(fields: [orderId], references: [id])
+  jobOrderId  String?
+  jobOrder    JobOrder?                @relation(fields: [jobOrderId], references: [id])
+
+  // Ownership: null = unassigned, anyone with COMMUNICATION_VIEW may look but
+  // only the assignee may reply once set. Only meaningful for type=CUSTOMER.
+  assignedStaffId String?
+  assignedStaff   User?     @relation("ConversationAssignedStaff", fields: [assignedStaffId], references: [id])
+  assignedAt      DateTime?
+
+  // Drives the 24h no-response reminder sweep — set on every inbound
+  // customer message, cleared (implicitly superseded) once Staff replies.
+  lastCustomerMessageAt DateTime?
+  lastReminderSentAt    DateTime?
+
+  createdById String?
+  createdBy   User?    @relation("ConversationCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+  reads        ConversationRead[]
+}
+
+/** Membership for PRIVATE / GROUP / CUSTOMER_GROUP conversations. CUSTOMER conversations don't use this — their two natural parties are customer + assignedStaff (or any Staff/Admin with COMMUNICATION_VIEW for read access). */
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  addedAt        DateTime     @default(now())
+
+  @@unique([conversationId, userId])
 }
 
 model ConversationRead {
@@ -638,7 +715,22 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id])
   senderId       String
   sender         User         @relation(fields: [senderId], references: [id])
-  body           String
+  type           MessageType  @default(TEXT)
+  body           String       @default("")
+
+  attachmentPath String?
+  attachmentName String?
+  attachmentMime String?
+  attachmentSize Int?
+
+  refType        MessageRefType?
+  refInquiryId   String?
+  refInquiry     Inquiry?        @relation(fields: [refInquiryId], references: [id])
+  refQuotationId String?
+  refQuotation   Quotation?      @relation(fields: [refQuotationId], references: [id])
+  refJobOrderId  String?
+  refJobOrder    JobOrder?       @relation(fields: [refJobOrderId], references: [id])
+
   createdAt      DateTime     @default(now())
 }
 
@@ -689,6 +781,8 @@ model BusinessSettings {
   city        String?
   province    String?
   postalCode  String?
+
+  assignmentMode StaffAssignmentMode @default(MANUAL)
 
   updatedAt DateTime @updatedAt
 }
