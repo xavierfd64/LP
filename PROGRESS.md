@@ -167,7 +167,7 @@ Added to demonstrate every new flow on first run without any manual setup: a `RE
 ### Also fixed while in here
 `.gitignore`'s blanket `.env*` pattern was silently swallowing `.env.example` too, so it had never actually been committed despite the README instructing `cp .env.example .env` — added a `!.env.example` exception and committed the file for real.
 
-## Known Stubs
+## Known Stubs (as of the Aug 14 batch)
 
 - **SMS/Email notifications** — `lib/notifications.ts` persists a real `Notification` row per recipient (backing the in-app bell) but still just `console.log`s a `[STUB NOTIFY]` line for the actual SMS/email send. A real build would wire that half to Twilio/SendGrid.
 - **Payment gateway** — payments are manually recorded by staff, uploaded as proof by the customer, or paid via voucher (internal ledger only); nothing talks to an actual payment processor or e-wallet API.
@@ -177,5 +177,47 @@ Added to demonstrate every new flow on first run without any manual setup: a `RE
 - **Object storage** — files are written to local disk (`public/uploads/`) with metadata in the `File` table; a production deployment would swap this for S3-compatible storage behind the same `lib/upload.ts` interface.
 - **Single active reward *earn* rule** — only one `RewardRule` (earn rate) is active at a time; redemption tiers, by contrast, support multiple simultaneously active tiers by design.
 - **System-triggered audit entries have a null actor** — e.g. the reward-earn transaction fired automatically when an order completes has no human actor, so `AuditLog.actorId` is `null` for that one entry type.
-- **Messaging is per-order only** — no pre-order (inquiry-level) messaging thread yet; could be extended the same way if needed.
+- **Messaging is per-order only** — no pre-order (inquiry-level) messaging thread yet; could be extended the same way if needed. *(Superseded by the Aug 15 chatbox rework below — Message is no longer Order-only.)*
 - **Voucher minimum-spend / cap assumption** — see the Orders/Payments section above; this was a default choice, not an explicitly confirmed business rule.
+
+---
+
+## August 15 system update
+
+A follow-up batch addressing a formal "AUGUST 15 SYSTEM UPDATE" requirements document: quotation control, the still-pending Aug 14 notification triggers, a full chatbox (not just Order-scoped), a centralized customer Payment tab, a faster staff payment-recording flow, and a real mobile-responsive pass. Every item below was verified against the running app (Playwright-driven, cross-checked against the DB) before moving to the next, and everything from the Aug 14 batch (inquiry edit/cancel, quotation revision cycle, reward tiers, multi-method payments, notification bell) was re-verified working, not just left alone.
+
+### Quotation control
+- `Quotation.createdById` (+ `createdBy` relation) records who prepared each quotation; the detail page now shows "Prepared by `<name>` on `<date>`".
+- Duplicate-quotation prevention: `lib/quotation-status.ts` defines the "active" statuses (`DRAFT`/`SENT`/`REVISION_REQUESTED`/`APPROVED`); `createQuotationAction` now blocks creating a second active quotation on an inquiry that already has one, and the inquiry detail page shows staff a direct link to the existing quotation to revise instead of letting them start a competing one.
+
+### Chatbox (Inquiry / Quotation / Order / Job Order / General)
+- Replaced the Order-only `Message` model with a subject-agnostic `Conversation` (`INQUIRY`/`QUOTATION`/`ORDER`/`JOB_ORDER`/`GENERAL`) + per-user `ConversationRead` for unread tracking; migration backfills every existing Order-scoped message into a Conversation row before dropping the old FK (verified against both a populated and an empty DB).
+- `lib/conversations.ts` (get-or-create, mark-read, subject label/source-link helpers) and a rewritten `sendMessageAction` that posts against a `conversationId`.
+- `ConversationCard` (last message preview + unread badge + Open/Start Chat) is embedded on Inquiry, Quotation, and Job Order detail pages; the Order page keeps a full inline thread. New `/messages` inbox (unread badges; staff see every customer's conversations) and `/messages/[id]` full-thread routes, plus a "New General Message" entry point for customers not tied to any specific record. "Messages" added to the nav for every role that can use it.
+- Verified: customer send → staff notification with a working link → staff reply, exercised on all four subject types (inquiry/quotation/order/job order) plus a general conversation.
+
+### Notifications — remaining Aug 14 triggers
+Clicking a notification already redirected to its `link` (`openNotificationAction`), so "actionable" was already satisfied — the actual gap was missing trigger events. Added, all routed through the existing `notifyCustomer`/`notifyStaff` helpers with a link:
+- Order created, order completed.
+- Production/stage-progress updates (stage advance, entering QC, QC pass/fail) from `lib/workflow.ts`.
+- Job order completion (distinct from the fulfillment delivered/received/installed notices).
+- Delivery "in transit" (previously only "delivered" notified).
+- Reward points earned, voucher redeemed, voucher used.
+- Outstanding balance reminder: a staff/admin "Send Balance Reminder" button on the order page — there's no background job runner in this prototype to fire these automatically, so it's operator-triggered rather than scheduled.
+
+### Customer Payment tab + inline Record Payment
+- `/payments` is now open to `CUSTOMER` (role-branched content, not a separate route): customers get a centralized view across every order — total amount paid, outstanding balance, count of orders with a balance due, a per-order balance table, and full payment history (date, amount, method, order, reference #, status, proof) — without opening each order individually. Staff/admin keep the original all-payments view.
+- `RecordPaymentDialog`: a modal opened directly from the Order page, pre-populated with the order number, customer name, and outstanding balance; staff only fill in amount, method, reference number, payment date, and notes — no more bouncing to `/payments` and re-selecting the same order. `Payment.referenceNumber`/`Payment.paymentDate` (schema fields already present) are now actually collected. The `/payments` fallback form gained the same fields plus order pre-selection via `?orderId=`.
+
+### Mobile responsiveness
+The prior layout had no mobile nav at all (sidebar was `hidden md:flex` with nothing replacing it below that breakpoint) — fixed first, then a pass over fixed-column grids and cramped multi-field rows app-wide:
+- `MobileNav`: hamburger-triggered slide-out drawer reusing the same `SidebarNav`.
+- Header/main padding and the notification bell dropdown adapt to narrow viewports.
+- Every fixed multi-column grid (`grid-cols-2/3/4/5/12`) across dashboards, order/job-order/quotation detail pages, and admin forms now starts single-column and only expands at `sm`/`md`/`lg`, instead of squeezing fields into slivers.
+- `justify-between` title+action header rows wrap instead of forcing a title and button onto one line.
+- The quotation line-items editor (5 fields + remove, packed into a 12-col grid) got an actual mobile layout — product/description full-width, qty/price side by side, remove right-aligned — rather than a shrunken desktop row.
+- Tables already scrolled horizontally inside their own container (`components/ui/table.tsx`), so no change was needed there.
+- Verified with Playwright at a 375px viewport: zero horizontal page overflow across every staff/admin and customer page, the mobile nav drawer, and the notification bell.
+
+### Known stubs, still true after this batch
+Everything in the "Known Stubs (as of the Aug 14 batch)" list above still applies — this batch didn't touch payment-gateway integration, SMS/email delivery, courier APIs, or object storage. The one item explicitly resolved is per-order-only messaging (see chatbox section above).
