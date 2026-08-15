@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +51,16 @@ export default async function OrderDetailPage({
       orderBy: { createdAt: "desc" },
     });
     availableVouchers = vouchers;
+  } else if (user.role === "STAFF" && !(await can(user, "ORDER_VIEW"))) {
+    redirect("/dashboard");
   }
+
+  const isAdmin = user.role === "ADMIN";
+  const canModifyOrder = isAdmin || (await can(user, "ORDER_MODIFY"));
+  const canRecordPayment = isAdmin || (await can(user, "PAYMENT_RECORD"));
+  const canViewPayments = isAdmin || (await can(user, "PAYMENT_VIEW"));
+  const canStartProduction = isAdmin || (await can(user, "PRODUCTION_UPDATE_STAGE"));
+  const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
 
   const summary = await paymentSummary(order.id);
   const templates = isStaffLike
@@ -131,7 +141,7 @@ export default async function OrderDetailPage({
                 <span className="text-yellow-700">Awaiting partial payment</span>
               )}
             </p>
-            {isStaffLike && !summary.fullyPaid && (
+            {isStaffLike && canRecordPayment && !summary.fullyPaid && (
               <RecordPaymentDialog
                 orderId={order.id}
                 orderNumber={order.orderNumber}
@@ -144,10 +154,10 @@ export default async function OrderDetailPage({
               {!isStaffLike && !summary.fullyPaid && (
                 <ApplyVoucherForm orderId={order.id} vouchers={availableVouchers} />
               )}
-              {isStaffLike && !summary.fullyPaid && !order.releaseException && (
+              {isStaffLike && canModifyOrder && !summary.fullyPaid && !order.releaseException && (
                 <ReleaseExceptionForm orderId={order.id} />
               )}
-              {isStaffLike && !summary.fullyPaid && (
+              {isStaffLike && canViewPayments && !summary.fullyPaid && (
                 <form action={sendBalanceReminderAction.bind(null, order.id)}>
                   <Button type="submit" size="sm" variant="outline">
                     Send Balance Reminder
@@ -207,7 +217,7 @@ export default async function OrderDetailPage({
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Job Orders</CardTitle>
-          {isStaffLike && <AddJobOrderForm orderId={order.id} templates={templates} />}
+          {isStaffLike && canModifyOrder && <AddJobOrderForm orderId={order.id} templates={templates} />}
         </CardHeader>
         <Table>
           <THead>
@@ -239,14 +249,14 @@ export default async function OrderDetailPage({
                     <Link href={`/job-orders/${jo.id}`} className="text-sm font-medium text-slate-900 underline">
                       View
                     </Link>
-                    {isStaffLike && jo.status === "ON_HOLD" && (
+                    {isStaffLike && canStartProduction && jo.status === "ON_HOLD" && (
                       <form action={start}>
                         <Button type="submit" size="sm" variant="outline">
                           Start Production
                         </Button>
                       </form>
                     )}
-                    {isStaffLike && jo.status === "READY" && (
+                    {isStaffLike && canModifyOrder && jo.status === "READY" && (
                       <form action={release}>
                         <Button type="submit" size="sm" variant="outline">
                           Release
@@ -290,14 +300,16 @@ export default async function OrderDetailPage({
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Messages</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MessageThread conversationId={conversation.id} currentUserId={user.id} messages={messages} />
-        </CardContent>
-      </Card>
+      {(!isStaffLike || canViewComms) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Messages</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MessageThread conversationId={conversation.id} currentUserId={user.id} messages={messages} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,6 +1,26 @@
+import { Permission } from "@/lib/permissions";
+
 export type NavItem = { label: string; href: string };
 
-export function navForRole(role: string): NavItem[] {
+const STAFF_NAV_RULES: { label: string; href: string; permission?: Permission }[] = [
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Inquiries", href: "/inquiries", permission: "INQUIRY_VIEW" },
+  { label: "Quotations", href: "/quotations", permission: "QUOTATION_VIEW" },
+  { label: "Orders", href: "/orders", permission: "ORDER_VIEW" },
+  { label: "Production", href: "/production", permission: "PRODUCTION_VIEW" },
+  { label: "Inventory", href: "/inventory" },
+  { label: "Payments", href: "/payments", permission: "PAYMENT_VIEW" },
+  { label: "Reward Rules", href: "/admin/rewards", permission: "REWARDS_MANAGE_CONFIG" },
+  { label: "Messages", href: "/messages", permission: "COMMUNICATION_VIEW" },
+];
+
+/**
+ * `staffPermissions` is only meaningful (and only passed) for role="STAFF" —
+ * it's the set of permissions the Admin has granted that specific account.
+ * Every other role's nav is fixed, exactly as before this permission system
+ * existed.
+ */
+export function navForRole(role: string, staffPermissions?: Set<Permission>): NavItem[] {
   switch (role) {
     case "ADMIN":
       return [
@@ -14,19 +34,14 @@ export function navForRole(role: string): NavItem[] {
         { label: "Messages", href: "/messages" },
         { label: "Workflow Templates", href: "/admin/workflow-templates" },
         { label: "Users", href: "/admin/users" },
+        { label: "Staff & Permissions", href: "/admin/staff-permissions" },
         { label: "Reward Rules", href: "/admin/rewards" },
         { label: "Audit Log", href: "/admin/audit-log" },
       ];
     case "STAFF":
-      return [
-        { label: "Dashboard", href: "/dashboard" },
-        { label: "Inquiries", href: "/inquiries" },
-        { label: "Quotations", href: "/quotations" },
-        { label: "Orders", href: "/orders" },
-        { label: "Inventory", href: "/inventory" },
-        { label: "Payments", href: "/payments" },
-        { label: "Messages", href: "/messages" },
-      ];
+      return STAFF_NAV_RULES.filter((item) => !item.permission || staffPermissions?.has(item.permission)).map(
+        ({ label, href }) => ({ label, href })
+      );
     case "PRODUCTION":
       return [
         { label: "Production Queue", href: "/production" },

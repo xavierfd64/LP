@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
@@ -12,6 +14,7 @@ import { startGeneralConversationAction } from "@/app/actions/messages";
 export default async function MessagesPage() {
   const user = await requireUser();
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
+  if (user.role === "STAFF" && !(await can(user, "COMMUNICATION_VIEW"))) redirect("/dashboard");
 
   const where = isStaffLike ? {} : { customerId: (await getCurrentCustomer(user.id)).id };
 

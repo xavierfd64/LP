@@ -1,10 +1,13 @@
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OrderForm } from "./order-form";
 
 export default async function NewOrderPage({ searchParams }: PageProps<"/orders/new">) {
-  await requireRole(["STAFF", "ADMIN"]);
+  const user = await requireRole(["STAFF", "ADMIN"]);
+  if (user.role === "STAFF" && !(await can(user, "ORDER_CREATE"))) redirect("/orders");
   const sp = await searchParams;
   const quotationId = typeof sp.quotationId === "string" ? sp.quotationId : undefined;
 

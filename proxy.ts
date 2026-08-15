@@ -8,8 +8,16 @@ const PUBLIC_PATHS = ["/login", "/register"];
 
 // Path prefix -> roles allowed. Missing entry = any authenticated role.
 const ROLE_RULES: { prefix: string; roles: string[] }[] = [
+  // More specific prefixes must come before the general "/admin" rule below
+  // — ROLE_RULES.find() takes the first match. Reward configuration can be
+  // delegated to STAFF via the granular permission system (REWARDS_MANAGE_CONFIG),
+  // so it isn't locked behind the admin-only rule the way user/workflow-template
+  // management is.
+  { prefix: "/admin/rewards", roles: ["ADMIN", "STAFF"] },
   { prefix: "/admin", roles: ["ADMIN"] },
-  { prefix: "/production", roles: ["PRODUCTION", "ADMIN"] },
+  // STAFF can be granted production permissions too (e.g. a "Production Staff"
+  // preset); the PRODUCTION role itself keeps its existing unrestricted access.
+  { prefix: "/production", roles: ["PRODUCTION", "ADMIN", "STAFF"] },
   { prefix: "/inventory", roles: ["STAFF", "ADMIN"] },
   { prefix: "/payments", roles: ["STAFF", "ADMIN", "CUSTOMER"] },
   { prefix: "/users", roles: ["ADMIN"] },

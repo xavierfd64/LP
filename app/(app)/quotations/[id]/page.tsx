@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +41,17 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
   if (!isStaffLike) {
     const customer = await getCurrentCustomer(user.id);
     if (quotation.customerId !== customer.id) redirect("/quotations");
+  } else if (user.role === "STAFF" && !(await can(user, "QUOTATION_VIEW"))) {
+    redirect("/dashboard");
   }
+
+  const isAdmin = user.role === "ADMIN";
+  const canSend = isAdmin || (await can(user, "QUOTATION_SEND"));
+  const canEdit = isAdmin || (await can(user, "QUOTATION_EDIT"));
+  const canCancel = isAdmin || (await can(user, "QUOTATION_CANCEL"));
+  const canForceApprove = isAdmin || (await can(user, "QUOTATION_APPROVE_REJECT"));
+  const canCreateOrder = isAdmin || (await can(user, "ORDER_CREATE"));
+  const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const send = sendQuotationAction.bind(null, quotation.id);
@@ -137,7 +148,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
       )}
 
       <div className="flex flex-wrap gap-2">
-        {isStaffLike && (quotation.status === "DRAFT" || quotation.status === "REVISION_REQUESTED") && (
+        {isStaffLike && canSend && (quotation.status === "DRAFT" || quotation.status === "REVISION_REQUESTED") && (
           <form action={send}>
             <Button type="submit">Send to Customer</Button>
           </form>
@@ -158,13 +169,13 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
         {isStaffLike && quotation.status === "SENT" && (
           <p className="text-sm text-slate-500 self-center">Awaiting customer approval.</p>
         )}
-        {isStaffLike && quotation.status === "SENT" && <ForceApproveForm quotationId={quotation.id} />}
-        {isStaffLike && quotation.status === "APPROVED" && !hasOrder && (
+        {isStaffLike && canForceApprove && quotation.status === "SENT" && <ForceApproveForm quotationId={quotation.id} />}
+        {isStaffLike && canCreateOrder && quotation.status === "APPROVED" && !hasOrder && (
           <Link href={`/orders/new?quotationId=${quotation.id}`}>
             <Button>Create Order</Button>
           </Link>
         )}
-        {isStaffLike && editable && (
+        {isStaffLike && canEdit && editable && (
           <EditQuotationForm
             quotationId={quotation.id}
             lineItems={quotation.lineItems.map((li) => ({
@@ -176,7 +187,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
             notes={quotation.notes}
           />
         )}
-        {isStaffLike && editable && <CancelQuotationForm quotationId={quotation.id} />}
+        {isStaffLike && canCancel && editable && <CancelQuotationForm quotationId={quotation.id} />}
       </div>
 
       {hasOrder && (
@@ -194,12 +205,14 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
         </Card>
       )}
 
-      <ConversationCard
-        customerId={quotation.customerId}
-        subjectType="QUOTATION"
-        subjectId={quotation.id}
-        currentUserId={user.id}
-      />
+      {(!isStaffLike || canViewComms) && (
+        <ConversationCard
+          customerId={quotation.customerId}
+          subjectType="QUOTATION"
+          subjectId={quotation.id}
+          currentUserId={user.id}
+        />
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
 import { notifyStaff } from "@/lib/notifications";
@@ -17,6 +18,8 @@ const inquirySchema = z.object({
 
 export async function createInquiryAction(_prevState: string | undefined, formData: FormData) {
   const user = await requireUser();
+  if (user.role === "STAFF") await requirePermission("INQUIRY_HANDLE");
+  else if (user.role !== "CUSTOMER" && user.role !== "ADMIN") throw new Error("Not allowed.");
 
   const parsed = inquirySchema.safeParse({
     customerId: formData.get("customerId") || undefined,
@@ -53,8 +56,7 @@ export async function createInquiryAction(_prevState: string | undefined, formDa
 }
 
 export async function closeInquiryAction(inquiryId: string) {
-  const user = await requireUser();
-  if (user.role !== "STAFF" && user.role !== "ADMIN") throw new Error("Not allowed.");
+  const user = await requirePermission("INQUIRY_HANDLE");
 
   await prisma.inquiry.update({ where: { id: inquiryId }, data: { status: "CLOSED" } });
   await logAudit(user.id, "INQUIRY_CLOSED", "Inquiry", inquiryId);

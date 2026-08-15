@@ -4,6 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
 import { getOrCreateConversation, markConversationRead } from "@/lib/conversations";
@@ -25,7 +26,9 @@ export async function sendMessageAction(conversationId: string, _prevState: stri
   const conversation = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
 
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
-  if (!isStaffLike) {
+  if (isStaffLike) {
+    if (!(await can(user, "COMMUNICATION_SEND"))) throw new Error("Not allowed.");
+  } else {
     if (user.role !== "CUSTOMER") throw new Error("Not allowed.");
     const customer = await getCurrentCustomer(user.id);
     if (conversation.customerId !== customer.id) throw new Error("Not allowed.");

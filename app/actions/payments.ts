@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireRole, requireUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
 import { saveUploadedFile } from "@/lib/upload";
@@ -25,7 +26,7 @@ const recordPaymentSchema = z.object({
 const CUSTOMER_PROOF_METHODS = ["GCASH", "MAYA", "BANK_TRANSFER", "OTHER"] as const;
 
 export async function recordPaymentAction(_prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("PAYMENT_RECORD");
 
   const parsed = recordPaymentSchema.safeParse({
     orderId: formData.get("orderId"),
@@ -103,7 +104,7 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
 }
 
 export async function confirmPaymentAction(paymentId: string) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("PAYMENT_VERIFY");
   const payment = await prisma.payment.update({
     where: { id: paymentId },
     data: { status: "CONFIRMED" },
@@ -120,7 +121,7 @@ export async function confirmPaymentAction(paymentId: string) {
 }
 
 export async function rejectPaymentAction(paymentId: string) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("PAYMENT_REJECT");
   const payment = await prisma.payment.update({
     where: { id: paymentId },
     data: { status: "REJECTED" },
@@ -143,7 +144,7 @@ const releaseExceptionSchema = z.object({
 });
 
 export async function grantReleaseExceptionAction(_prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("ORDER_MODIFY");
   const parsed = releaseExceptionSchema.safeParse({
     orderId: formData.get("orderId"),
     releaseExceptionBy: formData.get("releaseExceptionBy"),
@@ -169,7 +170,7 @@ export async function grantReleaseExceptionAction(_prevState: string | undefined
 }
 
 export async function releaseJobOrderAction(jobOrderId: string) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("ORDER_MODIFY");
   const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
 
   if (jo.status !== "READY") {
@@ -192,7 +193,7 @@ export async function releaseJobOrderAction(jobOrderId: string) {
 }
 
 export async function sendBalanceReminderAction(orderId: string) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("PAYMENT_VIEW");
   const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
   const summary = await paymentSummary(orderId);
   const balanceDue = summary.total - summary.confirmed;

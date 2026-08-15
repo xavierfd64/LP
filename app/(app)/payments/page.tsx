@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
 
   if (!isStaffLike && user.role !== "CUSTOMER") redirect("/dashboard");
+  if (user.role === "STAFF" && !(await can(user, "PAYMENT_VIEW"))) redirect("/dashboard");
 
   if (!isStaffLike) {
     const customer = await getCurrentCustomer(user.id);
@@ -165,6 +167,10 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
   const sp = await searchParams;
   const preselectedOrderId = typeof sp.orderId === "string" ? sp.orderId : undefined;
+  const isAdmin = user.role === "ADMIN";
+  const canVerify = isAdmin || (await can(user, "PAYMENT_VERIFY"));
+  const canReject = isAdmin || (await can(user, "PAYMENT_REJECT"));
+  const canRecord = isAdmin || (await can(user, "PAYMENT_RECORD"));
 
   const [payments, orders] = await Promise.all([
     prisma.payment.findMany({
@@ -228,18 +234,22 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
                         )}
                       </TD>
                       <TD>
-                        {p.status === "PENDING" && (
+                        {p.status === "PENDING" && (canVerify || canReject) && (
                           <div className="flex gap-2">
-                            <form action={confirm}>
-                              <Button type="submit" size="sm">
-                                Confirm
-                              </Button>
-                            </form>
-                            <form action={reject}>
-                              <Button type="submit" size="sm" variant="destructive">
-                                Reject
-                              </Button>
-                            </form>
+                            {canVerify && (
+                              <form action={confirm}>
+                                <Button type="submit" size="sm">
+                                  Confirm
+                                </Button>
+                              </form>
+                            )}
+                            {canReject && (
+                              <form action={reject}>
+                                <Button type="submit" size="sm" variant="destructive">
+                                  Reject
+                                </Button>
+                              </form>
+                            )}
                           </div>
                         )}
                       </TD>
@@ -252,17 +262,19 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
           {payments.length === 0 && <EmptyState label="No payments recorded yet." />}
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Record a payment</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PaymentForm
-              orders={orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber, customerName: o.customer.name }))}
-              defaultOrderId={preselectedOrderId}
-            />
-          </CardContent>
-        </Card>
+        {canRecord && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Record a payment</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PaymentForm
+                orders={orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber, customerName: o.customer.name }))}
+                defaultOrderId={preselectedOrderId}
+              />
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +13,10 @@ import { markStageInProgressAction } from "@/app/actions/production";
 import { CompleteStageForm } from "./complete-stage-form";
 
 export default async function ProductionQueuePage({ searchParams }: PageProps<"/production">) {
-  await requireRole(["PRODUCTION", "ADMIN", "STAFF"]);
+  const user = await requireRole(["PRODUCTION", "ADMIN", "STAFF"]);
+  if (user.role === "STAFF" && !(await can(user, "PRODUCTION_VIEW"))) redirect("/dashboard");
+  const canUpdateStage = user.role !== "STAFF" || (await can(user, "PRODUCTION_UPDATE_STAGE"));
+  const canMarkStageComplete = user.role !== "STAFF" || (await can(user, "PRODUCTION_MARK_STAGE_COMPLETE"));
   const sp = await searchParams;
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
 
@@ -78,13 +83,15 @@ export default async function ProductionQueuePage({ searchParams }: PageProps<"/
                         Go to QC
                       </Link>
                     ) : currentLog?.status === "READY" ? (
-                      <form action={markIP}>
-                        <Button type="submit" size="sm" variant="outline">
-                          Start Stage
-                        </Button>
-                      </form>
+                      canUpdateStage && (
+                        <form action={markIP}>
+                          <Button type="submit" size="sm" variant="outline">
+                            Start Stage
+                          </Button>
+                        </form>
+                      )
                     ) : currentLog?.status === "IN_PROGRESS" ? (
-                      <CompleteStageForm jobOrderId={jo.id} stageLogId={currentLog.id} />
+                      canMarkStageComplete && <CompleteStageForm jobOrderId={jo.id} stageLogId={currentLog.id} />
                     ) : null}
                   </TD>
                 </TR>

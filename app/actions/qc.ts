@@ -1,11 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions-guard";
 import { recordQCResult, RuleViolation } from "@/lib/workflow";
 
 export async function recordQCResultAction(jobOrderId: string, formData: FormData) {
-  const user = await requireRole(["PRODUCTION", "STAFF", "ADMIN"]);
+  const user = await requirePermission("PRODUCTION_MARK_COMPLETE", ["PRODUCTION"]);
 
   const result = formData.get("result") === "FAIL" ? "FAIL" : "PASS";
   const quantityChecked = Number(formData.get("quantityChecked") ?? 0);

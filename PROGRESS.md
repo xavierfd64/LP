@@ -221,3 +221,45 @@ The prior layout had no mobile nav at all (sidebar was `hidden md:flex` with not
 
 ### Known stubs, still true after this batch
 Everything in the "Known Stubs (as of the Aug 14 batch)" list above still applies — this batch didn't touch payment-gateway integration, SMS/email delivery, courier APIs, or object storage. The one item explicitly resolved is per-order-only messaging (see chatbox section above).
+
+---
+
+## August 15 — 2nd update: User Roles & Staff Permissions
+
+A formal "USER ROLES & PERMISSIONS" requirements document asked for a proper Admin-controlled, per-Staff-member permission system — not three fixed roles — with explicit emphasis that enforcement must be real at the backend/API level, not just hidden buttons. Started by reading the existing auth stack (NextAuth v5 credentials + JWT in `lib/auth.ts`/`lib/auth.config.ts`, `requireUser()`/`requireRole()` in `lib/session.ts`, route gating in `proxy.ts`) before adding anything, per the request's explicit instruction to reuse rather than parallel it.
+
+### Design
+- **ADMIN**: unchanged — `requireRole`/`requirePermission` both always let ADMIN through unconditionally. Never touches the permission table.
+- **CUSTOMER**: unchanged — never participates in the permission system, isolated exactly as before.
+- **PRODUCTION**: unchanged — keeps the same unrestricted access to production/QC actions it always had (passed as a `bypassRoles` escape hatch to `requirePermission`), since this update was about STAFF, not about folding PRODUCTION into it.
+- **STAFF**: access now comes entirely from an admin-assigned set of granular permissions instead of the role itself. A new `Permission` enum (50 values across Inquiry/Quotation/Orders/Payments/Production/Fulfillment/Rewards/Communication/Reports/Customer Management/User Management, matching the spec's categories) plus a `StaffPermission` join table (existence of a row = granted) replace the old blanket `requireRole(["STAFF","ADMIN"])` checks.
+
+### Schema + migration
+- `Permission` enum, `StaffPermission` model (`@@unique([userId, permission])`), `User.active Boolean @default(true)` for activate/deactivate.
+- The migration is purely additive (new enum/table, `ADD COLUMN ... DEFAULT true`) but also **backfills every existing STAFF user with every permission** in the same migration, so introducing this system doesn't silently strip access from anyone who could already do everything a STAFF role could do — Admin dials individual staff back afterward. Verified this specifically: seeded two pre-existing STAFF users into a copy of the DB *before* applying the migration, then applied it, and confirmed both landed with all 50 permissions while a pre-existing ADMIN got zero rows (bypasses the table entirely). New STAFF accounts created after this migration start with zero permissions until Admin assigns some.
+
+### Enforcement
+- `lib/permissions.ts` — data/types only (Permission list, category labels, `PERMISSION_PRESETS`), deliberately kept free of any Prisma import so it's safe to import from Client Components (the permission checkbox grid needs it).
+- `lib/permissions-guard.ts` — the DB-backed half: `getStaffPermissions()` (React-`cache()`-deduped per request), `can(user, permission)`, and `requirePermission(permission, bypassRoles?)` — the server-action guard that replaced `requireRole` at every relevant call site across `inquiries.ts`, `quotations.ts`, `orders.ts`, `payments.ts`, `fulfillment.ts`, `production.ts`, `qc.ts`, `rewards.ts` (reward *config* actions only — redemption stays customer-only), and `messages.ts` (staff-sender path). `inventory.ts` and `workflow-templates.ts` were deliberately left on the old `requireRole` — those categories aren't in the spec's permission list, so they're out of scope; `admin-users.ts`'s user-creation/permission-assignment actions stay `requireRole(["ADMIN"])` on purpose, since letting a STAFF permission grant control access to the page that assigns STAFF permissions would be a privilege-escalation hole.
+- Frontend visibility now mirrors the backend: every button/form gated by a specific permission checks `can(user, "X")` before rendering (view-level page guards redirect to `/dashboard` for STAFF lacking the page's `*_VIEW` permission), and the sidebar/mobile nav (`nav-config.ts`) filters STAFF items by the same granted-permission set via `Shell` fetching `getStaffPermissions()` once per request.
+- `proxy.ts`: opened `/production` and `/admin/rewards` to STAFF at the route level (permission-gated inside), since a STAFF account can now be granted production or reward-config permissions; every other `/admin/*` path stays ADMIN-only.
+- Deactivation (`User.active`): checked in `authorize()` (blocks login outright) and again in `requireUser()` on every request (DB re-check, since JWT sessions don't self-invalidate) — a deactivated user is locked out immediately, not just on next login.
+
+### Admin UI
+- `/admin/staff-permissions`: lists STAFF accounts with active status and a permission count.
+- `/admin/staff-permissions/[userId]`: a checkbox grid grouped by category (client component, presets from `lib/permissions.ts`), a preset dropdown that pre-checks boxes without locking them (still individually editable before saving), backed by `updateStaffPermissionsAction` (replace-the-full-set, `requireRole(["ADMIN"])`).
+- `/admin/users`: added an Active/Deactivated badge and an activate/deactivate toggle (`toggleUserActiveAction`, blocks self-deactivation).
+
+### Verification
+Reseeded from scratch through all 4 migrations (zero drift via `prisma migrate diff --exit-code`), then Playwright-verified against the running app:
+- ADMIN reaches every route including `/admin/staff-permissions`, `/production`, `/admin/rewards` unconditionally.
+- A "Manager"-preset STAFF (`staff1`, 45/50 permissions, seeded via `PERMISSION_PRESETS.Manager`) sees the full nav and every button; a "Sales Staff"-preset STAFF (`staff2`, 10/50 permissions) has `/payments` and `/production` redirect them to `/dashboard`, and does not see Record Payment / Send Balance Reminder / Add Job Order on an order it *can* view.
+- **Backend enforcement, concretely, not just UI hiding**: captured the exact `Next-Action` POST request staff1 (has `PAYMENT_RECORD`) sends when submitting the Record Payment dialog, then replayed the byte-identical request with only staff2's session cookie swapped in. The server rejected it — HTTP 500, `"You do not have permission to do this (Record payment)."` thrown from `requirePermission` inside `recordPaymentAction` — and confirmed via direct DB query that zero rows were created by the replay (only staff1's original, legitimate click persisted). This proves the check runs on the server regardless of what the client sends, not just when a button happens to be visible.
+- Deactivating staff2 from `/admin/users` immediately blocked their login attempt with "This account has been deactivated."; reactivating restored it.
+- Full route crawl across ADMIN/STAFF(Manager)/STAFF(SalesStaff)/PRODUCTION/CUSTOMER: zero 500s, zero page errors.
+- Re-verified every "must not break" item from the spec's own checklist still works: inquiry edit/cancel, quotation prepared-by + duplicate-quotation prevention, customer Payment tab, rewards page, notification bell. The new permission-grid page itself was also checked at a 375px mobile viewport — categories stack cleanly, no horizontal overflow.
+
+### Known gaps / deliberate scope decisions
+- Several permissions in the enum have no enforcement point yet because the underlying feature doesn't exist in the app: `INQUIRY_MODIFY`/`INQUIRY_CANCEL` (no staff-side inquiry edit/cancel action exists — only the customer's own), `ORDER_HANDLE_MODIFICATION`/`ORDER_UPDATE_STATUS`/`ORDER_CANCEL` (order status changes are all system-driven; there's no manual "cancel an order" action), `PAYMENT_EDIT`/`PAYMENT_REFUND` (no edit/refund action exists), `REPORTS_VIEW`/`REPORTS_EXPORT` (no reports page exists), `CUSTOMER_*` (no staff-facing customer CRUD exists — customers only self-register). They're defined and selectable in the permission grid/presets for schema completeness and so Admin can pre-configure them ahead of those features landing, but granting them today has no effect.
+- `USER_VIEW`/`USER_CREATE`/`USER_EDIT`/`USER_ACTIVATE_DEACTIVATE`/`USER_MANAGE_PERMISSIONS` are likewise defined but not wired to a STAFF bypass — those pages are ADMIN-only at the route level by design (see privilege-escalation note above), so granting them to a STAFF account currently does nothing.
+- Inventory and Workflow Templates remain on the old role-based (`requireRole`) gating — untouched because the spec's permission categories don't mention them.

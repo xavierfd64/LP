@@ -5,6 +5,7 @@ import { NotificationBell } from "./notification-bell";
 import { navForRole } from "./nav-config";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
+import { getStaffPermissions } from "@/lib/permissions-guard";
 
 export async function Shell({
   role,
@@ -17,7 +18,8 @@ export async function Shell({
   userId: string;
   children: React.ReactNode;
 }) {
-  const items = navForRole(role);
+  const staffPermissions = role === "STAFF" ? await getStaffPermissions(userId, role) : undefined;
+  const items = navForRole(role, staffPermissions);
   const [notifications, unreadCount] = await Promise.all([
     prisma.notification.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 15 }),
     prisma.notification.count({ where: { userId, read: false } }),

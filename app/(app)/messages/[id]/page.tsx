@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,8 @@ export default async function ConversationDetailPage({ params }: PageProps<"/mes
   if (!isStaffLike) {
     const customer = await getCurrentCustomer(user.id);
     if (conversation.customerId !== customer.id) redirect("/messages");
+  } else if (user.role === "STAFF" && !(await can(user, "COMMUNICATION_VIEW"))) {
+    redirect("/messages");
   }
 
   const messages = await prisma.message.findMany({

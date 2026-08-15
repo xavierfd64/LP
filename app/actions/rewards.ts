@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireRole, requireUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
 import { nextVoucherCode } from "@/lib/numbering";
@@ -16,7 +17,7 @@ const ruleSchema = z.object({
 });
 
 export async function createRewardRuleAction(_prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["ADMIN"]);
+  const user = await requirePermission("REWARDS_MANAGE_CONFIG");
 
   const parsed = ruleSchema.safeParse({
     name: formData.get("name"),
@@ -32,7 +33,7 @@ export async function createRewardRuleAction(_prevState: string | undefined, for
 }
 
 export async function toggleRewardRuleAction(ruleId: string) {
-  const user = await requireRole(["ADMIN"]);
+  const user = await requirePermission("REWARDS_MANAGE_CONFIG");
   const rule = await prisma.rewardRule.findUniqueOrThrow({ where: { id: ruleId } });
 
   if (!rule.active) {
@@ -58,7 +59,7 @@ const tierSchema = z.object({
 
 /** Admin-configurable redemption tiers (points cost -> voucher value -> minimum order to use it). Multiple tiers can be active at once, unlike the single-active RewardRule. */
 export async function createRedemptionTierAction(_prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["ADMIN"]);
+  const user = await requirePermission("REWARDS_MANAGE_CONFIG");
 
   const parsed = tierSchema.safeParse({
     pointsCost: formData.get("pointsCost"),
@@ -74,7 +75,7 @@ export async function createRedemptionTierAction(_prevState: string | undefined,
 }
 
 export async function toggleRedemptionTierAction(tierId: string) {
-  const user = await requireRole(["ADMIN"]);
+  const user = await requirePermission("REWARDS_MANAGE_CONFIG");
   const tier = await prisma.redemptionTier.findUniqueOrThrow({ where: { id: tierId } });
 
   await prisma.redemptionTier.update({ where: { id: tierId }, data: { active: !tier.active } });

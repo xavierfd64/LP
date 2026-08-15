@@ -1,11 +1,14 @@
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { QuotationForm } from "./quotation-form";
 
 export default async function NewQuotationPage({ searchParams }: PageProps<"/quotations/new">) {
-  await requireRole(["STAFF", "ADMIN"]);
+  const user = await requireRole(["STAFF", "ADMIN"]);
+  if (user.role === "STAFF" && !(await can(user, "QUOTATION_CREATE"))) redirect("/quotations");
   const sp = await searchParams;
   const inquiryId = typeof sp.inquiryId === "string" ? sp.inquiryId : undefined;
 

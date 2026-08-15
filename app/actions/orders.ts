@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions-guard";
 import { nextOrderNumber, nextJoNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
 import { startProduction, RuleViolation } from "@/lib/workflow";
@@ -20,7 +20,7 @@ const orderSchema = z.object({
 });
 
 export async function createOrderAction(_prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("ORDER_CREATE");
 
   const parsed = orderSchema.safeParse({
     customerId: formData.get("customerId"),
@@ -84,7 +84,7 @@ const jobOrderSchema = z.object({
 });
 
 export async function createJobOrderAction(_prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("ORDER_MODIFY");
 
   const parsed = jobOrderSchema.safeParse({
     orderId: formData.get("orderId"),
@@ -120,7 +120,7 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
 }
 
 export async function startProductionAction(jobOrderId: string) {
-  const user = await requireRole(["STAFF", "ADMIN", "PRODUCTION"]);
+  const user = await requirePermission("PRODUCTION_UPDATE_STAGE", ["PRODUCTION"]);
   const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
 
   try {

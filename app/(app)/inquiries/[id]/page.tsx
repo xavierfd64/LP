@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,13 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
   if (!isStaffLike) {
     const customer = await getCurrentCustomer(user.id);
     if (inquiry.customerId !== customer.id) redirect("/inquiries");
+  } else if (user.role === "STAFF" && !(await can(user, "INQUIRY_VIEW"))) {
+    redirect("/dashboard");
   }
+
+  const canHandle = user.role === "ADMIN" || (await can(user, "INQUIRY_HANDLE"));
+  const canCreateQuotation = user.role === "ADMIN" || (await can(user, "QUOTATION_CREATE"));
+  const canViewComms = user.role === "ADMIN" || (await can(user, "COMMUNICATION_VIEW"));
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const closeAction = closeInquiryAction.bind(null, inquiry.id);
@@ -100,14 +107,14 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
         </Alert>
       )}
 
-      {isStaffLike && (
+      {isStaffLike && (canConvert || inquiry.status !== "CLOSED") && (
         <div className="flex gap-2">
-          {canConvert && (
+          {canConvert && canCreateQuotation && (
             <Link href={`/quotations/new?inquiryId=${inquiry.id}`}>
               <Button>Convert to Quotation</Button>
             </Link>
           )}
-          {inquiry.status !== "CLOSED" && inquiry.status !== "CANCELLED" && (
+          {inquiry.status !== "CLOSED" && inquiry.status !== "CANCELLED" && canHandle && (
             <form action={closeAction}>
               <Button variant="outline" type="submit">
                 Close Inquiry
@@ -135,12 +142,14 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
         </div>
       )}
 
-      <ConversationCard
-        customerId={inquiry.customerId}
-        subjectType="INQUIRY"
-        subjectId={inquiry.id}
-        currentUserId={user.id}
-      />
+      {(!isStaffLike || canViewComms) && (
+        <ConversationCard
+          customerId={inquiry.customerId}
+          subjectType="INQUIRY"
+          subjectId={inquiry.id}
+          currentUserId={user.id}
+        />
+      )}
     </div>
   );
 }

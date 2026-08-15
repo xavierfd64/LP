@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireRole, requireUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { nextQuoteNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
@@ -36,7 +37,7 @@ function parseLineItems(formData: FormData) {
 }
 
 export async function createQuotationAction(_prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("QUOTATION_CREATE");
 
   const customerId = String(formData.get("customerId") ?? "");
   const inquiryId = (formData.get("inquiryId") as string) || undefined;
@@ -85,7 +86,7 @@ export async function createQuotationAction(_prevState: string | undefined, form
 }
 
 export async function sendQuotationAction(quotationId: string) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("QUOTATION_SEND");
   const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } });
 
   if (quotation.status !== "DRAFT" && quotation.status !== "REVISION_REQUESTED") {
@@ -195,7 +196,7 @@ export async function requestQuotationRevisionAction(quotationId: string, _prevS
 }
 
 export async function editQuotationAction(quotationId: string, _prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("QUOTATION_EDIT");
   const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } });
 
   if (!["DRAFT", "SENT", "REVISION_REQUESTED"].includes(quotation.status)) {
@@ -235,7 +236,7 @@ const cancelQuotationSchema = z.object({
 
 /** Staff/admin can cancel a quotation outright — at the customer's request, or to correct pricing mistakes. */
 export async function cancelQuotationAction(quotationId: string, _prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("QUOTATION_CANCEL");
   const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } });
 
   if (!["DRAFT", "SENT", "REVISION_REQUESTED"].includes(quotation.status)) {
@@ -267,7 +268,7 @@ const forceApproveSchema = z.object({
 
 /** Staff/admin bypass of customer approval for rush jobs — always audit-logged with a reason, distinct from a genuine customer click. */
 export async function forceApproveQuotationAction(quotationId: string, _prevState: string | undefined, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("QUOTATION_APPROVE_REJECT");
   const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } });
 
   if (quotation.status !== "SENT") {

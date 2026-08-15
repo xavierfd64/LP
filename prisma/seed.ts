@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { PERMISSION_PRESETS } from "../lib/permissions";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -57,6 +58,17 @@ async function main() {
       role: "STAFF",
       phone: "0917-000-0003",
     },
+  });
+
+  // Demo the granular permission system: Sandra gets the (near-)full Manager
+  // preset so she can exercise every staff-facing flow in the demo; Steve
+  // gets a narrow Sales Staff preset to demonstrate the restriction actually
+  // holding (he can create quotations but can't touch payments or rewards).
+  await prisma.staffPermission.createMany({
+    data: PERMISSION_PRESETS.Manager.map((permission) => ({ userId: staff1.id, permission })),
+  });
+  await prisma.staffPermission.createMany({
+    data: PERMISSION_PRESETS["Sales Staff"].map((permission) => ({ userId: staff2.id, permission })),
   });
 
   const prod1 = await prisma.user.create({

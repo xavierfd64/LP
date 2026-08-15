@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
@@ -11,6 +13,8 @@ import { formatDate } from "@/lib/utils";
 export default async function InquiriesPage() {
   const user = await requireUser();
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
+  if (user.role === "STAFF" && !(await can(user, "INQUIRY_VIEW"))) redirect("/dashboard");
+  const canHandle = user.role === "ADMIN" || (await can(user, "INQUIRY_HANDLE"));
 
   const where = isStaffLike ? {} : { customerId: (await getCurrentCustomer(user.id)).id };
 
@@ -27,9 +31,11 @@ export default async function InquiriesPage() {
           <h1 className="text-2xl font-bold text-slate-900">{isStaffLike ? "Inquiries" : "My Inquiries"}</h1>
           <p className="text-sm text-slate-500">Customer requests before a quotation is prepared.</p>
         </div>
-        <Link href="/inquiries/new">
-          <Button>New Inquiry</Button>
-        </Link>
+        {(!isStaffLike || canHandle) && (
+          <Link href="/inquiries/new">
+            <Button>New Inquiry</Button>
+          </Link>
+        )}
       </div>
 
       <Card>

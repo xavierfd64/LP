@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +53,26 @@ export default async function JobOrderDetailPage({
     if (jo.order.customerId !== customer.id) redirect("/orders");
   }
 
+  if (user.role === "STAFF") {
+    const [viewOrder, viewProduction, viewFulfillment] = await Promise.all([
+      can(user, "ORDER_VIEW"),
+      can(user, "PRODUCTION_VIEW"),
+      can(user, "FULFILLMENT_VIEW"),
+    ]);
+    if (!viewOrder && !viewProduction && !viewFulfillment) redirect("/dashboard");
+  }
+
+  const isAdmin = user.role === "ADMIN";
+  const canModifyOrder = isAdmin || (await can(user, "ORDER_MODIFY"));
+  const canMarkProductionComplete = isAdmin || (await can(user, "PRODUCTION_MARK_COMPLETE"));
+  const canSchedulePickup = isAdmin || (await can(user, "FULFILLMENT_SCHEDULE_PICKUP"));
+  const canScheduleDelivery = isAdmin || (await can(user, "FULFILLMENT_SCHEDULE_DELIVERY"));
+  const canUpdateDeliveryStatus = isAdmin || (await can(user, "FULFILLMENT_UPDATE_DELIVERY_STATUS"));
+  const canMarkDelivered = isAdmin || (await can(user, "FULFILLMENT_MARK_DELIVERED"));
+  const canMarkInstalled = isAdmin || (await can(user, "FULFILLMENT_MARK_INSTALLED"));
+  const canScheduleFulfillment = canSchedulePickup || canScheduleDelivery || canMarkInstalled;
+  const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
+
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const release = releaseJobOrderAction.bind(null, jo.id);
 
@@ -86,7 +107,7 @@ export default async function JobOrderDetailPage({
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={jo.status} />
-          {isStaffLike && jo.status === "READY" && (
+          {isStaffLike && canModifyOrder && jo.status === "READY" && (
             <form action={release}>
               <Button type="submit" size="sm">
                 Release
@@ -98,7 +119,7 @@ export default async function JobOrderDetailPage({
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
-      {jo.status === "QC" && isProductionLike && (
+      {jo.status === "QC" && (user.role === "PRODUCTION" || (isStaffLike && canMarkProductionComplete)) && (
         <Card>
           <CardHeader>
             <CardTitle>Record QC result</CardTitle>
@@ -304,31 +325,31 @@ export default async function JobOrderDetailPage({
                   )}
                   {isStaffLike && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {f.method === "PICKUP" && f.status === "SCHEDULED" && (
+                      {f.method === "PICKUP" && f.status === "SCHEDULED" && canSchedulePickup && (
                         <form action={markPickedUp}>
                           <Button type="submit" size="sm">
                             Mark Picked Up
                           </Button>
                         </form>
                       )}
-                      {f.method === "DELIVERY" && f.status === "BOOKED" && (
+                      {f.method === "DELIVERY" && f.status === "BOOKED" && canUpdateDeliveryStatus && (
                         <form action={advanceDelivery}>
                           <Button type="submit" size="sm">
                             Mark In Transit
                           </Button>
                         </form>
                       )}
-                      {f.method === "DELIVERY" && f.status === "IN_TRANSIT" && (
+                      {f.method === "DELIVERY" && f.status === "IN_TRANSIT" && canMarkDelivered && (
                         <form action={advanceDelivery}>
                           <Button type="submit" size="sm">
                             Mark Delivered
                           </Button>
                         </form>
                       )}
-                      {f.method === "DELIVERY" && f.status !== "DELIVERED" && (
+                      {f.method === "DELIVERY" && f.status !== "DELIVERED" && canUpdateDeliveryStatus && (
                         <DeliveryProofForm fulfillmentId={f.id} jobOrderId={jo.id} />
                       )}
-                      {f.method === "INSTALLATION" && f.status === "SCHEDULED" && (
+                      {f.method === "INSTALLATION" && f.status === "SCHEDULED" && canMarkInstalled && (
                         <form action={markInstalled}>
                           <Button type="submit" size="sm">
                             Mark Installed
@@ -341,7 +362,7 @@ export default async function JobOrderDetailPage({
               );
             })}
 
-            {isStaffLike && jo.status === "RELEASED" && jo.fulfillments.length === 0 && (
+            {isStaffLike && canScheduleFulfillment && jo.status === "RELEASED" && jo.fulfillments.length === 0 && (
               <CreateFulfillmentForm
                 jobOrderId={jo.id}
                 allowInstall={jo.workflowTemplate.stages.some((s) => s.isInstallStage)}
@@ -351,7 +372,7 @@ export default async function JobOrderDetailPage({
         </Card>
       )}
 
-      {(isStaffLike || user.role === "CUSTOMER") && (
+      {((isStaffLike && canViewComms) || user.role === "CUSTOMER") && (
         <ConversationCard
           customerId={jo.order.customerId}
           subjectType="JOB_ORDER"

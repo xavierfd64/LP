@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
@@ -11,6 +13,8 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 export default async function OrdersPage() {
   const user = await requireUser();
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
+  if (user.role === "STAFF" && !(await can(user, "ORDER_VIEW"))) redirect("/dashboard");
+  const canCreate = user.role === "ADMIN" || (await can(user, "ORDER_CREATE"));
 
   const where = isStaffLike ? {} : { customerId: (await getCurrentCustomer(user.id)).id };
 
@@ -27,7 +31,7 @@ export default async function OrdersPage() {
           <h1 className="text-2xl font-bold text-slate-900">{isStaffLike ? "Orders" : "My Orders"}</h1>
           <p className="text-sm text-slate-500">Track job orders, payments, and fulfillment.</p>
         </div>
-        {isStaffLike && (
+        {isStaffLike && canCreate && (
           <Link href="/orders/new">
             <Button>New Order</Button>
           </Link>

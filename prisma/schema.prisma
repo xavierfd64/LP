@@ -135,6 +135,76 @@ enum RewardTxnType {
   REDEEM
 }
 
+// Granular, action-level permissions a STAFF account can be granted. ADMIN
+// always bypasses this system entirely; CUSTOMER never participates in it.
+// Not every value below has a corresponding enforcement point yet (some are
+// defined for schema/preset completeness ahead of features that don't exist
+// yet, e.g. order cancellation, payment refunds, customer management) — see
+// PROGRESS.md for the full mapping of which permissions actually gate an
+// action today.
+enum Permission {
+  INQUIRY_VIEW
+  INQUIRY_HANDLE
+  INQUIRY_MODIFY
+  INQUIRY_CANCEL
+
+  QUOTATION_VIEW
+  QUOTATION_CREATE
+  QUOTATION_EDIT
+  QUOTATION_SEND
+  QUOTATION_HANDLE_MODIFICATION
+  QUOTATION_APPROVE_REJECT
+  QUOTATION_CANCEL
+
+  ORDER_VIEW
+  ORDER_CREATE
+  ORDER_MODIFY
+  ORDER_HANDLE_MODIFICATION
+  ORDER_UPDATE_STATUS
+  ORDER_CANCEL
+
+  PAYMENT_VIEW
+  PAYMENT_RECORD
+  PAYMENT_VERIFY
+  PAYMENT_REJECT
+  PAYMENT_EDIT
+  PAYMENT_REFUND
+
+  PRODUCTION_VIEW
+  PRODUCTION_UPDATE_STAGE
+  PRODUCTION_MARK_STAGE_COMPLETE
+  PRODUCTION_MARK_COMPLETE
+
+  FULFILLMENT_VIEW
+  FULFILLMENT_SCHEDULE_PICKUP
+  FULFILLMENT_SCHEDULE_DELIVERY
+  FULFILLMENT_UPDATE_DELIVERY_STATUS
+  FULFILLMENT_MARK_DELIVERED
+  FULFILLMENT_MARK_INSTALLED
+
+  REWARDS_VIEW
+  REWARDS_PROCESS_REDEMPTION
+  REWARDS_MANAGE_CONFIG
+
+  COMMUNICATION_VIEW
+  COMMUNICATION_SEND
+  COMMUNICATION_MANAGE
+
+  REPORTS_VIEW
+  REPORTS_EXPORT
+
+  CUSTOMER_VIEW
+  CUSTOMER_CREATE
+  CUSTOMER_EDIT
+  CUSTOMER_ACTIVATE_DEACTIVATE
+
+  USER_VIEW
+  USER_CREATE
+  USER_EDIT
+  USER_ACTIVATE_DEACTIVATE
+  USER_MANAGE_PERMISSIONS
+}
+
 // ---------- Core ----------
 
 model User {
@@ -144,6 +214,7 @@ model User {
   passwordHash String
   role         Role
   phone        String?
+  active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -161,6 +232,19 @@ model User {
   quotationsForceApproved Quotation[] @relation("QuotationForceApprovedBy")
   quotationsCreated       Quotation[] @relation("QuotationCreatedBy")
   conversationReads       ConversationRead[]
+  staffPermissions        StaffPermission[]
+}
+
+// Existence of a row = granted. Only meaningful for role=STAFF users — ADMIN
+// bypasses this system entirely (never checked), CUSTOMER never has rows.
+model StaffPermission {
+  id         String     @id @default(cuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission
+  createdAt  DateTime   @default(now())
+
+  @@unique([userId, permission])
 }
 
 model Customer {

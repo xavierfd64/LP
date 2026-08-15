@@ -1,4 +1,6 @@
-import { requireRole } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +12,10 @@ import { RedemptionTierForm } from "./tier-form";
 import { toggleRewardRuleAction, toggleRedemptionTierAction } from "@/app/actions/rewards";
 
 export default async function AdminRewardsPage() {
-  await requireRole(["ADMIN"]);
+  const user = await requireUser();
+  if (user.role !== "ADMIN") {
+    if (user.role !== "STAFF" || !(await can(user, "REWARDS_MANAGE_CONFIG"))) redirect("/dashboard");
+  }
 
   const [rules, tiers] = await Promise.all([
     prisma.rewardRule.findMany({ orderBy: { createdAt: "desc" } }),

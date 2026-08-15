@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/session";
+import { requirePermission } from "@/lib/permissions-guard";
 import { logAudit } from "@/lib/audit";
 import { saveUploadedFile } from "@/lib/upload";
 import { notifyCustomer } from "@/lib/notifications";
@@ -23,7 +23,14 @@ async function maybeCompleteOrder(orderId: string) {
 }
 
 export async function createFulfillmentAction(jobOrderId: string, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const method = formData.get("method") as "PICKUP" | "DELIVERY" | "INSTALLATION";
+  const schedulePermission =
+    method === "PICKUP"
+      ? "FULFILLMENT_SCHEDULE_PICKUP"
+      : method === "DELIVERY"
+        ? "FULFILLMENT_SCHEDULE_DELIVERY"
+        : "FULFILLMENT_MARK_INSTALLED";
+  const user = await requirePermission(schedulePermission);
   const jo = await prisma.jobOrder.findUniqueOrThrow({
     where: { id: jobOrderId },
     include: { workflowTemplate: { include: { stages: true } }, order: true },
@@ -33,7 +40,6 @@ export async function createFulfillmentAction(jobOrderId: string, formData: Form
     redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent("Job order must be RELEASED before fulfillment can be scheduled.")}`);
   }
 
-  const method = formData.get("method") as "PICKUP" | "DELIVERY" | "INSTALLATION";
   const scheduledDateRaw = formData.get("scheduledDate") as string | null;
   const trackingNumber = (formData.get("trackingNumber") as string) || undefined;
   const courier = (formData.get("courier") as string) || undefined;
@@ -69,10 +75,9 @@ export async function createFulfillmentAction(jobOrderId: string, formData: Form
 }
 
 export async function advanceDeliveryAction(fulfillmentId: string, jobOrderId: string) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
   const f = await prisma.fulfillment.findUniqueOrThrow({ where: { id: fulfillmentId } });
-
   const next = f.status === "BOOKED" ? "IN_TRANSIT" : f.status === "IN_TRANSIT" ? "DELIVERED" : null;
+  const user = await requirePermission(next === "DELIVERED" ? "FULFILLMENT_MARK_DELIVERED" : "FULFILLMENT_UPDATE_DELIVERY_STATUS");
   if (!next) redirect(`/job-orders/${jobOrderId}`);
 
   await prisma.fulfillment.update({
@@ -109,7 +114,7 @@ export async function advanceDeliveryAction(fulfillmentId: string, jobOrderId: s
 }
 
 export async function uploadDeliveryProofAction(fulfillmentId: string, jobOrderId: string, formData: FormData) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("FULFILLMENT_UPDATE_DELIVERY_STATUS");
   const file = formData.get("proofFile") as File | null;
   if (!file || file.size === 0) redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent("Choose a file first.")}`);
 
@@ -121,7 +126,7 @@ export async function uploadDeliveryProofAction(fulfillmentId: string, jobOrderI
 }
 
 export async function markPickedUpAction(fulfillmentId: string, jobOrderId: string) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("FULFILLMENT_SCHEDULE_PICKUP");
   const f = await prisma.fulfillment.update({
     where: { id: fulfillmentId },
     data: { status: "RECEIVED", completedAt: new Date() },
@@ -145,7 +150,7 @@ export async function markPickedUpAction(fulfillmentId: string, jobOrderId: stri
 }
 
 export async function markInstalledAction(fulfillmentId: string, jobOrderId: string) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
+  const user = await requirePermission("FULFILLMENT_MARK_INSTALLED");
   const f = await prisma.fulfillment.update({
     where: { id: fulfillmentId },
     data: { status: "INSTALLED", completedAt: new Date() },
