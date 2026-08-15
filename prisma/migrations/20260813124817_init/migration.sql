@@ -2,10 +2,10 @@
 CREATE TYPE "Role" AS ENUM ('ADMIN', 'STAFF', 'PRODUCTION', 'CUSTOMER');
 
 -- CreateEnum
-CREATE TYPE "InquiryStatus" AS ENUM ('NEW', 'QUOTED', 'CLOSED', 'CANCELLED');
+CREATE TYPE "InquiryStatus" AS ENUM ('NEW', 'QUOTED', 'CLOSED');
 
 -- CreateEnum
-CREATE TYPE "QuotationStatus" AS ENUM ('DRAFT', 'SENT', 'APPROVED', 'REJECTED', 'REVISION_REQUESTED', 'CANCELLED');
+CREATE TYPE "QuotationStatus" AS ENUM ('DRAFT', 'SENT', 'APPROVED', 'REJECTED');
 
 -- CreateEnum
 CREATE TYPE "PaymentTermType" AS ENUM ('STANDARD_PARTIAL', 'APPROVED_TERMS');
@@ -26,10 +26,7 @@ CREATE TYPE "FileCategory" AS ENUM ('CUSTOMER_FILE', 'DESIGN_DRAFT', 'APPROVED_D
 CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'CONFIRMED', 'REJECTED');
 
 -- CreateEnum
-CREATE TYPE "PaymentMethod" AS ENUM ('CASH', 'BANK_TRANSFER', 'GCASH', 'MAYA', 'CHEQUE', 'VOUCHER', 'OTHER');
-
--- CreateEnum
-CREATE TYPE "VoucherStatus" AS ENUM ('AVAILABLE', 'USED');
+CREATE TYPE "PaymentMethod" AS ENUM ('CASH', 'BANK_TRANSFER', 'GCASH', 'CHEQUE', 'OTHER');
 
 -- CreateEnum
 CREATE TYPE "QCOutcome" AS ENUM ('PASS', 'FAIL');
@@ -101,25 +98,10 @@ CREATE TABLE "Quotation" (
     "validUntil" TIMESTAMP(3),
     "total" DECIMAL(12,2) NOT NULL DEFAULT 0,
     "notes" TEXT,
-    "cancelledById" TEXT,
-    "cancelReason" TEXT,
-    "approvedByStaffId" TEXT,
-    "approvalBypassReason" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Quotation_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "QuotationRevisionRequest" (
-    "id" TEXT NOT NULL,
-    "quotationId" TEXT NOT NULL,
-    "customerId" TEXT NOT NULL,
-    "message" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "QuotationRevisionRequest_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -235,7 +217,6 @@ CREATE TABLE "Payment" (
     "amount" DECIMAL(12,2) NOT NULL,
     "method" "PaymentMethod" NOT NULL,
     "proofFilePath" TEXT,
-    "voucherId" TEXT,
     "status" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
     "recordedById" TEXT NOT NULL,
     "notes" TEXT,
@@ -361,57 +342,6 @@ CREATE TABLE "RewardTransaction" (
 );
 
 -- CreateTable
-CREATE TABLE "RedemptionTier" (
-    "id" TEXT NOT NULL,
-    "pointsCost" INTEGER NOT NULL,
-    "voucherValue" INTEGER NOT NULL,
-    "minimumSpend" INTEGER NOT NULL,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "RedemptionTier_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Voucher" (
-    "id" TEXT NOT NULL,
-    "code" TEXT NOT NULL,
-    "customerId" TEXT NOT NULL,
-    "tierId" TEXT,
-    "value" INTEGER NOT NULL,
-    "minimumSpend" INTEGER NOT NULL,
-    "status" "VoucherStatus" NOT NULL DEFAULT 'AVAILABLE',
-    "rewardTransactionId" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "Voucher_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Message" (
-    "id" TEXT NOT NULL,
-    "orderId" TEXT NOT NULL,
-    "senderId" TEXT NOT NULL,
-    "body" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Notification" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "type" TEXT NOT NULL,
-    "message" TEXT NOT NULL,
-    "link" TEXT,
-    "read" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "AuditLog" (
     "id" TEXT NOT NULL,
     "actorId" TEXT,
@@ -446,9 +376,6 @@ CREATE UNIQUE INDEX "WorkflowStage_templateId_order_key" ON "WorkflowStage"("tem
 CREATE UNIQUE INDEX "JobOrder_orderId_joNumber_key" ON "JobOrder"("orderId", "joNumber");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Payment_voucherId_key" ON "Payment"("voucherId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "ReworkRecord_qcResultId_key" ON "ReworkRecord"("qcResultId");
 
 -- CreateIndex
@@ -459,12 +386,6 @@ CREATE UNIQUE INDEX "InventoryItem_sku_key" ON "InventoryItem"("sku");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "SupplyLot_lotCode_key" ON "SupplyLot"("lotCode");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Voucher_code_key" ON "Voucher"("code");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Voucher_rewardTransactionId_key" ON "Voucher"("rewardTransactionId");
 
 -- AddForeignKey
 ALTER TABLE "Customer" ADD CONSTRAINT "Customer_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -477,18 +398,6 @@ ALTER TABLE "Quotation" ADD CONSTRAINT "Quotation_inquiryId_fkey" FOREIGN KEY ("
 
 -- AddForeignKey
 ALTER TABLE "Quotation" ADD CONSTRAINT "Quotation_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Quotation" ADD CONSTRAINT "Quotation_cancelledById_fkey" FOREIGN KEY ("cancelledById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Quotation" ADD CONSTRAINT "Quotation_approvedByStaffId_fkey" FOREIGN KEY ("approvedByStaffId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "QuotationRevisionRequest" ADD CONSTRAINT "QuotationRevisionRequest_quotationId_fkey" FOREIGN KEY ("quotationId") REFERENCES "Quotation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "QuotationRevisionRequest" ADD CONSTRAINT "QuotationRevisionRequest_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "QuotationLineItem" ADD CONSTRAINT "QuotationLineItem_quotationId_fkey" FOREIGN KEY ("quotationId") REFERENCES "Quotation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -522,9 +431,6 @@ ALTER TABLE "File" ADD CONSTRAINT "File_uploadedById_fkey" FOREIGN KEY ("uploade
 
 -- AddForeignKey
 ALTER TABLE "Payment" ADD CONSTRAINT "Payment_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Payment" ADD CONSTRAINT "Payment_voucherId_fkey" FOREIGN KEY ("voucherId") REFERENCES "Voucher"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Payment" ADD CONSTRAINT "Payment_recordedById_fkey" FOREIGN KEY ("recordedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -567,24 +473,6 @@ ALTER TABLE "RewardTransaction" ADD CONSTRAINT "RewardTransaction_customerId_fke
 
 -- AddForeignKey
 ALTER TABLE "RewardTransaction" ADD CONSTRAINT "RewardTransaction_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Voucher" ADD CONSTRAINT "Voucher_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Voucher" ADD CONSTRAINT "Voucher_tierId_fkey" FOREIGN KEY ("tierId") REFERENCES "RedemptionTier"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Voucher" ADD CONSTRAINT "Voucher_rewardTransactionId_fkey" FOREIGN KEY ("rewardTransactionId") REFERENCES "RewardTransaction"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
