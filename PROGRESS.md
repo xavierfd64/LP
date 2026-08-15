@@ -387,3 +387,57 @@ The exact same `FloatingChatWidget` component, `Conversation`/`Message` tables, 
   - **Permission enforcement**: walked a Staff test account through full access → view-only (composer replaced by the notice text) → no access (widget absent) → restored to its original preset, verified via both the admin UI and a direct DB query. A replayed `sendMessageAction` POST with `COMMUNICATION_SEND` stripped returned no new message row, confirming the guard rejects server-side rather than relying on the UI hiding the composer.
   - **Regression smoke pass**: Inquiries, Quotations (quote numbers intact), Orders, Payments, Rewards, notification bell, Business Settings, mobile nav, and login/logout all still work across ADMIN/STAFF/CUSTOMER.
   - Minor non-blocking observation: the dev log showed occasional `destination stream closed early` entries on the `/api/realtime` SSE endpoint under the test's rapid browser-context churn — the `controller.enqueue`/`close` calls in `app/api/realtime/route.ts` are already wrapped in `try/catch`, this is Node-level cleanup noise from abrupt disconnects, not a page-level error, and didn't affect any test outcome.
+
+
+---
+
+## August 15 — 7th update: the Chatbox becomes the central communication hub
+
+Ownership/assignment, transfers, private and group chat, attachments, and message-level transaction references — all on the existing Conversation/Message/SSE infrastructure, extended rather than replaced.
+
+### Architecture decision
+Rather than merging existing per-transaction conversations into one thread (a destructive migration), everything was added on top, additively:
+- `Conversation.type` (CUSTOMER / CUSTOMER_GROUP / PRIVATE / GROUP) lets one messaging system represent customer conversations, internal Staff↔Admin DMs, and group chats without a parallel system per kind.
+- The customer's "central Chatbox" reuses the existing `GENERAL` subject type (`getOrCreateGeneralConversation`) — no new conversation-creation path needed.
+- Old per-transaction conversations (Inquiry/Quotation/Job Order/Order, from before this update) are untouched historical data, still reachable via `/messages`. New Inquiry/Quotation/Job Order references now attach to *messages* inside the central conversation instead of spawning a new conversation per transaction (Order was excluded from this — it was never in the spec's list of removed links or supported reference types, so its own embedded thread on the Order detail page keeps working exactly as it did, just made ownership-aware).
+- `Conversation.customerId`/`subjectType` were made nullable (PRIVATE/GROUP have neither) — an additive migration, no data loss.
+
+### Ownership, transfer, reassignment, takeover
+- A new CUSTOMER conversation starts unassigned. The rule, enforced in `app/actions/messages.ts`'s `sendMessageAction`: the first Staff/Admin who *sends* a reply (never merely opens/views one) becomes `assignedStaffId`, logged as an inline SYSTEM message ("X is now handling this conversation").
+- Once assigned, `computeCanSend()` blocks every other Staff/Admin from sending — including Admin, who is treated the same as Staff here per the spec ("Admin cannot directly reply... unless they take over").
+- `reassignConversationAction` backs both "Transfer" (used by the current owner, gated by `COMMUNICATION_TRANSFER`) and "Reassign" (used by Admin or `COMMUNICATION_ASSIGN`, works regardless of current owner) — one action, permission checked based on who's calling it and whether they currently own the conversation.
+- `takeOverConversationAction` lets Admin/`COMMUNICATION_ASSIGN` claim a conversation directly for when the responsible Staff member is unavailable.
+- Every ownership change is recorded as an inline SYSTEM message and triggers a notification to the new assignee.
+
+### Chat types and access control
+New `ConversationParticipant` join table backs PRIVATE (Staff↔Admin, exactly 2 participants) and GROUP/CUSTOMER_GROUP (multi-party) conversations. Access rules, enforced in `hasStructuralAccess()`:
+- Customers see only their own CUSTOMER/CUSTOMER_GROUP conversations.
+- Staff/Admin see every CUSTOMER conversation (gated by `COMMUNICATION_VIEW`, matching the existing model) plus any PRIVATE/GROUP/CUSTOMER_GROUP conversation they're an explicit participant of — including from other Admins' private DMs, which are treated as genuinely private rather than covered by Admin's general oversight, since the spec explicitly frames them as confidential ("Other Staff must NOT see it").
+- Staff can only start a private chat with Admin, not with other Staff directly (matches spec sections 11–13).
+
+### Attachments and transaction references
+`Message` gained attachment fields (path/name/mime/size, reusing the existing `saveUploadedFile`) and reference fields (`refType` + one of `refInquiryId`/`refQuotationId`/`refJobOrderId`). Validated server-side in `sendMessageAction`: 10MB size limit, an extension allowlist (images, PDF, Word, Excel, txt), and the referenced record must belong to the conversation's own customer. `MessageThread` renders attachments as inline image previews or file chips, and references as a structured, clickable card (type/number/status/amount where relevant) — matching the spec's mockup rather than plain text.
+
+### Chatbox UI (`FloatingChatWidget`, `MessageThread`)
+- Conversation list: kind badges (Customer/Private/Group/Customer Group), "Can Reply"/"View Only" for Staff/Admin, presence dots.
+- Thread header (CUSTOMER type, Staff/Admin view): "Responsible: {name}" or "Unassigned", inline Transfer/Reassign/Take Over controls backed by a Staff search-and-pick list with live presence.
+- "New Chat" panel (Staff/Admin only): Customer search (`COMMUNICATION_SEARCH_CUSTOMER`), Staff↔Admin private chat, Group creation (`COMMUNICATION_GROUP`).
+- Composer: 📎 attach, 😊 emoji (a small fixed grid — deliberately lightweight, not a full picker), 🔗 reference-a-transaction, each gated by its own permission (`canAttach`/`canReference` props, defaulting `true` so Customer call sites keep full capability without extra plumbing).
+- Removed: the old per-transaction "Messages" card on Inquiry/Quotation/Job Order pages, replaced by a `DiscussInChatboxButton` that opens the widget straight into the customer's central conversation with that transaction pre-referenced (dispatches a `chatbox:open-reference` window event the widget listens for).
+
+### Presence, 24h reminders, automatic assignment
+- **Presence**: `User.lastActiveAt`, updated by a client heartbeat every 30s while a Staff/Admin has the app open; online/away/offline derived at query time wherever Staff is listed — no push channel, "reasonable real-time" per the spec without new infrastructure.
+- **24h no-response reminder**: `lib/response-reminders.ts` sweeps CUSTOMER conversations where the customer's been waiting 24h+ with no reply, notifying the responsible Staff (if any) and every Admin, deduped via `lastReminderSentAt` so it won't refire within the same 24h window.
+- **Automatic assignment**: new `assignmentMode` on Business Settings (Manual / Automatic / Manual with a 15-minute fallback), `lib/auto-assignment.ts` picks the least-loaded eligible Staff member (`COMMUNICATION_VIEW`+`COMMUNICATION_SEND`, ranked online > away > offline) — Automatic fires inline when a customer's message lands in an unassigned conversation, the fallback mode via a sweep.
+- **Honest infrastructure note**: this stack has no job queue or cron runner. Both sweeps ride opportunistically on SSE connections (debounced 10 min / 5 min respectively, `globalThis`-backed like the realtime bus) — that covers the common case with zero setup, and a dedicated `GET /api/cron/response-reminders` route (protected by an optional `CRON_SECRET` env var) exists for anyone who wants precise timing from a real external scheduler.
+
+### Permissions
+Six new Communication permissions (`COMMUNICATION_TRANSFER`/`ASSIGN`/`GROUP`/`ATTACHMENT`/`REFERENCE_TRANSACTION`/`SEARCH_CUSTOMER`), added to the `Permission` enum and to the existing preset templates (Sales Staff and Cashier get the customer-facing ones; Customer Service and Manager get everything). Admin bypasses all of them, same as every existing permission. Every action in `app/actions/messages.ts` checks the specific permission server-side before doing anything — the UI hides controls the caller can't use, but that's a convenience layer, not the enforcement.
+
+### Verification
+A full Playwright pass covering ownership/transfer/reassign/takeover, permission enforcement (including a replay-attack test — captured a legitimate Transfer request and replayed it with a different Staff account's session cookies; the DB stayed unchanged, confirming the server rejects it independent of the UI), private/group chat isolation, customer search, real-time delivery, attachments, transaction references, presence, the 24h reminder and auto-assignment sweeps, and a full regression smoke test — passed cleanly across the board, with two real bugs found in the attachments/references path:
+
+1. **Live rendering gap**: attachments and transaction references sent while a conversation was open didn't render until the thread was reopened or the page reloaded — `createAndPublishMessage()`'s SSE broadcast only carried `{id, body, senderId, senderName, senderRole, messageType, createdAt}`, and `MessageThread`'s live-append path hardcoded `attachment`/`reference` to `null`. Fixed by extracting a `serializeMessage()` helper shared between the cold-fetch path (`getConversationMessagesAction`) and the live broadcast, so a message looks identical however it arrives.
+2. **Oversized upload crash**: any attachment over ~1MB crashed with a raw Next.js "Body exceeded 1 MB limit" error instead of the intended graceful "That file is too large (10MB max)." message. Root cause took two passes: raising `serverActions.bodySizeLimit` wasn't enough — bisection testing (uploads from 8MB to 11MB) kept failing with a *different* error ("Unexpected end of form") at exactly 10MB no matter how high that limit went. The dev log had the real answer: `proxy.ts` (the auth middleware, matched on nearly every route) has its own independent default 10MB body cap (`experimental.proxyClientMaxBodySize` — the new name for `middlewareClientMaxBodySize` under the `proxy.ts` convention this project already uses), and a chat send passes through it before ever reaching the Server Action. Both limits are now raised with headroom above `ATTACHMENT_MAX_BYTES`.
+
+Re-verified after the fix via direct bisection (not just re-running the original test): 9.9MB uploads succeed cleanly with zero errors, 11MB gets the graceful rejection message with zero page errors, and attachments/references render live on both sender and recipient sides without a reload. `npm run build` and `migrate diff --exit-code` both clean throughout.
