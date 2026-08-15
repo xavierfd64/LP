@@ -10,6 +10,8 @@ import { Alert } from "@/components/ui/alert";
 import { formatDateTime } from "@/lib/utils";
 import { closeInquiryAction, cancelInquiryAction } from "@/app/actions/inquiries";
 import { InquiryEditForm } from "./inquiry-edit-form";
+import { isActiveQuotationStatus } from "@/lib/quotation-status";
+import { ConversationCard } from "@/components/messaging/conversation-card";
 
 export default async function InquiryDetailPage({ params, searchParams }: PageProps<"/inquiries/[id]">) {
   const { id } = await params;
@@ -31,7 +33,8 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const closeAction = closeInquiryAction.bind(null, inquiry.id);
   const cancelAction = cancelInquiryAction.bind(null, inquiry.id);
-  const canConvert = inquiry.status !== "CLOSED" && inquiry.status !== "CANCELLED";
+  const activeQuotation = inquiry.quotations.find((q) => isActiveQuotationStatus(q.status));
+  const canConvert = inquiry.status !== "CLOSED" && inquiry.status !== "CANCELLED" && !activeQuotation;
   const canCustomerEdit = user.role === "CUSTOMER" && inquiry.status === "NEW";
 
   return (
@@ -87,6 +90,16 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
         </Card>
       )}
 
+      {isStaffLike && activeQuotation && (
+        <Alert tone="info">
+          This inquiry already has an active quotation —{" "}
+          <Link href={`/quotations/${activeQuotation.id}`} className="font-medium underline">
+            {activeQuotation.quoteNumber}
+          </Link>{" "}
+          ({activeQuotation.status.replace(/_/g, " ")}). Revise that one instead of creating a new one.
+        </Alert>
+      )}
+
       {isStaffLike && (
         <div className="flex gap-2">
           {canConvert && (
@@ -121,6 +134,13 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
           </form>
         </div>
       )}
+
+      <ConversationCard
+        customerId={inquiry.customerId}
+        subjectType="INQUIRY"
+        subjectId={inquiry.id}
+        currentUserId={user.id}
+      />
     </div>
   );
 }

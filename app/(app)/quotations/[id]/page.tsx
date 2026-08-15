@@ -14,6 +14,7 @@ import { RevisionRequestForm } from "./revision-request-form";
 import { EditQuotationForm } from "./edit-quotation-form";
 import { CancelQuotationForm } from "./cancel-quotation-form";
 import { ForceApproveForm } from "./force-approve-form";
+import { ConversationCard } from "@/components/messaging/conversation-card";
 
 export default async function QuotationDetailPage({ params, searchParams }: PageProps<"/quotations/[id]">) {
   const { id } = await params;
@@ -31,6 +32,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
       revisionRequests: { orderBy: { createdAt: "desc" } },
       cancelledBy: true,
       approvedByStaff: true,
+      createdBy: true,
     },
   });
   if (!quotation) notFound();
@@ -53,6 +55,9 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{quotation.quoteNumber}</h1>
           {isStaffLike && <p className="text-sm text-slate-500">{quotation.customer.name}</p>}
+          <p className="text-xs text-slate-400">
+            Prepared by {quotation.createdBy?.name ?? "—"} on {formatDateTime(quotation.createdAt)}
+          </p>
         </div>
         <StatusBadge status={quotation.status} />
       </div>
@@ -188,6 +193,13 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
           </CardContent>
         </Card>
       )}
+
+      <ConversationCard
+        customerId={quotation.customerId}
+        subjectType="QUOTATION"
+        subjectId={quotation.id}
+        currentUserId={user.id}
+      />
     </div>
   );
 }

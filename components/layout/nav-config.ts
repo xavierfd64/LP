@@ -11,6 +11,7 @@ export function navForRole(role: string): NavItem[] {
         { label: "Production", href: "/production" },
         { label: "Inventory", href: "/inventory" },
         { label: "Payments", href: "/payments" },
+        { label: "Messages", href: "/messages" },
         { label: "Workflow Templates", href: "/admin/workflow-templates" },
         { label: "Users", href: "/admin/users" },
         { label: "Reward Rules", href: "/admin/rewards" },
@@ -24,6 +25,7 @@ export function navForRole(role: string): NavItem[] {
         { label: "Orders", href: "/orders" },
         { label: "Inventory", href: "/inventory" },
         { label: "Payments", href: "/payments" },
+        { label: "Messages", href: "/messages" },
       ];
     case "PRODUCTION":
       return [
@@ -37,6 +39,7 @@ export function navForRole(role: string): NavItem[] {
         { label: "My Quotations", href: "/quotations" },
         { label: "My Orders", href: "/orders" },
         { label: "My Rewards", href: "/account/rewards" },
+        { label: "Messages", href: "/messages" },
       ];
     default:
       return [];

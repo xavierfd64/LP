@@ -8,6 +8,7 @@ import { getCurrentCustomer } from "@/lib/current-customer";
 import { nextQuoteNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
+import { ACTIVE_QUOTATION_STATUSES } from "@/lib/quotation-status";
 
 const lineItemsSchema = z.array(
   z.object({
@@ -48,6 +49,15 @@ export async function createQuotationAction(_prevState: string | undefined, form
     return "Please provide at least one valid line item.";
   }
 
+  if (inquiryId) {
+    const existingActive = await prisma.quotation.findFirst({
+      where: { inquiryId, status: { in: [...ACTIVE_QUOTATION_STATUSES] } },
+    });
+    if (existingActive) {
+      return `This inquiry already has an active quotation (${existingActive.quoteNumber}). Revise that one instead of creating a new one.`;
+    }
+  }
+
   const total = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
   const quoteNumber = await nextQuoteNumber();
 
@@ -57,6 +67,7 @@ export async function createQuotationAction(_prevState: string | undefined, form
       customerId,
       inquiryId,
       status: "DRAFT",
+      createdById: user.id,
       validUntil: validUntilRaw ? new Date(validUntilRaw) : undefined,
       notes: notesRaw,
       total,

@@ -721,11 +721,14 @@ async function main() {
   });
 
   // ---------- Messages (sample thread on order2) ----------
+  const order2Conversation = await prisma.conversation.create({
+    data: { customerId: customer2.id, subjectType: "ORDER", orderId: order2.id },
+  });
   await prisma.message.createMany({
     data: [
-      { orderId: order2.id, senderId: custUser2.id, body: "Hi, can I get an update on the DTF shirts?" },
+      { conversationId: order2Conversation.id, senderId: custUser2.id, body: "Hi, can I get an update on the DTF shirts?" },
       {
-        orderId: order2.id,
+        conversationId: order2Conversation.id,
         senderId: staff1.id,
         body: "Hi Maria! JO-001 is currently in Pressing, on track for your deadline. JO-002 had a minor QC issue we're reworking now.",
       },

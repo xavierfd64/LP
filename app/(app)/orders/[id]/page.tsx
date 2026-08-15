@@ -16,7 +16,8 @@ import { releaseJobOrderAction } from "@/app/actions/payments";
 import { PaymentProofForm } from "./payment-proof-form";
 import { ReleaseExceptionForm } from "./release-exception-form";
 import { ApplyVoucherForm } from "./apply-voucher-form";
-import { MessageThread } from "./message-thread";
+import { MessageThread } from "@/components/messaging/message-thread";
+import { getOrCreateConversation, markConversationRead } from "@/lib/conversations";
 
 export default async function OrderDetailPage({
   params,
@@ -35,7 +36,6 @@ export default async function OrderDetailPage({
       jobOrders: { include: { workflowTemplate: true }, orderBy: { joNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
       fulfillments: { orderBy: { createdAt: "desc" }, include: { jobOrder: true } },
-      messages: { orderBy: { createdAt: "asc" }, include: { sender: true } },
     },
   });
   if (!order) notFound();
@@ -55,6 +55,14 @@ export default async function OrderDetailPage({
   const templates = isStaffLike
     ? await prisma.workflowTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } })
     : [];
+
+  const conversation = await getOrCreateConversation(order.customerId, "ORDER", order.id);
+  const messages = await prisma.message.findMany({
+    where: { conversationId: conversation.id },
+    orderBy: { createdAt: "asc" },
+    include: { sender: true },
+  });
+  await markConversationRead(conversation.id, user.id);
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
 
@@ -276,7 +284,7 @@ export default async function OrderDetailPage({
           <CardTitle>Messages</CardTitle>
         </CardHeader>
         <CardContent>
-          <MessageThread orderId={order.id} currentUserId={user.id} messages={order.messages} />
+          <MessageThread conversationId={conversation.id} currentUserId={user.id} messages={messages} />
         </CardContent>
       </Card>
     </div>

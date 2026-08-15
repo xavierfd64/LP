@@ -159,6 +159,8 @@ model User {
   sentMessages     Message[]
   quotationsCancelled     Quotation[] @relation("QuotationCancelledBy")
   quotationsForceApproved Quotation[] @relation("QuotationForceApprovedBy")
+  quotationsCreated       Quotation[] @relation("QuotationCreatedBy")
+  conversationReads       ConversationRead[]
 }
 
 model Customer {
@@ -178,6 +180,7 @@ model Customer {
   rewardTxns   RewardTransaction[]
   vouchers     Voucher[]
   quotationRevisionRequests QuotationRevisionRequest[]
+  conversations Conversation[]
 }
 
 model Inquiry {
@@ -192,6 +195,7 @@ model Inquiry {
   updatedAt      DateTime      @updatedAt
 
   quotations Quotation[]
+  conversations Conversation[]
 }
 
 model Quotation {
@@ -205,6 +209,8 @@ model Quotation {
   validUntil  DateTime?
   total       Decimal         @default(0) @db.Decimal(12, 2)
   notes       String?
+  createdById String?
+  createdBy   User?    @relation("QuotationCreatedBy", fields: [createdById], references: [id])
   cancelledById   String?
   cancelledBy     User?    @relation("QuotationCancelledBy", fields: [cancelledById], references: [id])
   cancelReason    String?
@@ -217,6 +223,7 @@ model Quotation {
   lineItems        QuotationLineItem[]
   orders           Order[]
   revisionRequests QuotationRevisionRequest[]
+  conversations    Conversation[]
 }
 
 model QuotationRevisionRequest {
@@ -263,7 +270,7 @@ model Order {
   payments     Payment[]
   fulfillments Fulfillment[]
   rewardTxns   RewardTransaction[]
-  messages     Message[]
+  conversations Conversation[]
 }
 
 model WorkflowTemplate {
@@ -311,6 +318,7 @@ model JobOrder {
   reworkRecords ReworkRecord[]
   inventoryMoves InventoryMovement[]
   fulfillments  Fulfillment[]
+  conversations Conversation[]
 
   @@unique([orderId, joNumber])
 }
@@ -354,6 +362,8 @@ model Payment {
   voucherId    String?       @unique
   voucher      Voucher?      @relation(fields: [voucherId], references: [id])
   status       PaymentStatus @default(PENDING)
+  referenceNumber String?
+  paymentDate  DateTime      @default(now())
   recordedById String
   recordedBy   User          @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
   notes        String?
@@ -500,14 +510,52 @@ model Voucher {
   createdAt DateTime @default(now())
 }
 
+enum ConversationSubjectType {
+  INQUIRY
+  QUOTATION
+  ORDER
+  JOB_ORDER
+  GENERAL
+}
+
+model Conversation {
+  id          String                  @id @default(cuid())
+  customerId  String
+  customer    Customer                @relation(fields: [customerId], references: [id])
+  subjectType ConversationSubjectType
+  inquiryId   String?
+  inquiry     Inquiry?                @relation(fields: [inquiryId], references: [id])
+  quotationId String?
+  quotation   Quotation?              @relation(fields: [quotationId], references: [id])
+  orderId     String?
+  order       Order?                  @relation(fields: [orderId], references: [id])
+  jobOrderId  String?
+  jobOrder    JobOrder?               @relation(fields: [jobOrderId], references: [id])
+  createdAt   DateTime                @default(now())
+
+  messages Message[]
+  reads    ConversationRead[]
+}
+
+model ConversationRead {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  lastReadAt     DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+}
+
 model Message {
-  id        String   @id @default(cuid())
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id])
-  senderId  String
-  sender    User     @relation(fields: [senderId], references: [id])
-  body      String
-  createdAt DateTime @default(now())
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id])
+  body           String
+  createdAt      DateTime     @default(now())
 }
 
 model Notification {

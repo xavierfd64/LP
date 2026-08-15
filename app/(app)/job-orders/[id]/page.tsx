@@ -21,6 +21,7 @@ import {
   markPickedUpAction,
   markInstalledAction,
 } from "@/app/actions/fulfillment";
+import { ConversationCard } from "@/components/messaging/conversation-card";
 
 export default async function JobOrderDetailPage({
   params,
@@ -348,6 +349,15 @@ export default async function JobOrderDetailPage({
             )}
           </CardContent>
         </Card>
+      )}
+
+      {(isStaffLike || user.role === "CUSTOMER") && (
+        <ConversationCard
+          customerId={jo.order.customerId}
+          subjectType="JOB_ORDER"
+          subjectId={jo.id}
+          currentUserId={user.id}
+        />
       )}
     </div>
   );

@@ -15,13 +15,21 @@ type MessageItem = {
   sender: { name: string; role: string };
 };
 
-export function MessageThread({ orderId, currentUserId, messages }: { orderId: string; currentUserId: string; messages: MessageItem[] }) {
-  const action = sendMessageAction.bind(null, orderId);
+export function MessageThread({
+  conversationId,
+  currentUserId,
+  messages,
+}: {
+  conversationId: string;
+  currentUserId: string;
+  messages: MessageItem[];
+}) {
+  const action = sendMessageAction.bind(null, conversationId);
   const [error, formAction, pending] = useActionState(action, undefined);
 
   return (
     <div className="space-y-3">
-      <div className="max-h-80 space-y-2 overflow-y-auto rounded-md border border-slate-100 p-3">
+      <div className="max-h-96 space-y-2 overflow-y-auto rounded-md border border-slate-100 p-3">
         {messages.length === 0 && <p className="text-sm text-slate-400">No messages yet — say hello.</p>}
         {messages.map((m) => {
           const mine = m.senderId === currentUserId;
@@ -44,9 +52,9 @@ export function MessageThread({ orderId, currentUserId, messages }: { orderId: s
       </div>
 
       {error && <Alert tone="error">{error}</Alert>}
-      <form action={formAction} className="flex items-end gap-2">
+      <form action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <Textarea name="body" rows={2} placeholder="Type a message..." className="flex-1" required />
-        <Button type="submit" size="sm" disabled={pending}>
+        <Button type="submit" size="sm" disabled={pending} className="w-full sm:w-auto">
           {pending ? "Sending..." : "Send"}
         </Button>
       </form>
