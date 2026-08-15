@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/session";
+import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,8 +11,160 @@ import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { confirmPaymentAction, rejectPaymentAction } from "@/app/actions/payments";
 import { PaymentForm } from "./payment-form";
 
-export default async function PaymentsPage() {
-  await requireRole(["STAFF", "ADMIN"]);
+export default async function PaymentsPage({ searchParams }: PageProps<"/payments">) {
+  const user = await requireUser();
+  const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
+
+  if (!isStaffLike && user.role !== "CUSTOMER") redirect("/dashboard");
+
+  if (!isStaffLike) {
+    const customer = await getCurrentCustomer(user.id);
+    const orders = await prisma.order.findMany({
+      where: { customerId: customer.id },
+      include: { payments: { orderBy: { paymentDate: "desc" } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const allPayments = orders
+      .flatMap((o) => o.payments.map((p) => ({ ...p, order: o })))
+      .sort((a, b) => b.paymentDate.getTime() - a.paymentDate.getTime());
+
+    let totalPaid = 0;
+    let totalOutstanding = 0;
+    const orderSummaries = orders.map((o) => {
+      const confirmed = o.payments
+        .filter((p) => p.status === "CONFIRMED")
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+      const total = Number(o.totalAmount);
+      const balance = Math.max(total - confirmed, 0);
+      totalPaid += confirmed;
+      totalOutstanding += balance;
+      return { order: o, confirmed, total, balance };
+    });
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">My Payments</h1>
+          <p className="text-sm text-slate-500">Your payment history and balances across every order.</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Card>
+            <CardContent className="space-y-1 py-4">
+              <p className="text-xs uppercase text-slate-500">Total amount paid</p>
+              <p className="text-xl font-semibold text-green-700">{formatCurrency(totalPaid)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="space-y-1 py-4">
+              <p className="text-xs uppercase text-slate-500">Outstanding balance</p>
+              <p className="text-xl font-semibold text-yellow-700">{formatCurrency(totalOutstanding)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="space-y-1 py-4">
+              <p className="text-xs uppercase text-slate-500">Orders with balance due</p>
+              <p className="text-xl font-semibold text-slate-900">
+                {orderSummaries.filter((s) => s.balance > 0).length}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Balance by order</CardTitle>
+          </CardHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Order</TH>
+                  <TH>Total</TH>
+                  <TH>Paid</TH>
+                  <TH>Remaining due</TH>
+                  <TH>Status</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {orderSummaries.map((s) => (
+                  <TR key={s.order.id}>
+                    <TD>
+                      <Link href={`/orders/${s.order.id}`} className="font-medium text-slate-900 underline">
+                        {s.order.orderNumber}
+                      </Link>
+                    </TD>
+                    <TD>{formatCurrency(s.total)}</TD>
+                    <TD>{formatCurrency(s.confirmed)}</TD>
+                    <TD className={s.balance > 0 ? "font-medium text-yellow-700" : "text-slate-500"}>
+                      {formatCurrency(s.balance)}
+                    </TD>
+                    <TD>
+                      <StatusBadge status={s.order.status} />
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
+          {orderSummaries.length === 0 && <EmptyState label="No orders yet." />}
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment history</CardTitle>
+          </CardHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Date</TH>
+                  <TH>Order</TH>
+                  <TH>Amount</TH>
+                  <TH>Method</TH>
+                  <TH>Reference #</TH>
+                  <TH>Status</TH>
+                  <TH>Proof</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {allPayments.map((p) => (
+                  <TR key={p.id}>
+                    <TD>{formatDateTime(p.paymentDate)}</TD>
+                    <TD>
+                      <Link href={`/orders/${p.orderId}`} className="font-medium text-slate-900 underline">
+                        {p.order.orderNumber}
+                      </Link>
+                    </TD>
+                    <TD>{formatCurrency(p.amount.toString())}</TD>
+                    <TD>{p.method.replace(/_/g, " ")}</TD>
+                    <TD>{p.referenceNumber ?? "—"}</TD>
+                    <TD>
+                      <StatusBadge status={p.status} />
+                    </TD>
+                    <TD>
+                      {p.proofFilePath ? (
+                        <a href={p.proofFilePath} target="_blank" className="text-sm underline text-slate-600">
+                          View
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
+          {allPayments.length === 0 && <EmptyState label="No payments recorded yet." />}
+        </Card>
+      </div>
+    );
+  }
+
+  const sp = await searchParams;
+  const preselectedOrderId = typeof sp.orderId === "string" ? sp.orderId : undefined;
 
   const [payments, orders] = await Promise.all([
     prisma.payment.findMany({
@@ -27,72 +181,74 @@ export default async function PaymentsPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
 
-      <div className="grid grid-cols-3 gap-6">
-        <Card className="col-span-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>All payments</CardTitle>
           </CardHeader>
-          <Table>
-            <THead>
-              <TR>
-                <TH>Order</TH>
-                <TH>Customer</TH>
-                <TH>Amount</TH>
-                <TH>Method</TH>
-                <TH>Status</TH>
-                <TH>Date</TH>
-                <TH>Proof</TH>
-                <TH />
-              </TR>
-            </THead>
-            <TBody>
-              {payments.map((p) => {
-                const confirm = confirmPaymentAction.bind(null, p.id);
-                const reject = rejectPaymentAction.bind(null, p.id);
-                return (
-                  <TR key={p.id}>
-                    <TD>
-                      <Link href={`/orders/${p.orderId}`} className="font-medium text-slate-900 underline">
-                        {p.order.orderNumber}
-                      </Link>
-                    </TD>
-                    <TD>{p.order.customer.name}</TD>
-                    <TD>{formatCurrency(p.amount.toString())}</TD>
-                    <TD>{p.method.replace(/_/g, " ")}</TD>
-                    <TD>
-                      <StatusBadge status={p.status} />
-                    </TD>
-                    <TD>{formatDateTime(p.createdAt)}</TD>
-                    <TD>
-                      {p.proofFilePath ? (
-                        <a href={p.proofFilePath} target="_blank" className="text-sm underline text-slate-600">
-                          View
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </TD>
-                    <TD>
-                      {p.status === "PENDING" && (
-                        <div className="flex gap-2">
-                          <form action={confirm}>
-                            <Button type="submit" size="sm">
-                              Confirm
-                            </Button>
-                          </form>
-                          <form action={reject}>
-                            <Button type="submit" size="sm" variant="destructive">
-                              Reject
-                            </Button>
-                          </form>
-                        </div>
-                      )}
-                    </TD>
-                  </TR>
-                );
-              })}
-            </TBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Order</TH>
+                  <TH>Customer</TH>
+                  <TH>Amount</TH>
+                  <TH>Method</TH>
+                  <TH>Status</TH>
+                  <TH>Date</TH>
+                  <TH>Proof</TH>
+                  <TH />
+                </TR>
+              </THead>
+              <TBody>
+                {payments.map((p) => {
+                  const confirm = confirmPaymentAction.bind(null, p.id);
+                  const reject = rejectPaymentAction.bind(null, p.id);
+                  return (
+                    <TR key={p.id}>
+                      <TD>
+                        <Link href={`/orders/${p.orderId}`} className="font-medium text-slate-900 underline">
+                          {p.order.orderNumber}
+                        </Link>
+                      </TD>
+                      <TD>{p.order.customer.name}</TD>
+                      <TD>{formatCurrency(p.amount.toString())}</TD>
+                      <TD>{p.method.replace(/_/g, " ")}</TD>
+                      <TD>
+                        <StatusBadge status={p.status} />
+                      </TD>
+                      <TD>{formatDateTime(p.createdAt)}</TD>
+                      <TD>
+                        {p.proofFilePath ? (
+                          <a href={p.proofFilePath} target="_blank" className="text-sm underline text-slate-600">
+                            View
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </TD>
+                      <TD>
+                        {p.status === "PENDING" && (
+                          <div className="flex gap-2">
+                            <form action={confirm}>
+                              <Button type="submit" size="sm">
+                                Confirm
+                              </Button>
+                            </form>
+                            <form action={reject}>
+                              <Button type="submit" size="sm" variant="destructive">
+                                Reject
+                              </Button>
+                            </form>
+                          </div>
+                        )}
+                      </TD>
+                    </TR>
+                  );
+                })}
+              </TBody>
+            </Table>
+          </div>
           {payments.length === 0 && <EmptyState label="No payments recorded yet." />}
         </Card>
 
@@ -103,6 +259,7 @@ export default async function PaymentsPage() {
           <CardContent>
             <PaymentForm
               orders={orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber, customerName: o.customer.name }))}
+              defaultOrderId={preselectedOrderId}
             />
           </CardContent>
         </Card>

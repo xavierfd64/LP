@@ -14,6 +14,8 @@ const recordPaymentSchema = z.object({
   orderId: z.string().min(1),
   amount: z.coerce.number().positive(),
   method: z.enum(["CASH", "BANK_TRANSFER", "GCASH", "MAYA", "CHEQUE", "OTHER"]),
+  referenceNumber: z.string().optional(),
+  paymentDate: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -29,25 +31,34 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
     orderId: formData.get("orderId"),
     amount: formData.get("amount"),
     method: formData.get("method"),
+    referenceNumber: formData.get("referenceNumber") || undefined,
+    paymentDate: formData.get("paymentDate") || undefined,
     notes: formData.get("notes") || undefined,
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
+  const { orderId, amount, method, referenceNumber, paymentDate, notes } = parsed.data;
+
   const payment = await prisma.payment.create({
     data: {
-      ...parsed.data,
+      orderId,
+      amount,
+      method,
+      referenceNumber,
+      paymentDate: paymentDate ? new Date(paymentDate) : undefined,
+      notes,
       status: "CONFIRMED",
       recordedById: user.id,
     },
   });
 
   await logAudit(user.id, "PAYMENT_RECORDED", "Payment", payment.id, {
-    orderId: parsed.data.orderId,
-    amount: parsed.data.amount,
+    orderId,
+    amount,
     status: "CONFIRMED",
   });
 
-  redirect(`/orders/${parsed.data.orderId}`);
+  redirect(`/orders/${orderId}`);
 }
 
 export async function uploadPaymentProofAction(_prevState: string | undefined, formData: FormData) {

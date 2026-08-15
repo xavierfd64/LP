@@ -8,7 +8,7 @@ import { Alert } from "@/components/ui/alert";
 
 type Order = { id: string; orderNumber: string; customerName: string };
 
-export function PaymentForm({ orders }: { orders: Order[] }) {
+export function PaymentForm({ orders, defaultOrderId }: { orders: Order[]; defaultOrderId?: string }) {
   const [error, formAction, pending] = useActionState(recordPaymentAction, undefined);
 
   return (
@@ -16,7 +16,7 @@ export function PaymentForm({ orders }: { orders: Order[] }) {
       {error && <Alert tone="error">{error}</Alert>}
       <div>
         <Label htmlFor="orderId">Order</Label>
-        <Select id="orderId" name="orderId" required>
+        <Select id="orderId" name="orderId" required defaultValue={defaultOrderId ?? ""}>
           <option value="">Select an order...</option>
           {orders.map((o) => (
             <option key={o.id} value={o.id}>
@@ -41,10 +41,18 @@ export function PaymentForm({ orders }: { orders: Order[] }) {
         </Select>
       </div>
       <div>
+        <Label htmlFor="referenceNumber">Reference number (optional)</Label>
+        <Input id="referenceNumber" name="referenceNumber" placeholder="e.g. GCash ref #" />
+      </div>
+      <div>
+        <Label htmlFor="paymentDate">Payment date</Label>
+        <Input id="paymentDate" name="paymentDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
+      </div>
+      <div>
         <Label htmlFor="notes">Notes (optional)</Label>
         <Textarea id="notes" name="notes" rows={2} />
       </div>
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto">
         {pending ? "Recording..." : "Record Payment (Confirmed)"}
       </Button>
     </form>

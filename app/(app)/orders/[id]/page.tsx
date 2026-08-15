@@ -18,6 +18,7 @@ import { ReleaseExceptionForm } from "./release-exception-form";
 import { ApplyVoucherForm } from "./apply-voucher-form";
 import { MessageThread } from "@/components/messaging/message-thread";
 import { getOrCreateConversation, markConversationRead } from "@/lib/conversations";
+import { RecordPaymentDialog } from "./record-payment-dialog";
 
 export default async function OrderDetailPage({
   params,
@@ -130,10 +131,13 @@ export default async function OrderDetailPage({
                 <span className="text-yellow-700">Awaiting partial payment</span>
               )}
             </p>
-            {isStaffLike && (
-              <Link href="/payments" className="text-sm underline text-slate-600">
-                Record a payment →
-              </Link>
+            {isStaffLike && !summary.fullyPaid && (
+              <RecordPaymentDialog
+                orderId={order.id}
+                orderNumber={order.orderNumber}
+                customerName={order.customer.name}
+                balanceDue={summary.total - summary.confirmed}
+              />
             )}
             <div className="pt-2 flex flex-col gap-2 items-start">
               {!isStaffLike && !summary.fullyPaid && <PaymentProofForm orderId={order.id} />}
