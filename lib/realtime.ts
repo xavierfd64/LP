@@ -20,6 +20,7 @@ export type RealtimeMessageEvent = {
     senderId: string;
     senderName: string;
     senderRole: string;
+    messageType: "TEXT" | "SYSTEM";
     createdAt: string;
   };
 };

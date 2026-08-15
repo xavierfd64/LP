@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { subscribeUser, type RealtimeEvent } from "@/lib/realtime";
+import { triggerResponseReminderSweepIfDue } from "@/lib/response-reminders";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,12 @@ export async function GET(req: Request) {
   const userId = session.user.id;
   const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { active: true } });
   if (!dbUser?.active) return new Response("Unauthorized", { status: 401 });
+
+  // No cron/job runner in this stack — piggyback the 24h response-reminder
+  // sweep on SSE connections (debounced, see triggerResponseReminderSweepIfDue),
+  // since every active user keeps one open. Fire-and-forget: never block the
+  // connection on it.
+  void triggerResponseReminderSweepIfDue();
 
   const encoder = new TextEncoder();
 
