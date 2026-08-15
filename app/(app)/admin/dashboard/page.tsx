@@ -2,17 +2,30 @@ import Link from "next/link";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import { OrdersByStatusChart, RevenueTrendChart, ProductionStatusChart } from "@/components/dashboard/admin-charts";
 
 function startOfMonth() {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
+/** The last `n` calendar months, oldest first, ending with the current month — used to bucket the revenue/orders trend chart. */
+function lastNMonths(n: number) {
+  const now = new Date();
+  return Array.from({ length: n }, (_, i) => {
+    const offset = n - 1 - i;
+    const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
+    return { label: start.toLocaleDateString("en-US", { month: "short" }), start, end };
+  });
+}
+
 export default async function AdminDashboardPage() {
   await requireRole(["ADMIN"]);
   const monthStart = startOfMonth();
+  const trendMonths = lastNMonths(6);
+  const trendRangeStart = trendMonths[0].start;
 
   const [
     newInquiries,
@@ -27,6 +40,9 @@ export default async function AdminDashboardPage() {
     ordersThisMonthCustomerIds,
     rewardEarnedAgg,
     rewardRedeemedAgg,
+    ordersByStatusRaw,
+    trendPayments,
+    trendOrders,
   ] = await Promise.all([
     prisma.inquiry.count({ where: { status: "NEW" } }),
     prisma.quotation.count({ where: { status: { in: ["DRAFT", "SENT"] } } }),
@@ -50,7 +66,23 @@ export default async function AdminDashboardPage() {
     prisma.order.findMany({ where: { createdAt: { gte: monthStart } }, select: { customerId: true }, distinct: ["customerId"] }),
     prisma.rewardTransaction.aggregate({ where: { type: "EARN", createdAt: { gte: monthStart } }, _sum: { points: true } }),
     prisma.rewardTransaction.aggregate({ where: { type: "REDEEM", createdAt: { gte: monthStart } }, _sum: { points: true } }),
+    prisma.order.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.payment.findMany({
+      where: { status: "CONFIRMED", paymentDate: { gte: trendRangeStart } },
+      select: { paymentDate: true, amount: true },
+    }),
+    prisma.order.findMany({ where: { createdAt: { gte: trendRangeStart } }, select: { createdAt: true } }),
   ]);
+
+  const ordersByStatusData = ordersByStatusRaw.map((s) => ({ status: s.status, count: s._count._all }));
+  const productionStatusData = jobOrdersByStatus.map((s) => ({ status: s.status, count: s._count._all }));
+  const revenueTrendData = trendMonths.map((m) => ({
+    month: m.label,
+    revenue: trendPayments
+      .filter((p) => p.paymentDate >= m.start && p.paymentDate < m.end)
+      .reduce((sum, p) => sum + Number(p.amount), 0),
+    orders: trendOrders.filter((o) => o.createdAt >= m.start && o.createdAt < m.end).length,
+  }));
 
   const qcPass = qcResults.find((r) => r.result === "PASS")?._count._all ?? 0;
   const qcFail = qcResults.find((r) => r.result === "FAIL")?._count._all ?? 0;
@@ -86,19 +118,33 @@ export default async function AdminDashboardPage() {
         <StatCard label="Points Redeemed (mo.)" value={Math.abs(rewardRedeemedAgg._sum.points ?? 0)} href="/admin/rewards" />
       </div>
 
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Orders by Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OrdersByStatusChart data={ordersByStatusData} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Revenue &amp; Orders Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RevenueTrendChart data={revenueTrendData} />
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Job Orders by Stage</CardTitle>
+            <CardTitle>Production Status Overview</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {jobOrdersByStatus.map((s) => (
-              <div key={s.status} className="flex items-center justify-between text-sm">
-                <Badge tone="slate">{s.status.replace(/_/g, " ")}</Badge>
-                <span className="font-medium text-slate-900">{s._count._all}</span>
-              </div>
-            ))}
-            {jobOrdersByStatus.length === 0 && <p className="text-sm text-slate-400">No job orders yet.</p>}
+          <CardContent>
+            <ProductionStatusChart data={productionStatusData} />
           </CardContent>
         </Card>
 

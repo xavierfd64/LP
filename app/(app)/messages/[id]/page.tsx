@@ -6,7 +6,7 @@ import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageThread } from "@/components/messaging/message-thread";
-import { markConversationRead, conversationSubjectLabel, conversationSourceLink } from "@/lib/conversations";
+import { markConversationRead, conversationReferenceLabel, conversationSourceLink } from "@/lib/conversations";
 
 export default async function ConversationDetailPage({ params }: PageProps<"/messages/[id]">) {
   const { id } = await params;
@@ -15,15 +15,24 @@ export default async function ConversationDetailPage({ params }: PageProps<"/mes
 
   const conversation = await prisma.conversation.findUnique({
     where: { id },
-    include: { customer: true },
+    include: {
+      customer: true,
+      inquiry: { select: { desiredProduct: true } },
+      quotation: { select: { quoteNumber: true } },
+      order: { select: { orderNumber: true } },
+      jobOrder: { select: { joNumber: true } },
+    },
   });
   if (!conversation) notFound();
 
+  let canSend = true;
   if (!isStaffLike) {
     const customer = await getCurrentCustomer(user.id);
     if (conversation.customerId !== customer.id) redirect("/messages");
   } else if (user.role === "STAFF" && !(await can(user, "COMMUNICATION_VIEW"))) {
     redirect("/messages");
+  } else {
+    canSend = user.role === "ADMIN" || (await can(user, "COMMUNICATION_SEND"));
   }
 
   const messages = await prisma.message.findMany({
@@ -38,7 +47,7 @@ export default async function ConversationDetailPage({ params }: PageProps<"/mes
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{conversationSubjectLabel(conversation)}</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{conversationReferenceLabel(conversation)}</h1>
         {isStaffLike && <p className="text-sm text-slate-500">{conversation.customer.name}</p>}
         {sourceLink && (
           <Link href={sourceLink} className="text-sm text-slate-500 underline">
@@ -52,7 +61,7 @@ export default async function ConversationDetailPage({ params }: PageProps<"/mes
           <CardTitle>Conversation</CardTitle>
         </CardHeader>
         <CardContent>
-          <MessageThread conversationId={conversation.id} currentUserId={user.id} messages={messages} />
+          <MessageThread conversationId={conversation.id} currentUserId={user.id} messages={messages} canSend={canSend} />
         </CardContent>
       </Card>
     </div>

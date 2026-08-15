@@ -32,12 +32,15 @@ export function MessageThread({
   currentUserId,
   messages: initialMessages,
   fillHeight = false,
+  canSend = true,
 }: {
   conversationId: string;
   currentUserId: string;
   messages: MessageItem[];
   /** Stretch to fill a parent with a definite height (the floating widget) instead of the fixed max-h-96 used everywhere else. */
   fillHeight?: boolean;
+  /** Staff with COMMUNICATION_VIEW but not COMMUNICATION_SEND can read a conversation but not reply — hides the composer instead of letting them submit into a guaranteed server-side rejection. */
+  canSend?: boolean;
 }) {
   const [messages, setMessages] = useState(initialMessages);
   const action = sendMessageAction.bind(null, conversationId);
@@ -117,12 +120,18 @@ export function MessageThread({
       </div>
 
       {error && <Alert tone="error">{error}</Alert>}
-      <form ref={formRef} action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <Textarea name="body" rows={2} placeholder="Type a message..." className="flex-1" required />
-        <Button type="submit" size="sm" disabled={pending} className="w-full sm:w-auto">
-          {pending ? "Sending..." : "Send"}
-        </Button>
-      </form>
+      {canSend ? (
+        <form ref={formRef} action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <Textarea name="body" rows={2} placeholder="Type a message..." className="flex-1" required />
+          <Button type="submit" size="sm" disabled={pending} className="w-full sm:w-auto">
+            {pending ? "Sending..." : "Send"}
+          </Button>
+        </form>
+      ) : (
+        <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          You have view-only access to this conversation.
+        </p>
+      )}
     </div>
   );
 }

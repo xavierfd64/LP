@@ -32,16 +32,23 @@ export async function markConversationRead(conversationId: string, userId: strin
   });
 }
 
-export function conversationSubjectLabel(c: { subjectType: string }) {
+/** Human-readable "what this conversation is about" label, including the actual reference number where available (e.g. "Quotation #QT-2026-0001") so Staff/Admin don't have to go find the record to know the context. */
+export function conversationReferenceLabel(c: {
+  subjectType: string;
+  inquiry?: { desiredProduct: string } | null;
+  quotation?: { quoteNumber: string } | null;
+  order?: { orderNumber: string } | null;
+  jobOrder?: { joNumber: string } | null;
+}) {
   switch (c.subjectType) {
     case "INQUIRY":
-      return "Inquiry";
+      return c.inquiry ? `Inquiry: ${c.inquiry.desiredProduct}` : "Inquiry";
     case "QUOTATION":
-      return "Quotation";
+      return c.quotation ? `Quotation #${c.quotation.quoteNumber}` : "Quotation";
     case "ORDER":
-      return "Order";
+      return c.order ? `Order #${c.order.orderNumber}` : "Order";
     case "JOB_ORDER":
-      return "Job Order";
+      return c.jobOrder ? `Job Order #${c.jobOrder.joNumber}` : "Job Order";
     default:
       return "General Support";
   }

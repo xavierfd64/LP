@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 
 export default async function OrdersPage() {
   const user = await requireUser();
@@ -26,6 +27,7 @@ export default async function OrdersPage() {
 
   return (
     <div className="space-y-6">
+      <TransactionBrandHeader />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{isStaffLike ? "Orders" : "My Orders"}</h1>

@@ -24,6 +24,14 @@ export async function Shell({
 }) {
   const staffPermissions = role === "STAFF" ? await getStaffPermissions(userId, role) : undefined;
   const items = navForRole(role, staffPermissions);
+  // Same floating chat everywhere — Customer always has it, Admin always
+  // bypasses, Staff only if granted COMMUNICATION_VIEW (mirrors the guard
+  // the /messages pages and the widget's own server actions already
+  // enforce, so this is UI convenience on top of real backend checks, not
+  // the only thing standing between an unauthorized Staff account and
+  // customer conversations).
+  const showChatWidget =
+    role === "CUSTOMER" || role === "ADMIN" || (role === "STAFF" && staffPermissions?.has("COMMUNICATION_VIEW"));
   const [notifications, unreadCount, settings] = await Promise.all([
     prisma.notification.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 15 }),
     prisma.notification.count({ where: { userId, read: false } }),
@@ -74,7 +82,7 @@ export async function Shell({
         </header>
         <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-6">{children}</main>
       </div>
-      {role === "CUSTOMER" && <FloatingChatWidget currentUserId={userId} />}
+      {showChatWidget && <FloatingChatWidget currentUserId={userId} role={role} />}
     </div>
   );
 }

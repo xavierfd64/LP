@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
-import { getOrCreateConversation, markConversationRead } from "@/lib/conversations";
+import { getOrCreateConversation, markConversationRead, conversationReferenceLabel } from "@/lib/conversations";
 import { publishToUsers } from "@/lib/realtime";
 
 const messageSchema = z.object({
@@ -31,15 +31,32 @@ export async function openOrCreateGeneralConversationAction() {
   return { id: conversation.id };
 }
 
-/** Conversation previews for the current customer, same shape/logic as the /messages inbox list, for the floating widget. */
+/**
+ * Conversation previews for the floating widget — same underlying data/
+ * access rules as the /messages inbox list. Customers see their own
+ * conversations; STAFF (gated by COMMUNICATION_VIEW) and ADMIN see every
+ * customer conversation, each carrying the customer name and a transaction
+ * reference label so Staff/Admin get context without leaving the widget.
+ */
 export async function getMyConversationsAction() {
   const user = await requireUser();
-  if (user.role !== "CUSTOMER") throw new Error("Not allowed.");
-  const customer = await getCurrentCustomer(user.id);
+  const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
+  if (isStaffLike) {
+    if (!(await can(user, "COMMUNICATION_VIEW"))) throw new Error("Not allowed.");
+  } else if (user.role !== "CUSTOMER") {
+    throw new Error("Not allowed.");
+  }
+
+  const where = isStaffLike ? {} : { customerId: (await getCurrentCustomer(user.id)).id };
 
   const conversations = await prisma.conversation.findMany({
-    where: { customerId: customer.id },
+    where,
     include: {
+      customer: true,
+      inquiry: { select: { desiredProduct: true } },
+      quotation: { select: { quoteNumber: true } },
+      order: { select: { orderNumber: true } },
+      jobOrder: { select: { joNumber: true } },
       messages: { orderBy: { createdAt: "desc" }, take: 1, include: { sender: true } },
       reads: { where: { userId: user.id } },
     },
@@ -56,6 +73,8 @@ export async function getMyConversationsAction() {
       return {
         id: c.id,
         subjectType: c.subjectType,
+        referenceLabel: conversationReferenceLabel(c),
+        customerName: isStaffLike ? c.customer.name : undefined,
         lastMessage: lastMessage
           ? { body: lastMessage.body, senderName: lastMessage.sender.name, createdAt: lastMessage.createdAt.toISOString() }
           : null,
@@ -69,15 +88,21 @@ export async function getMyConversationsAction() {
   return withMeta;
 }
 
-/** Messages for one conversation, marking it read — for the floating widget's thread view. */
+/** Messages for one conversation, marking it read — for the floating widget's thread view. Also reports whether the viewer may send (COMMUNICATION_SEND for Staff), so the widget can show a view-only state without a second round trip. */
 export async function getConversationMessagesAction(conversationId: string) {
   const user = await requireUser();
   const conversation = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
 
-  if (user.role === "CUSTOMER") {
+  const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
+  let canSend: boolean;
+  if (isStaffLike) {
+    if (!(await can(user, "COMMUNICATION_VIEW"))) throw new Error("Not allowed.");
+    canSend = await can(user, "COMMUNICATION_SEND");
+  } else if (user.role === "CUSTOMER") {
     const customer = await getCurrentCustomer(user.id);
     if (conversation.customerId !== customer.id) throw new Error("Not allowed.");
-  } else if (user.role !== "STAFF" && user.role !== "ADMIN") {
+    canSend = true;
+  } else {
     throw new Error("Not allowed.");
   }
 
@@ -88,18 +113,22 @@ export async function getConversationMessagesAction(conversationId: string) {
   });
   await markConversationRead(conversationId, user.id);
 
-  return messages.map((m) => ({
-    id: m.id,
-    body: m.body,
-    createdAt: m.createdAt.toISOString(),
-    senderId: m.senderId,
-    sender: { name: m.sender.name, role: m.sender.role },
-  }));
+  return {
+    canSend,
+    messages: messages.map((m) => ({
+      id: m.id,
+      body: m.body,
+      createdAt: m.createdAt.toISOString(),
+      senderId: m.senderId,
+      sender: { name: m.sender.name, role: m.sender.role },
+    })),
+  };
 }
 
 /** Marks a conversation read without fetching messages — used when the widget's already-open thread receives a live message. */
 export async function markConversationReadAction(conversationId: string) {
   const user = await requireUser();
+  if (user.role === "STAFF" && !(await can(user, "COMMUNICATION_VIEW"))) throw new Error("Not allowed.");
   await markConversationRead(conversationId, user.id);
 }
 

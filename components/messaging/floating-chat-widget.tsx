@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 type ConversationPreview = {
   id: string;
   subjectType: string;
+  referenceLabel: string;
+  customerName?: string;
   lastMessage: { body: string; senderName: string; createdAt: string } | null;
   unreadCount: number;
   updatedAt: string;
@@ -29,38 +31,22 @@ type MessageItem = {
   sender: { name: string; role: string };
 };
 
-// Kept local (not imported from lib/conversations.ts) because that module
-// also exports Prisma-backed helpers — importing it here would drag the
-// Prisma/pg client into the client bundle. Same reasoning as
-// lib/permissions.ts vs lib/permissions-guard.ts.
-function subjectLabel(subjectType: string) {
-  switch (subjectType) {
-    case "INQUIRY":
-      return "Inquiry";
-    case "QUOTATION":
-      return "Quotation";
-    case "ORDER":
-      return "Order";
-    case "JOB_ORDER":
-      return "Job Order";
-    default:
-      return "General Support";
-  }
-}
-
 /**
- * Facebook-Messenger-style floating chat, mounted once for CUSTOMER role in
- * the Shell so it's available on every Customer Portal page. Reuses the
- * exact same Conversation/Message data and the same MessageThread component
- * (with its own real-time listener) that the full /messages pages use —
- * this is a presentation layer on top of the existing messaging
- * infrastructure, not a parallel system.
+ * Facebook-Messenger-style floating chat. Mounted in the Shell for CUSTOMER
+ * (their own conversations) and for STAFF (gated by COMMUNICATION_VIEW) /
+ * ADMIN (every customer conversation). Reuses the exact same Conversation/
+ * Message data and the same MessageThread component (with its own
+ * real-time listener) that the full /messages pages use — this is a
+ * presentation layer on top of the existing messaging infrastructure, one
+ * chat system shared by every role, not a parallel one per portal.
  */
-export function FloatingChatWidget({ currentUserId }: { currentUserId: string }) {
+export function FloatingChatWidget({ currentUserId, role }: { currentUserId: string; role: string }) {
+  const isStaffLike = role === "STAFF" || role === "ADMIN";
   const [open, setOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationPreview[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeMessages, setActiveMessages] = useState<MessageItem[] | null>(null);
+  const [activeCanSend, setActiveCanSend] = useState(true);
   const [totalUnread, setTotalUnread] = useState(0);
   const hasOpenedOnce = useRef(false);
 
@@ -72,16 +58,18 @@ export function FloatingChatWidget({ currentUserId }: { currentUserId: string })
   }
 
   // Fetch the badge count as soon as the widget mounts, even before the
-  // customer ever opens it, so it's accurate immediately on page load.
+  // user ever opens it, so it's accurate immediately on page load.
   useEffect(() => {
     refreshConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function openThread(conversationId: string) {
     setActiveId(conversationId);
     setActiveMessages(null);
-    const msgs = await getConversationMessagesAction(conversationId);
-    setActiveMessages(msgs.map((m) => ({ ...m, createdAt: new Date(m.createdAt) })));
+    const { messages, canSend } = await getConversationMessagesAction(conversationId);
+    setActiveMessages(messages.map((m) => ({ ...m, createdAt: new Date(m.createdAt) })));
+    setActiveCanSend(canSend);
     await refreshConversations();
   }
 
@@ -91,7 +79,10 @@ export function FloatingChatWidget({ currentUserId }: { currentUserId: string })
     if (next && !hasOpenedOnce.current) {
       hasOpenedOnce.current = true;
       const list = await refreshConversations();
-      if (list.length > 0) await openThread(list[0].id);
+      // Customers jump straight into their most recent thread (they only
+      // ever have a handful). Staff/Admin can have conversations across
+      // many different customers, so they land on the list first and pick.
+      if (!isStaffLike && list.length > 0) await openThread(list[0].id);
     }
   }
 
@@ -137,13 +128,19 @@ export function FloatingChatWidget({ currentUserId }: { currentUserId: string })
                 <button
                   type="button"
                   onClick={backToList}
-                  className="flex items-center gap-1 text-sm font-medium hover:text-slate-200"
+                  className="flex min-w-0 items-center gap-1 text-sm font-medium hover:text-slate-200"
                 >
-                  <ChevronLeft className="h-4 w-4" />
-                  {activeConversation ? subjectLabel(activeConversation.subjectType) : "Messages"}
+                  <ChevronLeft className="h-4 w-4 shrink-0" />
+                  <span className="truncate">
+                    {activeConversation
+                      ? isStaffLike
+                        ? activeConversation.customerName
+                        : activeConversation.referenceLabel
+                      : "Messages"}
+                  </span>
                 </button>
               ) : (
-                <span className="text-sm font-semibold">Messages</span>
+                <span className="text-sm font-semibold">{isStaffLike ? "Customer Conversations" : "Messages"}</span>
               )}
               <button
                 type="button"
@@ -165,6 +162,7 @@ export function FloatingChatWidget({ currentUserId }: { currentUserId: string })
                       conversationId={activeId}
                       currentUserId={currentUserId}
                       messages={activeMessages}
+                      canSend={activeCanSend}
                       fillHeight
                     />
                   </div>
@@ -172,8 +170,9 @@ export function FloatingChatWidget({ currentUserId }: { currentUserId: string })
               ) : (
                 <ConversationList
                   conversations={conversations}
+                  isStaffLike={isStaffLike}
                   onSelect={openThread}
-                  onNewGeneral={handleStartGeneral}
+                  onNewGeneral={isStaffLike ? undefined : handleStartGeneral}
                 />
               )}
             </div>
@@ -200,12 +199,14 @@ export function FloatingChatWidget({ currentUserId }: { currentUserId: string })
 
 function ConversationList({
   conversations,
+  isStaffLike,
   onSelect,
   onNewGeneral,
 }: {
   conversations: ConversationPreview[] | null;
+  isStaffLike: boolean;
   onSelect: (id: string) => void;
-  onNewGeneral: () => void;
+  onNewGeneral?: () => void;
 }) {
   if (conversations === null) {
     return <div className="p-4 text-sm text-slate-400">Loading…</div>;
@@ -213,15 +214,19 @@ function ConversationList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-slate-100 p-3">
-        <Button type="button" size="sm" variant="outline" className="w-full" onClick={onNewGeneral}>
-          New General Message
-        </Button>
-      </div>
+      {onNewGeneral && (
+        <div className="border-b border-slate-100 p-3">
+          <Button type="button" size="sm" variant="outline" className="w-full" onClick={onNewGeneral}>
+            New General Message
+          </Button>
+        </div>
+      )}
       <div className="flex-1 divide-y divide-slate-100 overflow-y-auto">
         {conversations.length === 0 && (
           <p className="p-4 text-center text-sm text-slate-400">
-            No conversations yet — start one above to chat with our team.
+            {isStaffLike
+              ? "No customer conversations yet."
+              : "No conversations yet — start one above to chat with our team."}
           </p>
         )}
         {conversations.map((c) => (
@@ -232,7 +237,14 @@ function ConversationList({
             className="flex w-full items-start justify-between gap-2 p-3 text-left text-sm hover:bg-slate-50"
           >
             <div className="min-w-0">
-              <p className="font-medium text-slate-900">{subjectLabel(c.subjectType)}</p>
+              {isStaffLike ? (
+                <>
+                  <p className="truncate font-medium text-slate-900">{c.customerName}</p>
+                  <p className="truncate text-xs text-slate-400">Re: {c.referenceLabel}</p>
+                </>
+              ) : (
+                <p className="font-medium text-slate-900">{c.referenceLabel}</p>
+              )}
               <p className="truncate text-slate-500">
                 {c.lastMessage ? `${c.lastMessage.senderName}: ${c.lastMessage.body}` : "No messages yet."}
               </p>

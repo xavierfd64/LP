@@ -11,6 +11,7 @@ import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/tab
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { confirmPaymentAction, rejectPaymentAction } from "@/app/actions/payments";
 import { PaymentForm } from "./payment-form";
+import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 
 export default async function PaymentsPage({ searchParams }: PageProps<"/payments">) {
   const user = await requireUser();
@@ -46,6 +47,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
     return (
       <div className="space-y-6">
+        <TransactionBrandHeader />
         <div>
           <h1 className="text-2xl font-bold text-slate-900">My Payments</h1>
           <p className="text-sm text-slate-500">Your payment history and balances across every order.</p>
@@ -185,6 +187,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
   return (
     <div className="space-y-6">
+      <TransactionBrandHeader />
       <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

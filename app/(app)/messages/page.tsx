@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
-import { conversationSubjectLabel } from "@/lib/conversations";
+import { conversationReferenceLabel } from "@/lib/conversations";
 import { Button } from "@/components/ui/button";
 import { startGeneralConversationAction } from "@/app/actions/messages";
 import { RefreshOnMessage } from "@/components/realtime/refresh-on-message";
@@ -23,6 +23,10 @@ export default async function MessagesPage() {
     where,
     include: {
       customer: true,
+      inquiry: { select: { desiredProduct: true } },
+      quotation: { select: { quoteNumber: true } },
+      order: { select: { orderNumber: true } },
+      jobOrder: { select: { joNumber: true } },
       messages: { orderBy: { createdAt: "desc" }, take: 1, include: { sender: true } },
       reads: { where: { userId: user.id } },
     },
@@ -77,7 +81,7 @@ export default async function MessagesPage() {
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-medium text-slate-900">{conversationSubjectLabel(c)}</p>
+                <p className="font-medium text-slate-900">{conversationReferenceLabel(c)}</p>
                 {isStaffLike && <span className="text-sm text-slate-500">· {c.customer.name}</span>}
               </div>
               <p className="truncate text-sm text-slate-500">

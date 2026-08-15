@@ -20,6 +20,7 @@ import { ApplyVoucherForm } from "./apply-voucher-form";
 import { MessageThread } from "@/components/messaging/message-thread";
 import { getOrCreateConversation, markConversationRead } from "@/lib/conversations";
 import { RecordPaymentDialog } from "./record-payment-dialog";
+import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 
 export default async function OrderDetailPage({
   params,
@@ -79,6 +80,7 @@ export default async function OrderDetailPage({
 
   return (
     <div className="max-w-4xl space-y-6">
+      <TransactionBrandHeader />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{order.orderNumber}</h1>
