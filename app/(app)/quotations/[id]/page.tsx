@@ -15,8 +15,7 @@ import { RevisionRequestForm } from "./revision-request-form";
 import { EditQuotationForm } from "./edit-quotation-form";
 import { CancelQuotationForm } from "./cancel-quotation-form";
 import { ForceApproveForm } from "./force-approve-form";
-import { ConversationCard } from "@/components/messaging/conversation-card";
-import { RefreshOnMessage } from "@/components/realtime/refresh-on-message";
+import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 
 export default async function QuotationDetailPage({ params, searchParams }: PageProps<"/quotations/[id]">) {
@@ -64,7 +63,6 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
 
   return (
     <div className="max-w-3xl space-y-6">
-      <RefreshOnMessage />
       <TransactionBrandHeader />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -210,12 +208,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
       )}
 
       {(!isStaffLike || canViewComms) && (
-        <ConversationCard
-          customerId={quotation.customerId}
-          subjectType="QUOTATION"
-          subjectId={quotation.id}
-          currentUserId={user.id}
-        />
+        <DiscussInChatboxButton refType="QUOTATION" refId={quotation.id} label={quotation.quoteNumber} />
       )}
     </div>
   );

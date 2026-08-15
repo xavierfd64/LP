@@ -22,8 +22,7 @@ import {
   markPickedUpAction,
   markInstalledAction,
 } from "@/app/actions/fulfillment";
-import { ConversationCard } from "@/components/messaging/conversation-card";
-import { RefreshOnMessage } from "@/components/realtime/refresh-on-message";
+import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
 
 export default async function JobOrderDetailPage({
   params,
@@ -97,7 +96,6 @@ export default async function JobOrderDetailPage({
 
   return (
     <div className="max-w-3xl space-y-6">
-      <RefreshOnMessage />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
@@ -375,12 +373,7 @@ export default async function JobOrderDetailPage({
       )}
 
       {((isStaffLike && canViewComms) || user.role === "CUSTOMER") && (
-        <ConversationCard
-          customerId={jo.order.customerId}
-          subjectType="JOB_ORDER"
-          subjectId={jo.id}
-          currentUserId={user.id}
-        />
+        <DiscussInChatboxButton refType="JOB_ORDER" refId={jo.id} label={jo.joNumber} />
       )}
     </div>
   );
