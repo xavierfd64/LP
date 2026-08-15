@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
+import { notifyCustomer } from "@/lib/notifications";
 
 /** Auto-earn reward points when an Order is fully completed (all JOs fulfilled). */
 export async function onOrderCompleted(orderId: string) {
@@ -27,4 +28,10 @@ export async function onOrderCompleted(orderId: string) {
   });
 
   await logAudit(null, "REWARD_POINTS_EARNED", "Order", orderId, { points, ruleId: rule.id });
+  await notifyCustomer(
+    order.customerId,
+    "REWARD_POINTS_EARNED",
+    `You earned ${points} reward points from order ${order.orderNumber}.`,
+    `/account/rewards`
+  );
 }

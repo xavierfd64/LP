@@ -7,6 +7,7 @@ import { requireRole, requireUser } from "@/lib/session";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
 import { nextVoucherCode } from "@/lib/numbering";
+import { notifyCustomer } from "@/lib/notifications";
 
 const ruleSchema = z.object({
   name: z.string().min(1),
@@ -133,6 +134,12 @@ export async function redeemPointsAction(_prevState: string | undefined, formDat
     voucherValue: tier.voucherValue,
     code,
   });
+  await notifyCustomer(
+    customer.id,
+    "VOUCHER_REDEEMED",
+    `You redeemed ${tier.pointsCost} points for a ${tier.voucherValue} voucher (${code}).`,
+    `/account/rewards`
+  );
 
   redirect(`/account/rewards`);
 }

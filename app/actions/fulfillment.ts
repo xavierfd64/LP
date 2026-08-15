@@ -10,7 +10,13 @@ import { notifyCustomer } from "@/lib/notifications";
 async function maybeCompleteOrder(orderId: string) {
   const jobOrders = await prisma.jobOrder.findMany({ where: { orderId } });
   if (jobOrders.length > 0 && jobOrders.every((j) => j.status === "COMPLETED")) {
-    await prisma.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } });
+    const order = await prisma.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } });
+    await notifyCustomer(
+      order.customerId,
+      "ORDER_COMPLETED",
+      `Your order ${order.orderNumber} is complete. Thank you!`,
+      `/orders/${orderId}`
+    );
     const { onOrderCompleted } = await import("@/lib/rewards");
     await onOrderCompleted(orderId);
   }
@@ -75,11 +81,27 @@ export async function advanceDeliveryAction(fulfillmentId: string, jobOrderId: s
   });
   await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: next });
 
+  if (next === "IN_TRANSIT") {
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: f.orderId } });
+    await notifyCustomer(
+      order.customerId,
+      "FULFILLMENT_IN_TRANSIT",
+      `Your order is on its way${f.courier ? ` with ${f.courier}` : ""}${f.trackingNumber ? ` (tracking #${f.trackingNumber})` : ""}.`,
+      `/orders/${order.id}`
+    );
+  }
+
   if (next === "DELIVERED") {
-    await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+    const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
     await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
     const order = await prisma.order.findUniqueOrThrow({ where: { id: f.orderId } });
     await notifyCustomer(order.customerId, "FULFILLMENT_DELIVERED", `Your order has been delivered.`, `/orders/${order.id}`);
+    await notifyCustomer(
+      order.customerId,
+      "JOB_ORDER_COMPLETED",
+      `Job order ${jo.joNumber} is complete.`,
+      `/job-orders/${jobOrderId}`
+    );
     await maybeCompleteOrder(f.orderId);
   }
 
@@ -104,12 +126,18 @@ export async function markPickedUpAction(fulfillmentId: string, jobOrderId: stri
     where: { id: fulfillmentId },
     data: { status: "RECEIVED", completedAt: new Date() },
   });
-  await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+  const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
   await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: "RECEIVED" });
   await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
   {
     const order = await prisma.order.findUniqueOrThrow({ where: { id: f.orderId } });
     await notifyCustomer(order.customerId, "FULFILLMENT_RECEIVED", `Your pickup has been marked as received.`, `/orders/${order.id}`);
+    await notifyCustomer(
+      order.customerId,
+      "JOB_ORDER_COMPLETED",
+      `Job order ${jo.joNumber} is complete.`,
+      `/job-orders/${jobOrderId}`
+    );
   }
   await maybeCompleteOrder(f.orderId);
 
@@ -122,12 +150,18 @@ export async function markInstalledAction(fulfillmentId: string, jobOrderId: str
     where: { id: fulfillmentId },
     data: { status: "INSTALLED", completedAt: new Date() },
   });
-  await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+  const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
   await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: "INSTALLED" });
   await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
   {
     const order = await prisma.order.findUniqueOrThrow({ where: { id: f.orderId } });
     await notifyCustomer(order.customerId, "FULFILLMENT_INSTALLED", `Your installation is complete.`, `/orders/${order.id}`);
+    await notifyCustomer(
+      order.customerId,
+      "JOB_ORDER_COMPLETED",
+      `Job order ${jo.joNumber} is complete.`,
+      `/job-orders/${jobOrderId}`
+    );
   }
   await maybeCompleteOrder(f.orderId);
 

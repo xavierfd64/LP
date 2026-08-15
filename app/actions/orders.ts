@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/session";
 import { nextOrderNumber, nextJoNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
 import { startProduction, RuleViolation } from "@/lib/workflow";
+import { notifyCustomer } from "@/lib/notifications";
 
 const orderSchema = z.object({
   customerId: z.string().min(1),
@@ -62,6 +63,13 @@ export async function createOrderAction(_prevState: string | undefined, formData
       termsReason: data.termsReason,
     });
   }
+
+  await notifyCustomer(
+    data.customerId,
+    "ORDER_CREATED",
+    `Your order ${orderNumber} has been created.`,
+    `/orders/${order.id}`
+  );
 
   redirect(`/orders/${order.id}`);
 }

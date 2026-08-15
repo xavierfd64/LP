@@ -180,6 +180,24 @@ export async function releaseJobOrderAction(jobOrderId: string) {
   redirect(`/job-orders/${jobOrderId}`);
 }
 
+export async function sendBalanceReminderAction(orderId: string) {
+  const user = await requireRole(["STAFF", "ADMIN"]);
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+  const summary = await paymentSummary(orderId);
+  const balanceDue = summary.total - summary.confirmed;
+  if (balanceDue <= 0) redirect(`/orders/${orderId}`);
+
+  await notifyCustomer(
+    order.customerId,
+    "BALANCE_REMINDER",
+    `Reminder: order ${order.orderNumber} has an outstanding balance of ${balanceDue.toFixed(2)}.`,
+    `/orders/${orderId}`
+  );
+  await logAudit(user.id, "BALANCE_REMINDER_SENT", "Order", orderId, { balanceDue });
+
+  redirect(`/orders/${orderId}`);
+}
+
 const applyVoucherSchema = z.object({
   orderId: z.string().min(1),
   voucherId: z.string().min(1),
@@ -244,6 +262,12 @@ export async function applyVoucherAction(_prevState: string | undefined, formDat
     voucherId: voucher.id,
     appliedAmount,
   });
+  await notifyCustomer(
+    customer.id,
+    "VOUCHER_USED",
+    `Voucher ${voucher.code} was applied to order ${order.orderNumber} (${appliedAmount.toFixed(2)} credited).`,
+    `/orders/${order.id}`
+  );
 
   redirect(`/orders/${order.id}`);
 }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/app/generated/prisma/client";
+import { notifyCustomer } from "@/lib/notifications";
 
 export class RuleViolation extends Error {}
 
@@ -183,6 +184,14 @@ export async function completeCurrentStage(
   if (isReworkCompletion) {
     await logAudit(actorId, "REWORK_CLOSED", "JobOrder", jobOrderId, { stage: log.stageName });
   }
+
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: jo.orderId } });
+  const progressMessage = !next
+    ? `Job order ${jo.joNumber} finished production and is ready for release.`
+    : next.isQCStage
+      ? `Job order ${jo.joNumber} completed ${log.stageName} and is now in quality control.`
+      : `Job order ${jo.joNumber} completed ${log.stageName} and moved to ${next.name}.`;
+  await notifyCustomer(order.customerId, "PRODUCTION_STAGE_UPDATE", progressMessage, `/job-orders/${jobOrderId}`);
 }
 
 export async function setStageLogStatus(
@@ -313,5 +322,22 @@ export async function recordQCResult(
       assignedStage: input.assignedStage,
       quantityAffected: input.quantityFailed,
     });
+  }
+
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: jo.orderId } });
+  if (input.result === "FAIL") {
+    await notifyCustomer(
+      order.customerId,
+      "PRODUCTION_STAGE_UPDATE",
+      `Job order ${jo.joNumber} needs rework after QC — we're on it.`,
+      `/job-orders/${jobOrderId}`
+    );
+  } else {
+    const idx = stages.findIndex((s) => s.order === qcStage.order);
+    const next = stages[idx + 1];
+    const passMessage = !next
+      ? `Job order ${jo.joNumber} passed QC and is ready for release.`
+      : `Job order ${jo.joNumber} passed QC and moved to ${next.name}.`;
+    await notifyCustomer(order.customerId, "PRODUCTION_STAGE_UPDATE", passMessage, `/job-orders/${jobOrderId}`);
   }
 }

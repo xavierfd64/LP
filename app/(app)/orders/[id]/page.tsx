@@ -12,7 +12,7 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { paymentSummary } from "@/lib/workflow";
 import { AddJobOrderForm } from "./add-jo-form";
 import { startProductionAction } from "@/app/actions/orders";
-import { releaseJobOrderAction } from "@/app/actions/payments";
+import { releaseJobOrderAction, sendBalanceReminderAction } from "@/app/actions/payments";
 import { PaymentProofForm } from "./payment-proof-form";
 import { ReleaseExceptionForm } from "./release-exception-form";
 import { ApplyVoucherForm } from "./apply-voucher-form";
@@ -142,6 +142,13 @@ export default async function OrderDetailPage({
               )}
               {isStaffLike && !summary.fullyPaid && !order.releaseException && (
                 <ReleaseExceptionForm orderId={order.id} />
+              )}
+              {isStaffLike && !summary.fullyPaid && (
+                <form action={sendBalanceReminderAction.bind(null, order.id)}>
+                  <Button type="submit" size="sm" variant="outline">
+                    Send Balance Reminder
+                  </Button>
+                </form>
               )}
               {order.releaseException && (
                 <p className="text-xs text-slate-500">
