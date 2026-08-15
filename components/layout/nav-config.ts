@@ -53,6 +53,7 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "My Inquiries", href: "/inquiries" },
         { label: "My Quotations", href: "/quotations" },
         { label: "My Orders", href: "/orders" },
+        { label: "Payment", href: "/payments" },
         { label: "My Rewards", href: "/account/rewards" },
         { label: "Messages", href: "/messages" },
       ];

@@ -6,6 +6,7 @@ import { navForRole } from "./nav-config";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { getStaffPermissions } from "@/lib/permissions-guard";
+import { RealtimeProvider } from "@/components/realtime/realtime-provider";
 
 export async function Shell({
   role,
@@ -27,6 +28,7 @@ export async function Shell({
 
   return (
     <div className="flex min-h-screen">
+      <RealtimeProvider />
       <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white px-3 py-4 md:flex">
         <div className="mb-6 px-2">
           <p className="text-lg font-bold text-slate-900">LP Printing</p>

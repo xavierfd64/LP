@@ -10,6 +10,7 @@ import { formatDateTime } from "@/lib/utils";
 import { conversationSubjectLabel } from "@/lib/conversations";
 import { Button } from "@/components/ui/button";
 import { startGeneralConversationAction } from "@/app/actions/messages";
+import { RefreshOnMessage } from "@/components/realtime/refresh-on-message";
 
 export default async function MessagesPage() {
   const user = await requireUser();
@@ -47,6 +48,7 @@ export default async function MessagesPage() {
 
   return (
     <div className="space-y-6">
+      <RefreshOnMessage />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Messages</h1>

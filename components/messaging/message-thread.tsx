@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { sendMessageAction } from "@/app/actions/messages";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
@@ -15,21 +15,77 @@ type MessageItem = {
   sender: { name: string; role: string };
 };
 
+type RealtimeMessageDetail = {
+  conversationId: string;
+  message: {
+    id: string;
+    body: string;
+    senderId: string;
+    senderName: string;
+    senderRole: string;
+    createdAt: string;
+  };
+};
+
 export function MessageThread({
   conversationId,
   currentUserId,
-  messages,
+  messages: initialMessages,
 }: {
   conversationId: string;
   currentUserId: string;
   messages: MessageItem[];
 }) {
+  const [messages, setMessages] = useState(initialMessages);
   const action = sendMessageAction.bind(null, conversationId);
   const [error, formAction, pending] = useActionState(action, undefined);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const wasPending = useRef(false);
+
+  // New messages (including the current user's own, sent from another tab
+  // or just submitted here) arrive over the shared SSE connection rather
+  // than a redirect/refetch — this is the single source of truth for the
+  // thread's contents once mounted.
+  useEffect(() => {
+    function onMessage(e: Event) {
+      const detail = (e as CustomEvent).detail as RealtimeMessageDetail;
+      if (detail.conversationId !== conversationId) return;
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === detail.message.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: detail.message.id,
+            body: detail.message.body,
+            createdAt: new Date(detail.message.createdAt),
+            senderId: detail.message.senderId,
+            sender: { name: detail.message.senderName, role: detail.message.senderRole },
+          },
+        ];
+      });
+    }
+    window.addEventListener("realtime:message", onMessage);
+    return () => window.removeEventListener("realtime:message", onMessage);
+  }, [conversationId]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  // Clear the composer once a send completes successfully (no redirect
+  // happens anymore — the message shows up via the SSE listener above).
+  useEffect(() => {
+    if (wasPending.current && !pending && !error) {
+      formRef.current?.reset();
+    }
+    wasPending.current = pending;
+  }, [pending, error]);
 
   return (
     <div className="space-y-3">
-      <div className="max-h-96 space-y-2 overflow-y-auto rounded-md border border-slate-100 p-3">
+      <div ref={scrollRef} className="max-h-96 space-y-2 overflow-y-auto rounded-md border border-slate-100 p-3">
         {messages.length === 0 && <p className="text-sm text-slate-400">No messages yet — say hello.</p>}
         {messages.map((m) => {
           const mine = m.senderId === currentUserId;
@@ -52,7 +108,7 @@ export function MessageThread({
       </div>
 
       {error && <Alert tone="error">{error}</Alert>}
-      <form action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+      <form ref={formRef} action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <Textarea name="body" rows={2} placeholder="Type a message..." className="flex-1" required />
         <Button type="submit" size="sm" disabled={pending} className="w-full sm:w-auto">
           {pending ? "Sending..." : "Send"}

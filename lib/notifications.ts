@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { publishToUser } from "@/lib/realtime";
 
 // STUB: real SMS/email push would go here (e.g. via Twilio / SendGrid) in
 // addition to the in-app Notification row. For the prototype we just log.
@@ -7,8 +8,19 @@ function logStub(to: string, message: string) {
 }
 
 export async function notifyUser(userId: string, type: string, message: string, link?: string) {
-  await prisma.notification.create({ data: { userId, type, message, link } });
+  const notification = await prisma.notification.create({ data: { userId, type, message, link } });
   logStub(userId, message);
+  publishToUser(userId, {
+    type: "notification",
+    notification: {
+      id: notification.id,
+      type: notification.type,
+      message: notification.message,
+      link: notification.link,
+      read: notification.read,
+      createdAt: notification.createdAt.toISOString(),
+    },
+  });
 }
 
 /** Notifies every STAFF and ADMIN account (ops-facing events). */

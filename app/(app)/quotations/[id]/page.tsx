@@ -16,6 +16,7 @@ import { EditQuotationForm } from "./edit-quotation-form";
 import { CancelQuotationForm } from "./cancel-quotation-form";
 import { ForceApproveForm } from "./force-approve-form";
 import { ConversationCard } from "@/components/messaging/conversation-card";
+import { RefreshOnMessage } from "@/components/realtime/refresh-on-message";
 
 export default async function QuotationDetailPage({ params, searchParams }: PageProps<"/quotations/[id]">) {
   const { id } = await params;
@@ -62,6 +63,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
 
   return (
     <div className="max-w-3xl space-y-6">
+      <RefreshOnMessage />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{quotation.quoteNumber}</h1>

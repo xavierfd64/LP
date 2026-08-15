@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
 import { markAllNotificationsReadAction, openNotificationAction } from "@/app/actions/notifications";
@@ -15,13 +15,41 @@ type NotificationItem = {
 };
 
 export function NotificationBell({
-  notifications,
-  unreadCount,
+  notifications: initialNotifications,
+  unreadCount: initialUnreadCount,
 }: {
   notifications: NotificationItem[];
   unreadCount: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [notifications, setNotifications] = useState(initialNotifications);
+  const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
+
+  useEffect(() => {
+    function onNotification(e: Event) {
+      const detail = (e as CustomEvent).detail as {
+        notification: { id: string; type: string; message: string; link: string | null; read: boolean; createdAt: string };
+      };
+      const n = detail.notification;
+      setNotifications((prev) => [{ ...n, createdAt: new Date(n.createdAt) }, ...prev].slice(0, 15));
+      if (!n.read) setUnreadCount((prev) => prev + 1);
+    }
+    window.addEventListener("realtime:notification", onNotification);
+    return () => window.removeEventListener("realtime:notification", onNotification);
+  }, []);
+
+  function handleMarkAllRead() {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+  }
+
+  function handleOpen(id: string) {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setUnreadCount((prev) => {
+      const wasUnread = notifications.find((n) => n.id === id)?.read === false;
+      return wasUnread ? Math.max(0, prev - 1) : prev;
+    });
+  }
 
   return (
     <div className="relative">
@@ -46,7 +74,7 @@ export function NotificationBell({
             <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
               <p className="text-sm font-semibold text-slate-900">Notifications</p>
               {unreadCount > 0 && (
-                <form action={markAllNotificationsReadAction}>
+                <form action={markAllNotificationsReadAction} onSubmit={handleMarkAllRead}>
                   <button type="submit" className="text-xs text-slate-500 underline hover:text-slate-900">
                     Mark all read
                   </button>
@@ -58,9 +86,9 @@ export function NotificationBell({
                 <p className="px-3 py-6 text-center text-sm text-slate-400">No notifications yet.</p>
               )}
               {notifications.map((n) => {
-                const open = openNotificationAction.bind(null, n.id);
+                const openAction = openNotificationAction.bind(null, n.id);
                 return (
-                  <form key={n.id} action={open}>
+                  <form key={n.id} action={openAction} onSubmit={() => handleOpen(n.id)}>
                     <button
                       type="submit"
                       className={cn(

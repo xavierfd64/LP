@@ -13,6 +13,7 @@ import { closeInquiryAction, cancelInquiryAction } from "@/app/actions/inquiries
 import { InquiryEditForm } from "./inquiry-edit-form";
 import { isActiveQuotationStatus } from "@/lib/quotation-status";
 import { ConversationCard } from "@/components/messaging/conversation-card";
+import { RefreshOnMessage } from "@/components/realtime/refresh-on-message";
 
 export default async function InquiryDetailPage({ params, searchParams }: PageProps<"/inquiries/[id]">) {
   const { id } = await params;
@@ -46,6 +47,7 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
 
   return (
     <div className="max-w-2xl space-y-6">
+      <RefreshOnMessage />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold text-slate-900">{inquiry.desiredProduct}</h1>
         <StatusBadge status={inquiry.status} />
