@@ -1,7 +1,12 @@
-import { CheckCircle2, Circle, Loader2 } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { CheckCircle2, Circle, Loader2, Copy, Check, Home } from "lucide-react";
 import type { PublicOrderTracking } from "@/app/actions/public-tracking";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 
 /**
  * The customer-safe order summary + progress timeline — shared by the
@@ -10,15 +15,26 @@ import { formatCurrency, formatDate } from "@/lib/utils";
  * renders fields already vetted as public-safe by buildPublicSnapshot; no
  * internal notes, costs, or other customers' data ever reach this props
  * shape in the first place.
+ *
+ * UX shape (copy-to-clipboard reference number, DONE/CURRENT step badges,
+ * a "Back To Home" action) follows a customer-shared reference screenshot
+ * of a third-party tracking page — deliberately kept in this app's own
+ * Red + White + Montserrat system, not the reference's purple branding.
  */
 export function TrackingSnapshotCard({ data }: { data: PublicOrderTracking }) {
+  const lastUpdated =
+    [...data.timeline].reverse().find((s) => s.date)?.date ?? data.orderDate;
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Order</p>
-            <p className="text-lg font-bold text-slate-900">{data.orderNumber}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-400">Order Number</p>
+            <div className="mt-0.5 flex items-center gap-2">
+              <p className="text-lg font-bold text-slate-900">{data.orderNumber}</p>
+              <CopyButton value={data.orderNumber} />
+            </div>
           </div>
           <DocumentStatusBadge status={data.orderStatus} />
         </div>
@@ -49,10 +65,17 @@ export function TrackingSnapshotCard({ data }: { data: PublicOrderTracking }) {
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-700">Order Progress</p>
         <ol className="space-y-0">
           {data.timeline.map((step, i) => (
-            <li key={step.label} className="relative flex gap-3 pb-5 last:pb-0">
+            <li
+              key={step.label}
+              className={
+                step.state === "current"
+                  ? "relative flex items-start gap-3 rounded-md border-l-4 border-brand-600 bg-brand-50 py-3 pl-2 pr-2"
+                  : "relative flex items-start gap-3 py-2 pl-2 pr-2"
+              }
+            >
               {i < data.timeline.length - 1 && (
                 <span
-                  className="absolute left-[9px] top-5 h-full w-0.5"
+                  className="absolute left-[19px] top-9 h-full w-0.5"
                   style={{ backgroundColor: step.state === "done" ? "#dc2626" : "#e2e8f0" }}
                 />
               )}
@@ -65,18 +88,59 @@ export function TrackingSnapshotCard({ data }: { data: PublicOrderTracking }) {
                   <Circle className="h-5 w-5 text-slate-300" />
                 )}
               </span>
-              <div>
-                <p className={step.state === "upcoming" ? "text-sm text-slate-400" : "text-sm font-medium text-slate-900"}>
-                  {step.label}
-                </p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className={step.state === "upcoming" ? "text-sm text-slate-400" : "text-sm font-medium text-slate-900"}>
+                    {step.label}
+                  </p>
+                  {step.state === "done" && (
+                    <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                      Done
+                    </span>
+                  )}
+                  {step.state === "current" && (
+                    <span className="shrink-0 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      Current
+                    </span>
+                  )}
+                </div>
                 {step.date && <p className="text-xs text-slate-400">{formatDate(step.date)}</p>}
-                {step.state === "current" && <p className="text-xs font-medium text-brand-600">In progress</p>}
               </div>
             </li>
           ))}
         </ol>
       </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs text-slate-500">
+        <p>
+          <span className="font-medium text-slate-700">Last Updated:</span> {formatDateTime(lastUpdated)}
+        </p>
+      </div>
+
+      <Link href="/">
+        <Button type="button" variant="outline" className="w-full">
+          <Home className="h-4 w-4" /> Back To Home
+        </Button>
+      </Link>
     </div>
+  );
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      aria-label="Copy order number"
+      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+    >
+      {copied ? <Check className="h-4 w-4 text-brand-600" /> : <Copy className="h-4 w-4" />}
+    </button>
   );
 }
 
