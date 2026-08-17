@@ -36,6 +36,9 @@ export default async function SharedDocumentPage({ params }: PageProps<"/documen
         {result.docType === "JOB_ORDER" && result.jobOrder && (
           <JobOrderBody jobOrder={result.jobOrder} headerAction={headerAction} />
         )}
+        {result.docType === "SOA" && result.statement && (
+          <StatementBody statement={result.statement} headerAction={headerAction} />
+        )}
       </div>
       {isViewOnly && (
         <div className="hidden print:flex print:h-screen print:items-center print:justify-center">
@@ -166,6 +169,87 @@ function JobOrderBody({
       <DocumentSection title="Current Stage">
         <p className="text-sm text-slate-700">{currentStage?.stageName ?? "—"}</p>
       </DocumentSection>
+    </DocumentShell>
+  );
+}
+
+function StatementBody({
+  statement,
+  headerAction,
+}: {
+  statement: NonNullable<Extract<Awaited<ReturnType<typeof resolvePublicDocument>>, { ok: true }>["statement"]>;
+  headerAction: React.ReactNode;
+}) {
+  const { statement: s, computation, balanceStatus } = statement;
+  return (
+    <DocumentShell title="Statement of Account" documentNumber={s.statementNumber} headerAction={headerAction}>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <DocumentField label="Statement No." value={s.statementNumber} />
+        <DocumentField label="Statement Date" value={formatDate(s.generatedAt)} />
+        <DocumentField
+          label="Statement Period"
+          value={`${formatDate(s.periodStart)} – ${formatDate(new Date(s.periodEnd.getTime() - 1))}`}
+        />
+      </div>
+      <DocumentSection title="Customer">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <DocumentField label="Customer Name" value={s.customer.name} />
+          <DocumentField label="Customer ID" value={s.customer.displayId} />
+          <DocumentField label="Address" value={s.customer.address} />
+          <DocumentField label="Contact Number" value={s.customer.contactNumber} />
+        </div>
+      </DocumentSection>
+      <DocumentSection title="Account Summary">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <DocumentField label="Opening Balance" value={formatCurrency(computation.openingBalance)} />
+          <DocumentField label="Charges" value={formatCurrency(computation.totalCharges)} />
+          <DocumentField label="Payments / Credits" value={formatCurrency(computation.totalPayments)} />
+          <DocumentField label="Adjustments" value={formatCurrency(computation.adjustments)} />
+          <DocumentField
+            label="Status"
+            value={computation.outstandingBalance > 0.01 ? <DocumentStatusBadge status={balanceStatus} /> : <DocumentStatusBadge status="PAID" />}
+          />
+        </div>
+      </DocumentSection>
+      <DocumentSection title="Transaction Details">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+              <th className="py-1">Date</th>
+              <th className="py-1">Reference</th>
+              <th className="py-1">Description</th>
+              <th className="py-1 text-right">Charge</th>
+              <th className="py-1 text-right">Payment</th>
+              <th className="py-1 text-right">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {computation.rows.map((r, i) => (
+              <tr key={i} className="border-b border-slate-100">
+                <td className="py-1 whitespace-nowrap">{formatDate(r.date)}</td>
+                <td className="py-1 font-medium">{r.reference}</td>
+                <td className="py-1 text-slate-600">{r.description}</td>
+                <td className="py-1 text-right tabular-nums">{r.charge > 0 ? formatCurrency(r.charge) : "—"}</td>
+                <td className="py-1 text-right tabular-nums">{r.payment > 0 ? formatCurrency(r.payment) : "—"}</td>
+                <td className="py-1 text-right tabular-nums font-medium">{formatCurrency(r.runningBalance)}</td>
+              </tr>
+            ))}
+            {computation.rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-2 text-slate-400">
+                  No activity in this period.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </DocumentSection>
+      <div className="ml-auto w-full max-w-xs break-inside-avoid">
+        <div className="flex justify-between border-t-2 border-brand-600 pt-2 text-base font-bold text-brand-700">
+          <span>Total Amount Due</span>
+          <span className="tabular-nums">{formatCurrency(Math.max(computation.outstandingBalance, 0))}</span>
+        </div>
+      </div>
     </DocumentShell>
   );
 }

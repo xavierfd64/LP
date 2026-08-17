@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export type ShareDocType = "QUOTATION" | "INVOICE" | "JOB_ORDER";
+export type ShareDocType = "QUOTATION" | "INVOICE" | "JOB_ORDER" | "SOA";
 
 /** Which polymorphic FK column on DocumentShareLink a given document type uses — mirrors Message's refQuotationId/refJobOrderId pattern already in this schema. INVOICE shares live on the Order (there's no separate Invoice model; the invoice IS the order). */
 export function shareLinkWhereForDoc(docType: ShareDocType, docId: string) {
@@ -11,6 +11,8 @@ export function shareLinkWhereForDoc(docType: ShareDocType, docId: string) {
       return { orderId: docId };
     case "JOB_ORDER":
       return { jobOrderId: docId };
+    case "SOA":
+      return { statementId: docId };
   }
 }
 
@@ -30,6 +32,10 @@ export async function ownerCustomerIdForDoc(docType: ShareDocType, docId: string
   if (docType === "INVOICE") {
     const o = await prisma.order.findUnique({ where: { id: docId }, select: { customerId: true } });
     return o?.customerId ?? null;
+  }
+  if (docType === "SOA") {
+    const s = await prisma.statementOfAccount.findUnique({ where: { id: docId }, select: { customerId: true } });
+    return s?.customerId ?? null;
   }
   const jo = await prisma.jobOrder.findUnique({ where: { id: docId }, select: { order: { select: { customerId: true } } } });
   return jo?.order.customerId ?? null;

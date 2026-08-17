@@ -36,7 +36,8 @@ async function assertCanShare(docType: ShareDocType, docId: string) {
   const user = await requireUser();
   if (user.role === "ADMIN") return user;
   if (user.role === "STAFF") {
-    if (!(await can(user, "DOCUMENT_SHARE"))) throw new Error("You do not have permission to share documents.");
+    const permission = docType === "SOA" ? "SOA_SHARE" : "DOCUMENT_SHARE";
+    if (!(await can(user, permission))) throw new Error("You do not have permission to share documents.");
     return user;
   }
   if (user.role === "CUSTOMER") {
@@ -79,10 +80,17 @@ export async function generateDocumentShareLinkAction(docType: ShareDocType, doc
 
 export async function revokeDocumentShareLinkAction(linkId: string) {
   const link = await prisma.documentShareLink.findUniqueOrThrow({ where: { id: linkId } });
-  const docType: ShareDocType = link.quotationId ? "QUOTATION" : link.orderId ? "INVOICE" : "JOB_ORDER";
-  const docId = link.quotationId ?? link.orderId ?? link.jobOrderId!;
+  const docType: ShareDocType = link.quotationId
+    ? "QUOTATION"
+    : link.orderId
+      ? "INVOICE"
+      : link.statementId
+        ? "SOA"
+        : "JOB_ORDER";
+  const docId = link.quotationId ?? link.orderId ?? link.statementId ?? link.jobOrderId!;
   const user = await assertCanShare(docType, docId);
-  if (user.role === "STAFF" && !(await can(user, "DOCUMENT_REVOKE")) && link.createdById !== user.id) {
+  const revokePermission = docType === "SOA" ? "SOA_REVOKE" : "DOCUMENT_REVOKE";
+  if (user.role === "STAFF" && !(await can(user, revokePermission)) && link.createdById !== user.id) {
     throw new Error("You do not have permission to revoke this link.");
   }
 
@@ -125,5 +133,6 @@ export async function regenerateDocumentShareLinkAction(docType: ShareDocType, d
 function revalidateForDoc(docType: ShareDocType, docId: string) {
   if (docType === "QUOTATION") revalidatePath(`/quotations/${docId}`);
   else if (docType === "INVOICE") revalidatePath(`/orders/${docId}`);
+  else if (docType === "SOA") revalidatePath(`/soa/view/${docId}`);
   else revalidatePath(`/job-orders/${docId}`);
 }

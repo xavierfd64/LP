@@ -1,5 +1,23 @@
 import { prisma } from "@/lib/prisma";
 
+export type SoaPeriodSelection =
+  | { type: "monthly"; month: number; year: number }
+  | { type: "custom"; startDate: string; endDate: string };
+
+/** Monthly: a selected month/year -> [1st, next-1st). Custom: an inclusive date range -> [start, end+1 day), so a same-day range still covers that whole day. */
+export function resolveSoaPeriod(sel: SoaPeriodSelection): { start: Date; end: Date; label: string } {
+  if (sel.type === "monthly") {
+    const start = new Date(sel.year, sel.month - 1, 1);
+    const end = new Date(sel.year, sel.month, 1);
+    return { start, end, label: start.toLocaleDateString("en-PH", { year: "numeric", month: "long" }) };
+  }
+  const start = new Date(sel.startDate + "T00:00:00");
+  const endInclusive = new Date(sel.endDate + "T00:00:00");
+  const end = new Date(endInclusive.getFullYear(), endInclusive.getMonth(), endInclusive.getDate() + 1);
+  const label = `${start.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })} – ${endInclusive.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}`;
+  return { start, end, label };
+}
+
 export type SoaTransactionRow = {
   date: Date;
   reference: string;

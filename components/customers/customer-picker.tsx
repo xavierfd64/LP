@@ -24,11 +24,14 @@ export function CustomerPicker({
   name,
   initialCustomer,
   required = true,
+  onSelect,
 }: {
   /** Form field name the selected customerId is submitted under. */
   name: string;
   initialCustomer?: CustomerSearchResult | null;
   required?: boolean;
+  /** Optional — fires on every selection (search result or quick-add), for callers that navigate immediately instead of waiting on a form submit (e.g. the SOA customer lookup). */
+  onSelect?: (c: CustomerSearchResult) => void;
 }) {
   const [selected, setSelected] = useState<CustomerSearchResult | null>(initialCustomer ?? null);
   const [query, setQuery] = useState("");
@@ -121,6 +124,7 @@ export function CustomerPicker({
                     onClick={() => {
                       setSelected(c);
                       setOpen(false);
+                      onSelect?.(c);
                     }}
                     className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-slate-50"
                   >
@@ -152,6 +156,7 @@ export function CustomerPicker({
           onCreated={(c) => {
             setSelected(c);
             setQuickAddOpen(false);
+            onSelect?.(c);
           }}
         />
       )}

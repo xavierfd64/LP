@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { ShareDocType } from "@/lib/document-sharing";
+import { computeStatementOfAccount, deriveSoaBalanceStatus } from "@/lib/soa";
 
 export type PublicDocumentResult =
   | { ok: false; reason: "not_found" | "revoked" | "expired" }
@@ -10,6 +11,7 @@ export type PublicDocumentResult =
       quotation?: NonNullable<Awaited<ReturnType<typeof loadQuotation>>>;
       invoice?: NonNullable<Awaited<ReturnType<typeof loadInvoice>>>;
       jobOrder?: NonNullable<Awaited<ReturnType<typeof loadJobOrder>>>;
+      statement?: NonNullable<Awaited<ReturnType<typeof loadStatement>>>;
     };
 
 function loadQuotation(id: string) {
@@ -36,11 +38,22 @@ function loadJobOrder(id: string) {
   });
 }
 
+async function loadStatement(id: string) {
+  const statement = await prisma.statementOfAccount.findUnique({ where: { id }, include: { customer: true } });
+  if (!statement) return null;
+  const [computation, openOrders] = await Promise.all([
+    computeStatementOfAccount(statement.customerId, statement.periodStart, statement.periodEnd),
+    prisma.order.findMany({ where: { customerId: statement.customerId, status: { not: "CANCELLED" } }, select: { dueDate: true } }),
+  ]);
+  return { statement, computation, balanceStatus: deriveSoaBalanceStatus(openOrders) };
+}
+
 /**
  * Token-authorized, read-only document lookup for the public sharing page —
  * the mirror of getPublicOrderTrackingAction but for a single Quotation/
- * Invoice/Job Order document instead of an order's progress. Records the
- * view (view count + timestamp) as a side effect of a successful lookup.
+ * Invoice/Job Order/Statement of Account document instead of an order's
+ * progress. Records the view (view count + timestamp) as a side effect of
+ * a successful lookup.
  */
 export async function resolvePublicDocument(token: string): Promise<PublicDocumentResult> {
   const link = await prisma.documentShareLink.findUnique({ where: { token } });
@@ -48,8 +61,14 @@ export async function resolvePublicDocument(token: string): Promise<PublicDocume
   if (link.revokedAt) return { ok: false, reason: "revoked" };
   if (link.expiresAt && link.expiresAt.getTime() < Date.now()) return { ok: false, reason: "expired" };
 
-  const docType: ShareDocType = link.quotationId ? "QUOTATION" : link.orderId ? "INVOICE" : "JOB_ORDER";
-  const docId = link.quotationId ?? link.orderId ?? link.jobOrderId!;
+  const docType: ShareDocType = link.quotationId
+    ? "QUOTATION"
+    : link.orderId
+      ? "INVOICE"
+      : link.statementId
+        ? "SOA"
+        : "JOB_ORDER";
+  const docId = link.quotationId ?? link.orderId ?? link.statementId ?? link.jobOrderId!;
 
   await prisma.documentShareLink.update({
     where: { id: link.id },
@@ -65,6 +84,11 @@ export async function resolvePublicDocument(token: string): Promise<PublicDocume
     const invoice = await loadInvoice(docId);
     if (!invoice) return { ok: false, reason: "not_found" };
     return { ok: true, docType, accessLevel: link.accessLevel, invoice };
+  }
+  if (docType === "SOA") {
+    const statement = await loadStatement(docId);
+    if (!statement) return { ok: false, reason: "not_found" };
+    return { ok: true, docType, accessLevel: link.accessLevel, statement };
   }
   const jobOrder = await loadJobOrder(docId);
   if (!jobOrder) return { ok: false, reason: "not_found" };

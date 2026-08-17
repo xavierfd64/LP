@@ -40,6 +40,9 @@ const STATUS_TONE: Record<string, keyof typeof TONE_STYLE> = {
   UNPAID: "red",
   PARTIALLY_PAID: "amber",
   PAID: "green",
+  CURRENT: "blue",
+  DUE: "amber",
+  OVERDUE: "red",
 };
 
 export function DocumentStatusBadge({ status, className }: { status: string; className?: string }) {
