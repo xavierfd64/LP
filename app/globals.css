@@ -42,3 +42,15 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+/* Quotation/Invoice/Job Order documents (app/(print)/**) — paper-friendly
+   margins for the browser's native print/Save-as-PDF. Everything else
+   (keep-together blocks, repeating table headers) is handled with
+   Tailwind's own break-inside-avoid utility and plain <thead> semantics,
+   which browsers already paginate correctly without extra CSS. */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+}

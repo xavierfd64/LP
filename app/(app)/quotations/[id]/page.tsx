@@ -72,7 +72,14 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
             Prepared by {quotation.createdBy?.name ?? "—"} on {formatDateTime(quotation.createdAt)}
           </p>
         </div>
-        <StatusBadge status={quotation.status} />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={quotation.status} />
+          <Link href={`/quotations/${quotation.id}/print`} target="_blank">
+            <Button type="button" variant="outline" size="sm">
+              View Document
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
