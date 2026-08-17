@@ -13,27 +13,66 @@ import { ACTIVE_QUOTATION_STATUSES } from "@/lib/quotation-status";
 
 const lineItemsSchema = z.array(
   z.object({
-    productType: z.string().min(1),
+    serviceId: z.string().min(1, "Please select a service for every line item."),
     description: z.string().min(1),
     qty: z.coerce.number().int().positive(),
     unitPrice: z.coerce.number().nonnegative(),
+    specs: z.string().optional(),
   })
 );
 
-function parseLineItems(formData: FormData) {
-  const productTypes = formData.getAll("productType") as string[];
+type ParsedLineItem = {
+  serviceId: string;
+  productType: string;
+  description: string;
+  qty: number;
+  unitPrice: number;
+  specs?: Record<string, string>;
+};
+
+/**
+ * Parses the parallel per-row arrays submitted by LineItemsEditor and
+ * re-derives each row's `productType` snapshot from the live Service
+ * Master server-side (never trusting the client-synced hidden field) —
+ * also rejects any row whose service is unknown/inactive.
+ */
+async function parseLineItems(formData: FormData): Promise<{ success: true; data: ParsedLineItem[] } | { success: false; message: string }> {
+  const serviceIds = formData.getAll("serviceId") as string[];
   const descriptions = formData.getAll("description") as string[];
   const qtys = formData.getAll("qty") as string[];
   const unitPrices = formData.getAll("unitPrice") as string[];
+  const specsRaw = formData.getAll("specs") as string[];
 
-  const rawItems = productTypes.map((_, i) => ({
-    productType: productTypes[i],
+  const rawItems = serviceIds.map((_, i) => ({
+    serviceId: serviceIds[i],
     description: descriptions[i],
     qty: qtys[i],
     unitPrice: unitPrices[i],
+    specs: specsRaw[i] || undefined,
   }));
 
-  return lineItemsSchema.safeParse(rawItems);
+  const parsed = lineItemsSchema.safeParse(rawItems);
+  if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? "Invalid line items." };
+
+  const uniqueServiceIds = [...new Set(parsed.data.map((li) => li.serviceId))];
+  const services = await prisma.service.findMany({ where: { id: { in: uniqueServiceIds }, active: true } });
+  const serviceMap = new Map(services.map((s) => [s.id, s]));
+
+  const items: ParsedLineItem[] = [];
+  for (const li of parsed.data) {
+    const service = serviceMap.get(li.serviceId);
+    if (!service) return { success: false, message: "One or more selected services are invalid or inactive." };
+    let specs: Record<string, string> | undefined;
+    if (li.specs) {
+      try {
+        specs = JSON.parse(li.specs);
+      } catch {
+        specs = undefined;
+      }
+    }
+    items.push({ serviceId: service.id, productType: service.name, description: li.description, qty: li.qty, unitPrice: li.unitPrice, specs });
+  }
+  return { success: true, data: items };
 }
 
 export async function createQuotationAction(_prevState: string | undefined, formData: FormData) {
@@ -44,11 +83,10 @@ export async function createQuotationAction(_prevState: string | undefined, form
   const validUntilRaw = formData.get("validUntil") as string | null;
   const notesRaw = (formData.get("notes") as string) || undefined;
 
-  const parsedItems = parseLineItems(formData);
+  const parsedItems = await parseLineItems(formData);
   if (!customerId) return "Please select a customer.";
-  if (!parsedItems.success || parsedItems.data.length === 0) {
-    return "Please provide at least one valid line item.";
-  }
+  if (!parsedItems.success) return parsedItems.message;
+  if (parsedItems.data.length === 0) return "Please provide at least one valid line item.";
 
   if (inquiryId) {
     const existingActive = await prisma.quotation.findFirst({
@@ -171,6 +209,7 @@ export async function requestQuotationRevisionAction(quotationId: string, _prevS
         customerId: customer.id,
         description: parsed.data.message,
         desiredProduct,
+        serviceId: quotation.lineItems[0]?.serviceId ?? undefined,
         status: "NEW",
       },
     });
@@ -205,10 +244,9 @@ export async function editQuotationAction(quotationId: string, _prevState: strin
 
   const validUntilRaw = formData.get("validUntil") as string | null;
   const notesRaw = (formData.get("notes") as string) || undefined;
-  const parsedItems = parseLineItems(formData);
-  if (!parsedItems.success || parsedItems.data.length === 0) {
-    return "Please provide at least one valid line item.";
-  }
+  const parsedItems = await parseLineItems(formData);
+  if (!parsedItems.success) return parsedItems.message;
+  if (parsedItems.data.length === 0) return "Please provide at least one valid line item.";
 
   const total = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
 

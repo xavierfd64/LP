@@ -30,7 +30,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
     where: { id },
     include: {
       customer: true,
-      lineItems: true,
+      lineItems: { include: { service: true } },
       orders: true,
       inquiry: true,
       revisionRequests: { orderBy: { createdAt: "desc" } },
@@ -192,10 +192,14 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
           <EditQuotationForm
             quotationId={quotation.id}
             lineItems={quotation.lineItems.map((li) => ({
+              serviceId: li.serviceId ?? "",
               productType: li.productType,
+              category: li.service?.category ?? null,
+              specFields: (li.service?.specFields as string[]) ?? [],
               description: li.description,
               qty: li.qty,
               unitPrice: Number(li.unitPrice),
+              specs: (li.specs as Record<string, string> | null) ?? null,
             }))}
             notes={quotation.notes}
           />

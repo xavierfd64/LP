@@ -5,7 +5,7 @@ import { createQuotationAction } from "@/app/actions/quotations";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
-import { LineItemsEditor } from "../line-items-editor";
+import { LineItemsEditor, type LineItem } from "../line-items-editor";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import type { CustomerSearchResult } from "@/app/actions/customers";
 import { FormSection } from "@/components/documents/form-section";
@@ -13,13 +13,11 @@ import { FormSection } from "@/components/documents/form-section";
 export function QuotationForm({
   inquiryId,
   defaultCustomer,
-  defaultProductType,
   defaultLineItems,
 }: {
   inquiryId?: string;
   defaultCustomer?: CustomerSearchResult | null;
-  defaultProductType?: string;
-  defaultLineItems?: { productType: string; description: string; qty: number; unitPrice: number }[];
+  defaultLineItems?: LineItem[];
 }) {
   const [error, formAction, pending] = useActionState(createQuotationAction, undefined);
 
@@ -46,9 +44,7 @@ export function QuotationForm({
       </FormSection>
 
       <FormSection title="Items / Services">
-        <LineItemsEditor
-          initialItems={defaultLineItems ?? [{ productType: defaultProductType ?? "", description: "", qty: 1, unitPrice: 0 }]}
-        />
+        <LineItemsEditor initialItems={defaultLineItems ?? []} />
       </FormSection>
 
       <FormSection title="Notes">

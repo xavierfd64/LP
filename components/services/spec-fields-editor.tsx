@@ -14,11 +14,13 @@ export function SpecFieldsEditor({
   name,
   fields,
   initialSpecs,
+  onChange,
 }: {
-  /** Hidden input field name the JSON blob is submitted under. */
+  /** Hidden input field name the JSON blob is submitted under. Ignored (no hidden input rendered) when `onChange` is passed — the caller then owns the submitted field, e.g. to keep a per-row array index-aligned. */
   name: string;
   fields: string[];
   initialSpecs?: Record<string, string> | null;
+  onChange?: (values: Record<string, string>) => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>(initialSpecs ?? {});
 
@@ -28,19 +30,23 @@ export function SpecFieldsEditor({
 
   if (fields.length === 0) return null;
 
+  function set(field: string, value: string) {
+    setValues((prev) => {
+      const next = { ...prev, [field]: value };
+      onChange?.(next);
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-2 rounded-md border border-slate-200 p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Service Details</p>
-      <input type="hidden" name={name} value={JSON.stringify(values)} />
+      {!onChange && <input type="hidden" name={name} value={JSON.stringify(values)} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {fields.map((field) => (
           <div key={field}>
             <Label htmlFor={`spec-${field}`}>{field}</Label>
-            <Input
-              id={`spec-${field}`}
-              value={values[field] ?? ""}
-              onChange={(e) => setValues((prev) => ({ ...prev, [field]: e.target.value }))}
-            />
+            <Input id={`spec-${field}`} value={values[field] ?? ""} onChange={(e) => set(field, e.target.value)} />
           </div>
         ))}
       </div>
