@@ -6,7 +6,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions-guard";
 import { nextStatementNumber } from "@/lib/numbering";
-import { computeStatementOfAccount, resolveSoaPeriod, type SoaPeriodSelection } from "@/lib/soa";
+import {
+  computeStatementOfAccount,
+  resolveSoaPeriod,
+  findCustomersWithOutstandingBalance,
+  type SoaPeriodSelection,
+} from "@/lib/soa";
 import { notifyCustomer } from "@/lib/notifications";
 import { logAudit } from "@/lib/audit";
 import { formatCurrency } from "@/lib/utils";
@@ -15,6 +20,40 @@ const periodSchema = z.union([
   z.object({ type: z.literal("monthly"), month: z.coerce.number().min(1).max(12), year: z.coerce.number() }),
   z.object({ type: z.literal("custom"), startDate: z.string().min(1), endDate: z.string().min(1) }),
 ]);
+
+async function createStatement(customerId: string, range: { start: Date; end: Date }, generatedById: string) {
+  const computation = await computeStatementOfAccount(customerId, range.start, range.end);
+  const statementNumber = await nextStatementNumber(range.end);
+
+  const statement = await prisma.statementOfAccount.create({
+    data: {
+      statementNumber,
+      customerId,
+      periodStart: range.start,
+      periodEnd: range.end,
+      openingBalance: computation.openingBalance,
+      totalCharges: computation.totalCharges,
+      totalPayments: computation.totalPayments,
+      adjustments: computation.adjustments,
+      outstandingBalance: computation.outstandingBalance,
+      generatedById,
+    },
+  });
+
+  await logAudit(generatedById, "SOA_GENERATED", "StatementOfAccount", statement.id, {
+    customerId,
+    outstandingBalance: computation.outstandingBalance,
+  });
+
+  await notifyCustomer(
+    customerId,
+    "SOA_GENERATED",
+    `Your Statement of Account ${statementNumber} is ready. Outstanding balance: ${formatCurrency(computation.outstandingBalance)}.`,
+    `/soa/view/${statement.id}`
+  );
+
+  return statement;
+}
 
 export async function generateStatementAction(customerId: string, _prevState: string | undefined, formData: FormData) {
   const user = await requirePermission("SOA_GENERATE");
@@ -30,37 +69,33 @@ export async function generateStatementAction(customerId: string, _prevState: st
   const range = resolveSoaPeriod(parsed.data as SoaPeriodSelection);
   if (range.end <= range.start) return "The statement period end must be after its start.";
 
-  const computation = await computeStatementOfAccount(customerId, range.start, range.end);
-  const statementNumber = await nextStatementNumber(range.end);
-
-  const statement = await prisma.statementOfAccount.create({
-    data: {
-      statementNumber,
-      customerId,
-      periodStart: range.start,
-      periodEnd: range.end,
-      openingBalance: computation.openingBalance,
-      totalCharges: computation.totalCharges,
-      totalPayments: computation.totalPayments,
-      adjustments: computation.adjustments,
-      outstandingBalance: computation.outstandingBalance,
-      generatedById: user.id,
-    },
-  });
-
-  await logAudit(user.id, "SOA_GENERATED", "StatementOfAccount", statement.id, {
-    customerId,
-    outstandingBalance: computation.outstandingBalance,
-  });
-
-  await notifyCustomer(
-    customerId,
-    "SOA_GENERATED",
-    `Your Statement of Account ${statementNumber} is ready. Outstanding balance: ${formatCurrency(computation.outstandingBalance)}.`,
-    `/soa/view/${statement.id}`
-  );
-
+  const statement = await createStatement(customerId, range, user.id);
   redirect(`/soa/view/${statement.id}`);
+}
+
+/** Monthly SOA management's "Generate All" — one statement per customer currently carrying an outstanding balance for the selected month. Never sent automatically; Admin still has to click Send/Share per statement (or from each statement's own page) afterward. */
+export async function generateAllStatementsForMonthAction(month: number, year: number) {
+  const user = await requirePermission("SOA_GENERATE");
+  const range = resolveSoaPeriod({ type: "monthly", month, year });
+  const customers = await findCustomersWithOutstandingBalance(range.end);
+
+  let created = 0;
+  for (const c of customers) {
+    await createStatement(c.customer.id, range, user.id);
+    created += 1;
+  }
+
+  revalidatePath("/soa/monthly");
+  return { created };
+}
+
+/** Single-customer "Generate SOA" from the Monthly SOA table — same monthly period math as Generate All, just for one row. */
+export async function generateStatementForCustomerAndMonthAction(customerId: string, month: number, year: number) {
+  const user = await requirePermission("SOA_GENERATE");
+  const range = resolveSoaPeriod({ type: "monthly", month, year });
+  const statement = await createStatement(customerId, range, user.id);
+  revalidatePath("/soa/monthly");
+  return { statementId: statement.id };
 }
 
 const adjustmentSchema = z.object({
