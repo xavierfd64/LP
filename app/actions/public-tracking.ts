@@ -23,6 +23,9 @@ export type PublicOrderTracking = {
   outstandingBalance: number | null;
   expectedDate: string | null;
   currentStage: string | null;
+  service: string | null;
+  jobOrderNumber: string | null;
+  quantity: number | null;
   timeline: { label: string; state: "done" | "current" | "upcoming"; date: string | null }[];
 };
 
@@ -50,11 +53,12 @@ export async function getPublicOrderTrackingAction(token: string): Promise<Publi
   return { ok: true, data: await buildPublicSnapshot(order) };
 }
 
-async function buildPublicSnapshot(order: OrderTrackingSnapshot): Promise<PublicOrderTracking> {
+export async function buildPublicSnapshot(order: OrderTrackingSnapshot): Promise<PublicOrderTracking> {
   const total = Number(order.totalAmount);
   const amountPaid = await confirmedPaymentTotal(order.id);
   const outstanding = Math.max(total - amountPaid, 0);
   const paymentStatus = amountPaid <= 0 ? "UNPAID" : amountPaid >= total ? "PAID" : "PARTIALLY_PAID";
+  const jo = order.jobOrders[0];
   return {
     customerName: order.customer.name,
     orderNumber: order.orderNumber,
@@ -64,6 +68,9 @@ async function buildPublicSnapshot(order: OrderTrackingSnapshot): Promise<Public
     outstandingBalance: order.status === "CANCELLED" ? null : outstanding,
     expectedDate: nextExpectedDate(order)?.toISOString() ?? null,
     currentStage: currentStageLabel(order),
+    service: jo?.productType ?? null,
+    jobOrderNumber: jo?.joNumber ?? null,
+    quantity: jo?.quantity ?? null,
     timeline: buildOrderTimeline(order).map((s) => ({
       label: s.label,
       state: s.state,

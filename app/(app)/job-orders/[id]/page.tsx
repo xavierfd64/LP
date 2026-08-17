@@ -25,6 +25,8 @@ import {
 import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
 import { DocumentShareManager } from "@/components/documents/document-share-manager";
 import { findActiveShareLink } from "@/lib/document-sharing";
+import { TrackingLinkManager } from "@/app/(app)/orders/[id]/tracking-link-manager";
+import { findActiveTrackingLink } from "@/lib/order-tracking";
 
 export default async function JobOrderDetailPage({
   params,
@@ -76,6 +78,8 @@ export default async function JobOrderDetailPage({
   const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
   const canShare = isAdmin || user.role === "CUSTOMER" || (isStaffLike && (await can(user, "DOCUMENT_SHARE")));
   const activeShareLink = canShare ? await findActiveShareLink("JOB_ORDER", jo.id) : null;
+  const canManageTracking = isStaffLike && (isAdmin || (await can(user, "ORDER_TRACKING_MANAGE")));
+  const activeTrackingLink = canManageTracking ? await findActiveTrackingLink(jo.orderId) : null;
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const release = releaseJobOrderAction.bind(null, jo.id);
@@ -402,6 +406,31 @@ export default async function JobOrderDetailPage({
                       token: activeShareLink.token,
                       accessLevel: activeShareLink.accessLevel,
                       expiresAt: activeShareLink.expiresAt ? activeShareLink.expiresAt.toISOString() : null,
+                    }
+                  : null
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageTracking && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Tracking Link</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-xs text-slate-500">
+              Tracking follows this Job Order&apos;s parent order — the same link customers can use from the order itself.
+            </p>
+            <TrackingLinkManager
+              orderId={jo.orderId}
+              activeLink={
+                activeTrackingLink
+                  ? {
+                      id: activeTrackingLink.id,
+                      token: activeTrackingLink.token,
+                      expiresAt: activeTrackingLink.expiresAt ? activeTrackingLink.expiresAt.toISOString() : null,
                     }
                   : null
               }

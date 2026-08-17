@@ -19,6 +19,8 @@ import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbo
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 import { DocumentShareManager } from "@/components/documents/document-share-manager";
 import { findActiveShareLink } from "@/lib/document-sharing";
+import { TrackingLinkManager } from "@/app/(app)/orders/[id]/tracking-link-manager";
+import { findActiveTrackingLink } from "@/lib/order-tracking";
 
 export default async function QuotationDetailPage({ params, searchParams }: PageProps<"/quotations/[id]">) {
   const { id } = await params;
@@ -63,6 +65,8 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
   const approve = approveQuotationAction.bind(null, quotation.id);
   const reject = rejectQuotationAction.bind(null, quotation.id);
   const hasOrder = quotation.orders.length > 0;
+  const canManageTracking = isStaffLike && (isAdmin || (await can(user, "ORDER_TRACKING_MANAGE")));
+  const activeTrackingLink = canManageTracking && hasOrder ? await findActiveTrackingLink(quotation.orders[0].id) : null;
   const editable = ["DRAFT", "SENT", "REVISION_REQUESTED"].includes(quotation.status);
 
   return (
@@ -243,6 +247,31 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
                       token: activeShareLink.token,
                       accessLevel: activeShareLink.accessLevel,
                       expiresAt: activeShareLink.expiresAt ? activeShareLink.expiresAt.toISOString() : null,
+                    }
+                  : null
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageTracking && hasOrder && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Tracking Link</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-xs text-slate-500">
+              Tracking follows the order created from this quotation — the same link customers can use from the order itself.
+            </p>
+            <TrackingLinkManager
+              orderId={quotation.orders[0].id}
+              activeLink={
+                activeTrackingLink
+                  ? {
+                      id: activeTrackingLink.id,
+                      token: activeTrackingLink.token,
+                      expiresAt: activeTrackingLink.expiresAt ? activeTrackingLink.expiresAt.toISOString() : null,
                     }
                   : null
               }

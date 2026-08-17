@@ -4,7 +4,10 @@ import { authConfig } from "@/lib/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC_PATHS = ["/login", "/register"];
+// "/" is the public tracking landing page for anonymous visitors — it
+// handles its own redirect to the right dashboard once signed in (see
+// app/page.tsx), so it must not be gated here.
+const PUBLIC_PATHS = ["/", "/login", "/register"];
 // Login-free public pages — token-authorized by the page itself (see
 // app/(public)/), not by session. Prefix-matched since both take a dynamic
 // [token] segment.
