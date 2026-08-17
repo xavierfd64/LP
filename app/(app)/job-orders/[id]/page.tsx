@@ -107,6 +107,11 @@ export default async function JobOrderDetailPage({
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={jo.status} />
+          <Link href={`/job-orders/${jo.id}/print`} target="_blank">
+            <Button type="button" variant="outline" size="sm">
+              View Document
+            </Button>
+          </Link>
           {isStaffLike && canModifyOrder && jo.status === "READY" && (
             <form action={release}>
               <Button type="submit" size="sm">
