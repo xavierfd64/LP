@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { LineItemsEditor } from "../line-items-editor";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import type { CustomerSearchResult } from "@/app/actions/customers";
+import { FormSection } from "@/components/documents/form-section";
 
 export function QuotationForm({
   inquiryId,
@@ -27,21 +28,32 @@ export function QuotationForm({
       {error && <Alert tone="error">{error}</Alert>}
       {inquiryId && <input type="hidden" name="inquiryId" value={inquiryId} />}
 
-      <CustomerPicker name="customerId" initialCustomer={defaultCustomer} />
+      <FormSection title="Customer Information">
+        <CustomerPicker name="customerId" initialCustomer={defaultCustomer} />
+      </FormSection>
 
-      <div>
-        <Label htmlFor="validUntil">Valid until</Label>
-        <Input id="validUntil" name="validUntil" type="date" />
-      </div>
+      <FormSection title="Transaction Information">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="validUntil">Valid Until</Label>
+            <Input id="validUntil" name="validUntil" type="date" />
+          </div>
+          <div>
+            <Label>Status</Label>
+            <p className="flex h-9 items-center text-sm text-slate-500">Draft (send once ready)</p>
+          </div>
+        </div>
+      </FormSection>
 
-      <LineItemsEditor
-        initialItems={defaultLineItems ?? [{ productType: defaultProductType ?? "", description: "", qty: 1, unitPrice: 0 }]}
-      />
+      <FormSection title="Items / Services">
+        <LineItemsEditor
+          initialItems={defaultLineItems ?? [{ productType: defaultProductType ?? "", description: "", qty: 1, unitPrice: 0 }]}
+        />
+      </FormSection>
 
-      <div>
-        <Label htmlFor="notes">Notes (optional)</Label>
-        <Textarea id="notes" name="notes" rows={2} />
-      </div>
+      <FormSection title="Notes">
+        <Textarea id="notes" name="notes" rows={2} placeholder="Optional notes for this quotation…" />
+      </FormSection>
 
       <Button type="submit" disabled={pending}>
         {pending ? "Saving..." : "Save as Draft"}

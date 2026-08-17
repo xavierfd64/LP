@@ -4,6 +4,7 @@ import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
+import { BusinessInfoBanner } from "@/components/documents/business-info-banner";
 import { QuotationForm } from "./quotation-form";
 
 export default async function NewQuotationPage({ searchParams }: PageProps<"/quotations/new">) {
@@ -29,6 +30,7 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
   return (
     <div className="max-w-2xl space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">New Quotation</h1>
+      <BusinessInfoBanner />
 
       {priorQuotation?.revisionRequests[0] && (
         <Alert tone="warning">

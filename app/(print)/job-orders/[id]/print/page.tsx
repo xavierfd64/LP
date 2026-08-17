@@ -73,8 +73,12 @@ export default async function JobOrderPrintPage({ params }: PageProps<"/job-orde
         </div>
       </DocumentSection>
 
-      <DocumentSection title="Production Instructions">
+      <DocumentSection title="Description">
         <p className="text-sm whitespace-pre-wrap text-slate-700">{jo.description || "—"}</p>
+      </DocumentSection>
+
+      <DocumentSection title="Production Instructions">
+        <p className="text-sm whitespace-pre-wrap text-slate-700">{jo.productionInstructions || "—"}</p>
       </DocumentSection>
 
       {currentStage?.notes && (

@@ -81,6 +81,7 @@ const jobOrderSchema = z.object({
   quantity: z.coerce.number().int().positive(),
   workflowTemplateId: z.string().min(1),
   deadline: z.string().optional(),
+  productionInstructions: z.string().optional(),
 });
 
 export async function createJobOrderAction(_prevState: string | undefined, formData: FormData) {
@@ -93,6 +94,7 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
     quantity: formData.get("quantity"),
     workflowTemplateId: formData.get("workflowTemplateId"),
     deadline: formData.get("deadline") || undefined,
+    productionInstructions: formData.get("productionInstructions") || undefined,
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
@@ -108,6 +110,7 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
       quantity: data.quantity,
       workflowTemplateId: data.workflowTemplateId,
       deadline: data.deadline ? new Date(data.deadline) : undefined,
+      productionInstructions: data.productionInstructions,
       status: "ON_HOLD",
     },
   });

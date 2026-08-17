@@ -7,6 +7,7 @@ import { Input, Label, Textarea, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import type { CustomerSearchResult } from "@/app/actions/customers";
+import { FormSection } from "@/components/documents/form-section";
 
 export function OrderForm({
   quotationId,
@@ -25,59 +26,63 @@ export function OrderForm({
       {error && <Alert tone="error">{error}</Alert>}
       {quotationId && <input type="hidden" name="quotationId" value={quotationId} />}
 
-      {defaultCustomer ? (
-        <div>
-          <Label>Customer</Label>
-          <div className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2">
-            <p className="text-sm font-medium text-slate-900">
-              {defaultCustomer.name}
-              {defaultCustomer.companyName ? ` (${defaultCustomer.companyName})` : ""}
-            </p>
-            <p className="text-xs text-slate-500">{defaultCustomer.displayId} · locked from the source quotation</p>
-          </div>
-          <input type="hidden" name="customerId" value={defaultCustomer.id} />
-        </div>
-      ) : (
-        <CustomerPicker name="customerId" />
-      )}
-
-      <div>
-        <Label htmlFor="totalAmount">Total amount (PHP)</Label>
-        <Input id="totalAmount" name="totalAmount" type="number" min={0} step="0.01" required defaultValue={defaultTotal ?? 0} />
-      </div>
-
-      <div>
-        <Label htmlFor="paymentTermType">Payment terms</Label>
-        <Select
-          id="paymentTermType"
-          name="paymentTermType"
-          value={termType}
-          onChange={(e) => setTermType(e.target.value as "STANDARD_PARTIAL" | "APPROVED_TERMS")}
-        >
-          <option value="STANDARD_PARTIAL">Standard — requires partial payment before production</option>
-          <option value="APPROVED_TERMS">Approved Terms — qualified client exception</option>
-        </Select>
-      </div>
-
-      {termType === "STANDARD_PARTIAL" && (
-        <div>
-          <Label htmlFor="requiredPartialPct">Required partial payment (%)</Label>
-          <Input id="requiredPartialPct" name="requiredPartialPct" type="number" min={0} max={100} defaultValue={50} />
-        </div>
-      )}
-
-      {termType === "APPROVED_TERMS" && (
-        <>
+      <FormSection title="Customer Information">
+        {defaultCustomer ? (
           <div>
-            <Label htmlFor="termsApprovedBy">Authorized by</Label>
-            <Input id="termsApprovedBy" name="termsApprovedBy" required placeholder="Name of approving manager" />
+            <div className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2">
+              <p className="text-sm font-medium text-slate-900">
+                {defaultCustomer.name}
+                {defaultCustomer.companyName ? ` (${defaultCustomer.companyName})` : ""}
+              </p>
+              <p className="text-xs text-slate-500">{defaultCustomer.displayId} · locked from the source quotation</p>
+            </div>
+            <input type="hidden" name="customerId" value={defaultCustomer.id} />
+          </div>
+        ) : (
+          <CustomerPicker name="customerId" />
+        )}
+      </FormSection>
+
+      <FormSection title="Transaction Information">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="totalAmount">Total Amount (PHP)</Label>
+            <Input id="totalAmount" name="totalAmount" type="number" min={0} step="0.01" required defaultValue={defaultTotal ?? 0} />
           </div>
           <div>
-            <Label htmlFor="termsReason">Reason</Label>
-            <Textarea id="termsReason" name="termsReason" rows={2} placeholder="Why this client qualifies for terms" />
+            <Label htmlFor="paymentTermType">Payment Terms</Label>
+            <Select
+              id="paymentTermType"
+              name="paymentTermType"
+              value={termType}
+              onChange={(e) => setTermType(e.target.value as "STANDARD_PARTIAL" | "APPROVED_TERMS")}
+            >
+              <option value="STANDARD_PARTIAL">Standard — requires partial payment before production</option>
+              <option value="APPROVED_TERMS">Approved Terms — qualified client exception</option>
+            </Select>
           </div>
-        </>
-      )}
+
+          {termType === "STANDARD_PARTIAL" && (
+            <div>
+              <Label htmlFor="requiredPartialPct">Required Partial Payment (%)</Label>
+              <Input id="requiredPartialPct" name="requiredPartialPct" type="number" min={0} max={100} defaultValue={50} />
+            </div>
+          )}
+
+          {termType === "APPROVED_TERMS" && (
+            <>
+              <div>
+                <Label htmlFor="termsApprovedBy">Authorized By</Label>
+                <Input id="termsApprovedBy" name="termsApprovedBy" required placeholder="Name of approving manager" />
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="termsReason">Reason</Label>
+                <Textarea id="termsReason" name="termsReason" rows={2} placeholder="Why this client qualifies for terms" />
+              </div>
+            </>
+          )}
+        </div>
+      </FormSection>
 
       <Button type="submit" disabled={pending}>
         {pending ? "Creating..." : "Create Order"}

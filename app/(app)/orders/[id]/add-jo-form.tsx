@@ -53,6 +53,15 @@ export function AddJobOrderForm({ orderId, templates }: { orderId: string; templ
         <Label htmlFor="description">Description</Label>
         <Textarea id="description" name="description" rows={2} required />
       </div>
+      <div>
+        <Label htmlFor="productionInstructions">Production Instructions (optional)</Label>
+        <Textarea
+          id="productionInstructions"
+          name="productionInstructions"
+          rows={2}
+          placeholder="Notes for the production floor — materials, finishing, special handling…"
+        />
+      </div>
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? "Adding..." : "Add Job Order"}

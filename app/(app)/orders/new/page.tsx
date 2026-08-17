@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BusinessInfoBanner } from "@/components/documents/business-info-banner";
 import { OrderForm } from "./order-form";
 
 export default async function NewOrderPage({ searchParams }: PageProps<"/orders/new">) {
@@ -18,6 +19,7 @@ export default async function NewOrderPage({ searchParams }: PageProps<"/orders/
   return (
     <div className="max-w-xl space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">New Order</h1>
+      <BusinessInfoBanner />
       <Card>
         <CardHeader>
           <CardTitle>{quotation ? `From quotation ${quotation.quoteNumber}` : "Create order"}</CardTitle>
