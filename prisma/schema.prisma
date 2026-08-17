@@ -209,6 +209,12 @@ enum Permission {
   USER_EDIT
   USER_ACTIVATE_DEACTIVATE
   USER_MANAGE_PERMISSIONS
+
+  DOCUMENT_VIEW
+  DOCUMENT_SHARE
+  DOCUMENT_DOWNLOAD
+  DOCUMENT_REVOKE
+  ORDER_TRACKING_MANAGE
 }
 
 // ---------- Core ----------
@@ -243,6 +249,8 @@ model User {
   conversationsAssigned   Conversation[]              @relation("ConversationAssignedStaff")
   conversationsCreated    Conversation[]               @relation("ConversationCreatedBy")
   conversationParticipant ConversationParticipant[]
+  documentSharesCreated   DocumentShareLink[]
+  trackingLinksCreated    OrderTrackingLink[]
 }
 
 // Existence of a row = granted. Only meaningful for role=STAFF users — ADMIN
@@ -259,10 +267,15 @@ model StaffPermission {
 
 model Customer {
   id                  String   @id @default(cuid())
+  displayId           String   @unique
   userId              String?  @unique
   user                User?    @relation(fields: [userId], references: [id])
   name                String
   companyName         String?
+  email               String?
+  contactNumber       String?
+  address             String?
+  facebookUrl         String?
   isQualifiedForTerms Boolean  @default(false)
   rewardPointsBalance Int      @default(0)
   createdAt           DateTime @default(now())
@@ -275,6 +288,10 @@ model Customer {
   vouchers     Voucher[]
   quotationRevisionRequests QuotationRevisionRequest[]
   conversations Conversation[]
+
+  @@index([name])
+  @@index([email])
+  @@index([contactNumber])
 }
 
 model Inquiry {
@@ -320,6 +337,7 @@ model Quotation {
   revisionRequests QuotationRevisionRequest[]
   conversations    Conversation[]
   referencedInMessages Message[]
+  shareLinks       DocumentShareLink[]
 }
 
 model QuotationRevisionRequest {
@@ -367,6 +385,8 @@ model Order {
   fulfillments Fulfillment[]
   rewardTxns   RewardTransaction[]
   conversations Conversation[]
+  shareLinks    DocumentShareLink[]
+  trackingLinks OrderTrackingLink[]
 }
 
 model WorkflowTemplate {
@@ -405,6 +425,7 @@ model JobOrder {
   currentStageOrder  Int         @default(1)
   status        JobOrderStatus @default(ON_HOLD)
   deadline      DateTime?
+  productionInstructions String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -416,6 +437,7 @@ model JobOrder {
   fulfillments  Fulfillment[]
   conversations Conversation[]
   referencedInMessages Message[]
+  shareLinks    DocumentShareLink[]
 
   @@unique([orderId, joNumber])
 }
@@ -785,4 +807,62 @@ model BusinessSettings {
   assignmentMode StaffAssignmentMode @default(MANUAL)
 
   updatedAt DateTime @updatedAt
+}
+
+enum DocumentAccessLevel {
+  VIEW_ONLY
+  VIEW_DOWNLOAD
+}
+
+/**
+ * A login-free, tokenized public link letting a Customer track a single
+ * Order's progress with no account. Deliberately separate from
+ * DocumentShareLink below (per spec: two clearly separate systems/permission
+ * sets) — this one only ever exposes a read-only progress timeline, never a
+ * document. `token` is the sole way to reach the public page (see
+ * app/(public)/track/[token]); the numeric/cuid Order id itself is never
+ * placed in a public URL.
+ */
+model OrderTrackingLink {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  orderId   String
+  order     Order     @relation(fields: [orderId], references: [id])
+  createdById String
+  createdBy User      @relation(fields: [createdById], references: [id])
+  expiresAt DateTime?
+  revokedAt DateTime?
+  viewCount    Int      @default(0)
+  lastViewedAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+/**
+ * A login-free, tokenized public link to view (and optionally download) one
+ * specific Quotation, Invoice (=Order), or Job Order document. Exactly one
+ * of quotationId/orderId/jobOrderId is set, mirroring how Message's
+ * refQuotationId/refOrderId-via-refJobOrderId reference columns already work
+ * in this schema. accessLevel is enforced server-side when the public page
+ * renders and again before the PDF/print route serves a response — never
+ * just a hidden frontend button.
+ */
+model DocumentShareLink {
+  id          String              @id @default(cuid())
+  token       String              @unique
+  quotationId String?
+  quotation   Quotation?          @relation(fields: [quotationId], references: [id])
+  orderId     String?
+  order       Order?              @relation(fields: [orderId], references: [id])
+  jobOrderId  String?
+  jobOrder    JobOrder?           @relation(fields: [jobOrderId], references: [id])
+  accessLevel DocumentAccessLevel @default(VIEW_ONLY)
+  createdById String
+  createdBy   User                @relation(fields: [createdById], references: [id])
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  viewCount        Int       @default(0)
+  lastViewedAt     DateTime?
+  downloadCount    Int       @default(0)
+  lastDownloadedAt DateTime?
+  createdAt   DateTime  @default(now())
 }

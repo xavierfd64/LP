@@ -119,10 +119,17 @@ async function main() {
   });
 
   const customer1 = await prisma.customer.create({
-    data: { userId: custUser1.id, name: custUser1.name },
+    data: { userId: custUser1.id, name: custUser1.name, displayId: "CUST-000001", email: custUser1.email, contactNumber: custUser1.phone },
   });
   const customer2 = await prisma.customer.create({
-    data: { userId: custUser2.id, name: custUser2.name, companyName: "Santos Sportswear" },
+    data: {
+      userId: custUser2.id,
+      name: custUser2.name,
+      companyName: "Santos Sportswear",
+      displayId: "CUST-000002",
+      email: custUser2.email,
+      contactNumber: custUser2.phone,
+    },
   });
   const customer3 = await prisma.customer.create({
     data: {
@@ -130,6 +137,22 @@ async function main() {
       name: custUser3.name,
       companyName: "Bautista Municipal Government",
       isQualifiedForTerms: true,
+      displayId: "CUST-000003",
+      email: custUser3.email,
+      contactNumber: custUser3.phone,
+    },
+  });
+  // A walk-in Customer Record with no linked login account, demonstrating
+  // the login-free flow: staff can prepare Quotations/Orders for them, and
+  // the record later supports Edit Customer -> Activate Login.
+  await prisma.customer.create({
+    data: {
+      name: "Liza Fernandez",
+      displayId: "CUST-000004",
+      email: "liza.fernandez@example.com",
+      contactNumber: "0917-100-0004",
+      address: "12 Rizal St., Quezon City",
+      facebookUrl: "https://facebook.com/liza.fernandez",
     },
   });
 

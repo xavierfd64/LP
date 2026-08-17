@@ -5,6 +5,7 @@ import { signIn, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { nextCustomerDisplayId } from "@/lib/numbering";
 
 export async function loginAction(_prevState: string | undefined, formData: FormData) {
   const email = String(formData.get("email") ?? "");
@@ -51,6 +52,7 @@ export async function registerAction(_prevState: string | undefined, formData: F
   if (existing) return "An account with that email already exists.";
 
   const passwordHash = await bcrypt.hash(password, 10);
+  const displayId = await nextCustomerDisplayId();
 
   await prisma.user.create({
     data: {
@@ -63,6 +65,9 @@ export async function registerAction(_prevState: string | undefined, formData: F
         create: {
           name,
           companyName: companyName || undefined,
+          displayId,
+          email,
+          contactNumber: phone || undefined,
         },
       },
     },

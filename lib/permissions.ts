@@ -125,6 +125,16 @@ export const PERMISSION_GROUPS = [
       { key: "USER_MANAGE_PERMISSIONS", label: "Manage Staff permissions" },
     ],
   },
+  {
+    category: "Documents",
+    permissions: [
+      { key: "DOCUMENT_VIEW", label: "View shared documents" },
+      { key: "DOCUMENT_SHARE", label: "Generate document sharing links" },
+      { key: "DOCUMENT_DOWNLOAD", label: "Allow PDF download on shared links" },
+      { key: "DOCUMENT_REVOKE", label: "Revoke/regenerate document sharing links" },
+      { key: "ORDER_TRACKING_MANAGE", label: "Generate/revoke Customer Order Tracking links" },
+    ],
+  },
 ] as const;
 
 export type Permission = (typeof PERMISSION_GROUPS)[number]["permissions"][number]["key"];
@@ -156,6 +166,10 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "COMMUNICATION_ATTACHMENT",
     "COMMUNICATION_REFERENCE_TRANSACTION",
     "COMMUNICATION_SEARCH_CUSTOMER",
+    "DOCUMENT_VIEW",
+    "DOCUMENT_SHARE",
+    "DOCUMENT_DOWNLOAD",
+    "ORDER_TRACKING_MANAGE",
   ],
   Cashier: [
     "ORDER_VIEW",
@@ -183,6 +197,11 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "COMMUNICATION_ATTACHMENT",
     "COMMUNICATION_REFERENCE_TRANSACTION",
     "COMMUNICATION_SEARCH_CUSTOMER",
+    "DOCUMENT_VIEW",
+    "DOCUMENT_SHARE",
+    "DOCUMENT_DOWNLOAD",
+    "DOCUMENT_REVOKE",
+    "ORDER_TRACKING_MANAGE",
   ],
   "Production Staff": [
     "ORDER_VIEW",

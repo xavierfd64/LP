@@ -15,6 +15,13 @@ export async function nextJoNumber(orderId: string): Promise<string> {
   return `JO-${seq}`;
 }
 
+/** Human-readable Customer ID shown throughout the UI (search results, quick-add confirmation, documents) — distinct from the internal cuid `Customer.id`, which is never surfaced to users. */
+export async function nextCustomerDisplayId(): Promise<string> {
+  const count = await prisma.customer.count();
+  const seq = String(count + 1).padStart(6, "0");
+  return `CUST-${seq}`;
+}
+
 export async function nextQuoteNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const count = await prisma.quotation.count({
