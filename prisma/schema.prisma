@@ -222,6 +222,9 @@ enum Permission {
   SOA_REVOKE
 
   EMAIL_LOG_VIEW
+
+  SERVICE_VIEW
+  SERVICE_MANAGE
 }
 
 // ---------- Core ----------
@@ -301,6 +304,8 @@ model Customer {
   statements    StatementOfAccount[]
   adjustments   AccountAdjustment[]
   statementSchedules StatementSchedule[]
+  messengerConnection MessengerConnection?
+  messengerLogs       MessengerLog[]
 
   @@index([name])
   @@index([email])
@@ -312,7 +317,14 @@ model Inquiry {
   customerId     String
   customer       Customer      @relation(fields: [customerId], references: [id])
   description    String
+  // Denormalized snapshot of the Service name at the time of entry — never
+  // changes even if the Service Master is later renamed (spec: "preserve
+  // historical data"). serviceId is the live link, used to drive carry-over
+  // and to look up the Service's current production flow at JobOrder time.
   desiredProduct String
+  serviceId      String?
+  service        Service?      @relation(fields: [serviceId], references: [id])
+  specs          Json?
   roughQty       Int?
   status         InquiryStatus @default(NEW)
   createdAt      DateTime      @default(now())
@@ -368,6 +380,9 @@ model QuotationLineItem {
   quotationId String
   quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   productType String
+  serviceId   String?
+  service     Service?  @relation(fields: [serviceId], references: [id])
+  specs       Json?
   description String
   qty         Int
   unitPrice   Decimal   @db.Decimal(12, 2)
@@ -416,6 +431,38 @@ model WorkflowTemplate {
 
   stages    WorkflowStage[]
   jobOrders JobOrder[]
+  services  Service[]
+}
+
+/**
+ * The Service/Product Master — the single source of truth for what a
+ * customer can request (spec: "Only saved and active services should
+ * appear... do not hard-code the options"). Reuses the existing
+ * WorkflowTemplate/WorkflowStage models for its configurable production
+ * flow rather than inventing a second stage system — a Service just names
+ * a WorkflowTemplate as its default flow. `specFields` is an admin-defined
+ * list of label strings (e.g. ["Width","Height","Material","Finishing"])
+ * rendered as optional key/value inputs wherever this Service is picked;
+ * kept as a flat string list rather than a full form-builder schema, which
+ * would be a lot of complexity for what the spec actually asks for.
+ */
+model Service {
+  id                 String            @id @default(cuid())
+  name               String            @unique
+  description        String?
+  category           String?
+  active             Boolean           @default(true)
+  workflowTemplateId String?
+  workflowTemplate   WorkflowTemplate? @relation(fields: [workflowTemplateId], references: [id])
+  specFields         Json              @default("[]")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  inquiries  Inquiry[]
+  lineItems  QuotationLineItem[]
+  jobOrders  JobOrder[]
+
+  @@index([active])
 }
 
 model WorkflowStage {
@@ -436,6 +483,9 @@ model JobOrder {
   order         Order          @relation(fields: [orderId], references: [id])
   joNumber      String
   productType   String
+  serviceId     String?
+  service       Service?       @relation(fields: [serviceId], references: [id])
+  specs         Json?
   description   String
   quantity      Int
   workflowTemplateId String
@@ -849,6 +899,20 @@ model BusinessSettings {
   emailLastTestAt       DateTime?
   emailLastTestOk       Boolean?
 
+  // ---------- Facebook Messenger notifications ----------
+  // Real Meta Send-API architecture (lib/messenger.ts): a customer opts in
+  // via the documented m.me/<pageId>?ref=<code> deep link, our webhook
+  // records their PSID, and sendMessengerEvent() calls the actual Graph API
+  // — never a fake "open a Facebook URL" simulation. Functionally inert
+  // until Admin supplies a real Page ID + Page Access Token from a
+  // registered Meta App; that absence is surfaced honestly (MessengerLog
+  // status SKIPPED with a clear reason) rather than pretended away.
+  messengerEnabled          Boolean  @default(false)
+  messengerPageId           String?
+  messengerPageAccessTokenEnc String?
+  messengerVerifyToken       String?
+  messengerEventSettings     Json    @default("{}")
+
   updatedAt DateTime @updatedAt
 }
 
@@ -1041,4 +1105,46 @@ model EmailTemplate {
   subject   String
   bodyHtml  String
   updatedAt DateTime @updatedAt
+}
+
+/**
+ * One customer's Messenger opt-in state. `optinRef` is the unique code
+ * embedded in their m.me/<pageId>?ref=<optinRef> link before they connect;
+ * once our webhook sees that ref come back in a message's referral
+ * payload, `psid` (the page-scoped Messenger user id) and `connected` are
+ * set. Never messaged before `connected` is true — the spec is explicit
+ * that customers must affirmatively authorize the channel.
+ */
+model MessengerConnection {
+  id          String    @id @default(cuid())
+  customerId  String    @unique
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  optinRef    String    @unique
+  psid        String?
+  connected   Boolean   @default(false)
+  connectedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+enum MessengerStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+/** Mirrors EmailLog's shape/role (queue + log in one table) for the Messenger channel. */
+model MessengerLog {
+  id            String          @id @default(cuid())
+  customerId    String
+  customer      Customer        @relation(fields: [customerId], references: [id])
+  message       String
+  eventType     String
+  relatedType   String?
+  relatedId     String?
+  status        MessengerStatus @default(QUEUED)
+  failureReason String?
+  createdAt     DateTime        @default(now())
+  sentAt        DateTime?
 }

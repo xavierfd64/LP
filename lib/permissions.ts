@@ -145,6 +145,13 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    category: "Service Master",
+    permissions: [
+      { key: "SERVICE_VIEW", label: "View the Service/Product Master" },
+      { key: "SERVICE_MANAGE", label: "Add/edit services and their production flows" },
+    ],
+  },
+  {
     category: "Email",
     permissions: [{ key: "EMAIL_LOG_VIEW", label: "View email log and retry failed emails" }],
   },

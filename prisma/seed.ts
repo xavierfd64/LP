@@ -219,6 +219,55 @@ async function main() {
     },
   });
 
+  // ---------- Service/Product Master ----------
+  // Each Service names an existing WorkflowTemplate as its default
+  // production flow, so a Job Order created for that Service automatically
+  // uses the right stages — no separate "production flow" system.
+  await prisma.service.createMany({
+    data: [
+      {
+        name: "Jersey / Uniforms",
+        description: "Custom sublimated or DTF-printed team jerseys and uniforms.",
+        category: "Apparel",
+        workflowTemplateId: jerseyTemplate.id,
+        specFields: ["Sizes", "Fabric", "Printing Method", "Color"],
+      },
+      {
+        name: "Tarpaulin",
+        description: "Large-format tarpaulin printing for events and signage.",
+        category: "Signage & Printing",
+        workflowTemplateId: tarpTemplate.id,
+        specFields: ["Width", "Height", "Material", "Finishing"],
+      },
+      {
+        name: "DTF Shirt Printing",
+        description: "Direct-to-film transfer printing on shirts.",
+        category: "Apparel",
+        workflowTemplateId: dtfTemplate.id,
+        specFields: ["Sizes", "Print Placement", "Quantity"],
+      },
+      {
+        name: "Signage",
+        description: "Fabricated and mounted signage, including installation.",
+        category: "Signage & Printing",
+        workflowTemplateId: signageTemplate.id,
+        specFields: ["Dimensions", "Material", "Mounting Location"],
+      },
+      {
+        name: "Stickers",
+        description: "Cut or sheet stickers and labels.",
+        category: "Signage & Printing",
+        specFields: ["Size", "Material", "Finishing", "Quantity"],
+      },
+      {
+        name: "Business Cards",
+        description: "Standard or premium business card printing.",
+        category: "Corporate",
+        specFields: ["Paper Stock", "Finishing", "Quantity"],
+      },
+    ],
+  });
+
   // ---------- Inventory ----------
   const vinylItem = await prisma.inventoryItem.create({
     data: { sku: "TARP-VINYL-13OZ", name: "Tarpaulin Vinyl 13oz", unit: "meter", reorderThreshold: 100, currentQty: 40 },
