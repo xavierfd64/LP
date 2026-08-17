@@ -82,7 +82,14 @@ export default async function OrderDetailPage({
           <h1 className="text-2xl font-bold text-slate-900">{order.orderNumber}</h1>
           {isStaffLike && <p className="text-sm text-slate-500">{order.customer.name}</p>}
         </div>
-        <StatusBadge status={order.status} />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={order.status} />
+          <Link href={`/orders/${order.id}/invoice`} target="_blank">
+            <Button type="button" variant="outline" size="sm">
+              View Invoice
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
