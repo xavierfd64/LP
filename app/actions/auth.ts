@@ -5,7 +5,7 @@ import { signIn, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { nextCustomerDisplayId } from "@/lib/numbering";
+import { linkOrCreateCustomerForUser } from "@/lib/customer-linking";
 
 export async function loginAction(_prevState: string | undefined, formData: FormData) {
   const email = String(formData.get("email") ?? "");
@@ -52,26 +52,11 @@ export async function registerAction(_prevState: string | undefined, formData: F
   if (existing) return "An account with that email already exists.";
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const displayId = await nextCustomerDisplayId();
 
-  await prisma.user.create({
-    data: {
-      name,
-      email,
-      passwordHash,
-      role: "CUSTOMER",
-      phone,
-      customer: {
-        create: {
-          name,
-          companyName: companyName || undefined,
-          displayId,
-          email,
-          contactNumber: phone || undefined,
-        },
-      },
-    },
+  const user = await prisma.user.create({
+    data: { name, email, passwordHash, role: "CUSTOMER", phone },
   });
+  await linkOrCreateCustomerForUser(user.id, { name, email, companyName, phone });
 
   try {
     await signIn("credentials", { email, password, redirectTo: "/" });
@@ -81,6 +66,10 @@ export async function registerAction(_prevState: string | undefined, formData: F
     }
     throw error;
   }
+}
+
+export async function oauthSignInAction(provider: "google" | "facebook") {
+  await signIn(provider, { redirectTo: "/" });
 }
 
 export async function logoutAction() {

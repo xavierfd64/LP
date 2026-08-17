@@ -1,9 +1,12 @@
 import { Alert } from "@/components/ui/alert";
 import { LoginForm } from "./login-form";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { availableOAuthProviders } from "@/lib/oauth-providers";
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const sp = await searchParams;
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
+  const providers = availableOAuthProviders();
 
   return (
     <div className="space-y-6">
@@ -13,6 +16,8 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
+
+      <OAuthButtons google={providers.google} facebook={providers.facebook} />
 
       <LoginForm />
 
