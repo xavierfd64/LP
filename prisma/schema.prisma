@@ -220,6 +220,8 @@ enum Permission {
   SOA_GENERATE
   SOA_SHARE
   SOA_REVOKE
+
+  EMAIL_LOG_VIEW
 }
 
 // ---------- Core ----------
@@ -1016,6 +1018,7 @@ model EmailLog {
   id             String      @id @default(cuid())
   recipientEmail String
   subject        String
+  bodyHtml       String      @default("")
   eventType      String
   relatedType    String?
   relatedId      String?

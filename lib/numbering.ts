@@ -51,6 +51,15 @@ export async function nextLotCode(
   return `${prefix}${seq}`;
 }
 
+/** SOA-2026-08-0001-style — sequential within the statement's ending month. */
+export async function nextStatementNumber(periodEnd: Date): Promise<string> {
+  const y = periodEnd.getFullYear();
+  const m = String(periodEnd.getMonth() + 1).padStart(2, "0");
+  const prefix = `SOA-${y}-${m}-`;
+  const count = await prisma.statementOfAccount.count({ where: { statementNumber: { startsWith: prefix } } });
+  return `${prefix}${String(count + 1).padStart(4, "0")}`;
+}
+
 export async function nextVoucherCode(): Promise<string> {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars (0/O, 1/I)
   for (let attempt = 0; attempt < 5; attempt++) {

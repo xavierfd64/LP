@@ -99,6 +99,20 @@ export function BusinessSettingsForm({ settings }: { settings: BusinessSettings 
       </section>
 
       <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-700">Payment Instructions</h2>
+        <div>
+          <Label htmlFor="paymentInstructions">Shown on Invoice and Statement of Account documents</Label>
+          <Textarea
+            id="paymentInstructions"
+            name="paymentInstructions"
+            rows={3}
+            defaultValue={settings.paymentInstructions ?? ""}
+            placeholder="e.g. GCash: 0917-000-0000 (Juan Dela Cruz) · BDO: 0012-3456-7890"
+          />
+        </div>
+      </section>
+
+      <section className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-700">Communication</h2>
         <div>
           <Label htmlFor="assignmentMode">Chatbox conversation assignment</Label>

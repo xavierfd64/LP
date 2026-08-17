@@ -11,8 +11,10 @@ const STAFF_NAV_RULES: { label: string; href: string; permission?: Permission }[
   { label: "Production", href: "/production", permission: "PRODUCTION_VIEW" },
   { label: "Inventory", href: "/inventory" },
   { label: "Payments", href: "/payments", permission: "PAYMENT_VIEW" },
+  { label: "Statement of Account", href: "/soa", permission: "SOA_VIEW" },
   { label: "Transaction Summary", href: "/reports/summary", permission: "REPORTS_VIEW" },
   { label: "Reward Rules", href: "/admin/rewards", permission: "REWARDS_MANAGE_CONFIG" },
+  { label: "Email Log", href: "/admin/email-log", permission: "EMAIL_LOG_VIEW" },
 ];
 
 /**
@@ -32,12 +34,15 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "Production", href: "/production" },
         { label: "Inventory", href: "/inventory" },
         { label: "Payments", href: "/payments" },
+        { label: "Statement of Account", href: "/soa" },
         { label: "Workflow Templates", href: "/admin/workflow-templates" },
         { label: "Users", href: "/admin/users" },
         { label: "Staff & Permissions", href: "/admin/staff-permissions" },
         { label: "Reward Rules", href: "/admin/rewards" },
         { label: "Audit Log", href: "/admin/audit-log" },
         { label: "Business Settings", href: "/admin/settings" },
+        { label: "Email Settings", href: "/admin/email-settings" },
+        { label: "Email Log", href: "/admin/email-log" },
       ];
     case "STAFF":
       return STAFF_NAV_RULES.filter((item) => !item.permission || staffPermissions?.has(item.permission)).map(

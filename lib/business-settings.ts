@@ -2,6 +2,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 export type StaffAssignmentMode = "MANUAL" | "AUTOMATIC" | "MANUAL_WITH_AUTO_FALLBACK";
+export type EmailProvider = "GMAIL" | "YAHOO" | "OUTLOOK" | "CUSTOM_SMTP";
 
 export type BusinessSettings = {
   id: string;
@@ -19,6 +20,19 @@ export type BusinessSettings = {
   province: string | null;
   postalCode: string | null;
   assignmentMode: StaffAssignmentMode;
+  paymentInstructions: string | null;
+  emailEnabled: boolean;
+  emailProvider: EmailProvider | null;
+  emailSenderName: string | null;
+  emailSenderAddress: string | null;
+  emailSmtpHost: string | null;
+  emailSmtpPort: number | null;
+  emailSmtpSecure: boolean;
+  emailSmtpUsername: string | null;
+  emailSmtpPasswordEnc: string | null;
+  emailEventSettings: unknown;
+  emailLastTestAt: Date | null;
+  emailLastTestOk: boolean | null;
 };
 
 const FALLBACK: BusinessSettings = {
@@ -37,6 +51,19 @@ const FALLBACK: BusinessSettings = {
   province: null,
   postalCode: null,
   assignmentMode: "MANUAL",
+  paymentInstructions: null,
+  emailEnabled: false,
+  emailProvider: null,
+  emailSenderName: null,
+  emailSenderAddress: null,
+  emailSmtpHost: null,
+  emailSmtpPort: null,
+  emailSmtpSecure: true,
+  emailSmtpUsername: null,
+  emailSmtpPasswordEnc: null,
+  emailEventSettings: {},
+  emailLastTestAt: null,
+  emailLastTestOk: null,
 };
 
 /**

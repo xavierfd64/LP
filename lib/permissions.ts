@@ -144,6 +144,10 @@ export const PERMISSION_GROUPS = [
       { key: "SOA_REVOKE", label: "Revoke SOA sharing links" },
     ],
   },
+  {
+    category: "Email",
+    permissions: [{ key: "EMAIL_LOG_VIEW", label: "View email log and retry failed emails" }],
+  },
 ] as const;
 
 export type Permission = (typeof PERMISSION_GROUPS)[number]["permissions"][number]["key"];
@@ -226,6 +230,7 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "SOA_GENERATE",
     "SOA_SHARE",
     "SOA_REVOKE",
+    "EMAIL_LOG_VIEW",
   ],
   "Production Staff": [
     "ORDER_VIEW",
