@@ -32,7 +32,8 @@ export default async function QuotationPrintPage({ params }: PageProps<"/quotati
   }
 
   const subtotal = quotation.lineItems.reduce((sum, li) => sum + li.qty * Number(li.unitPrice), 0);
-  const contact = quotation.customer.user?.email ?? quotation.customer.user?.phone ?? null;
+  const contact =
+    quotation.customer.email ?? quotation.customer.contactNumber ?? quotation.customer.user?.email ?? quotation.customer.user?.phone ?? null;
 
   return (
     <DocumentShell title="Quotation" documentNumber={quotation.quoteNumber}>
@@ -46,7 +47,7 @@ export default async function QuotationPrintPage({ params }: PageProps<"/quotati
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DocumentField label="Customer" value={quotation.customer.name} />
         <DocumentField label="Contact" value={contact} />
-        <DocumentField label="Address" value={null} />
+        <DocumentField label="Address" value={quotation.customer.address} />
         <DocumentField label="Prepared By" value={quotation.createdBy?.name ?? "—"} />
       </div>
 

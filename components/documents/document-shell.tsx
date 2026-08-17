@@ -15,10 +15,13 @@ export async function DocumentShell({
   title,
   documentNumber,
   children,
+  headerAction,
 }: {
   title: string;
   documentNumber?: string;
   children: React.ReactNode;
+  /** Overrides the default "Print / Save as PDF" button — used by the public document-sharing page, where printing is only offered for View + Download links (enforced server-side, not just by omitting this). Pass `null` to show nothing. */
+  headerAction?: React.ReactNode | null;
 }) {
   const settings = await getBusinessSettings();
   const address = formatBusinessAddress(settings);
@@ -26,7 +29,7 @@ export async function DocumentShell({
 
   return (
     <div className="mx-auto max-w-3xl bg-white p-6 text-slate-900 sm:p-10 print:max-w-none print:p-0">
-      <PrintButton />
+      {headerAction === undefined ? <PrintButton /> : headerAction}
 
       <header className="flex flex-col gap-4 border-b-2 border-brand-600 pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">

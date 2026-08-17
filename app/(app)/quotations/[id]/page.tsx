@@ -17,6 +17,8 @@ import { CancelQuotationForm } from "./cancel-quotation-form";
 import { ForceApproveForm } from "./force-approve-form";
 import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
+import { DocumentShareManager } from "@/components/documents/document-share-manager";
+import { findActiveShareLink } from "@/lib/document-sharing";
 
 export default async function QuotationDetailPage({ params, searchParams }: PageProps<"/quotations/[id]">) {
   const { id } = await params;
@@ -53,6 +55,8 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
   const canForceApprove = isAdmin || (await can(user, "QUOTATION_APPROVE_REJECT"));
   const canCreateOrder = isAdmin || (await can(user, "ORDER_CREATE"));
   const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
+  const canShare = isAdmin || !isStaffLike || (await can(user, "DOCUMENT_SHARE"));
+  const activeShareLink = canShare ? await findActiveShareLink("QUOTATION", quotation.id) : null;
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const send = sendQuotationAction.bind(null, quotation.id);
@@ -216,6 +220,31 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
 
       {(!isStaffLike || canViewComms) && (
         <DiscussInChatboxButton refType="QUOTATION" refId={quotation.id} label={quotation.quoteNumber} />
+      )}
+
+      {canShare && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Share Document</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DocumentShareManager
+              docType="QUOTATION"
+              docId={quotation.id}
+              isCustomer={!isStaffLike}
+              activeLink={
+                activeShareLink
+                  ? {
+                      id: activeShareLink.id,
+                      token: activeShareLink.token,
+                      accessLevel: activeShareLink.accessLevel,
+                      expiresAt: activeShareLink.expiresAt ? activeShareLink.expiresAt.toISOString() : null,
+                    }
+                  : null
+              }
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );

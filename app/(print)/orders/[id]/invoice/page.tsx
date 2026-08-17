@@ -54,7 +54,7 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
   }
   const subtotal = items.reduce((sum, i) => sum + i.qty * i.unitPrice, 0);
 
-  const contact = order.customer.user?.email ?? order.customer.user?.phone ?? null;
+  const contact = order.customer.email ?? order.customer.contactNumber ?? order.customer.user?.email ?? order.customer.user?.phone ?? null;
 
   return (
     <DocumentShell title="Invoice" documentNumber={order.orderNumber}>
@@ -68,7 +68,7 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DocumentField label="Customer" value={order.customer.name} />
         <DocumentField label="Contact" value={contact} />
-        <DocumentField label="Address" value={null} />
+        <DocumentField label="Address" value={order.customer.address} />
         <DocumentField label="Related Order" value={order.orderNumber} />
       </div>
 

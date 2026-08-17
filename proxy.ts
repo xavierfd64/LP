@@ -5,6 +5,10 @@ import { authConfig } from "@/lib/auth.config";
 const { auth } = NextAuth(authConfig);
 
 const PUBLIC_PATHS = ["/login", "/register"];
+// Login-free public pages — token-authorized by the page itself (see
+// app/(public)/), not by session. Prefix-matched since both take a dynamic
+// [token] segment.
+const PUBLIC_PATH_PREFIXES = ["/track/", "/documents/"];
 
 // Path prefix -> roles allowed. Missing entry = any authenticated role.
 const ROLE_RULES: { prefix: string; roles: string[] }[] = [
@@ -43,6 +47,7 @@ export default auth((req) => {
 
   if (
     PUBLIC_PATHS.includes(pathname) ||
+    PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/uploads")

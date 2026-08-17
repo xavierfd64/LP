@@ -24,6 +24,8 @@ import { RecordPaymentDialog } from "./record-payment-dialog";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 import { TrackingLinkManager } from "./tracking-link-manager";
 import { findActiveTrackingLink } from "@/lib/order-tracking";
+import { DocumentShareManager } from "@/components/documents/document-share-manager";
+import { findActiveShareLink } from "@/lib/document-sharing";
 
 export default async function OrderDetailPage({
   params,
@@ -66,6 +68,7 @@ export default async function OrderDetailPage({
   const canStartProduction = isAdmin || (await can(user, "PRODUCTION_UPDATE_STAGE"));
   const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
   const canManageTracking = isAdmin || (await can(user, "ORDER_TRACKING_MANAGE"));
+  const canShare = isAdmin || !isStaffLike || (await can(user, "DOCUMENT_SHARE"));
 
   const summary = await paymentSummary(order.id);
   const templates = isStaffLike
@@ -74,6 +77,7 @@ export default async function OrderDetailPage({
 
   const activeTrackingLink =
     isStaffLike && canManageTracking ? await findActiveTrackingLink(order.id) : null;
+  const activeShareLink = canShare ? await findActiveShareLink("INVOICE", order.id) : null;
 
   const conversation = await getOrCreateConversation(order.customerId, "ORDER", order.id);
   const commsData = !isStaffLike || canViewComms ? await getConversationMessagesAction(conversation.id) : null;
@@ -325,6 +329,31 @@ export default async function OrderDetailPage({
                       id: activeTrackingLink.id,
                       token: activeTrackingLink.token,
                       expiresAt: activeTrackingLink.expiresAt ? activeTrackingLink.expiresAt.toISOString() : null,
+                    }
+                  : null
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {canShare && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Share Document (Invoice)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DocumentShareManager
+              docType="INVOICE"
+              docId={order.id}
+              isCustomer={!isStaffLike}
+              activeLink={
+                activeShareLink
+                  ? {
+                      id: activeShareLink.id,
+                      token: activeShareLink.token,
+                      accessLevel: activeShareLink.accessLevel,
+                      expiresAt: activeShareLink.expiresAt ? activeShareLink.expiresAt.toISOString() : null,
                     }
                   : null
               }

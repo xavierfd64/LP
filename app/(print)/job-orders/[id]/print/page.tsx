@@ -41,7 +41,8 @@ export default async function JobOrderPrintPage({ params }: PageProps<"/job-orde
   const currentStage = jo.stageLogs.find((s) => s.stageOrder === jo.currentStageOrder);
   const lastCompletedStage = [...jo.stageLogs].reverse().find((s) => s.status === "COMPLETED");
 
-  const contact = jo.order.customer.user?.email ?? jo.order.customer.user?.phone ?? null;
+  const contact =
+    jo.order.customer.email ?? jo.order.customer.contactNumber ?? jo.order.customer.user?.email ?? jo.order.customer.user?.phone ?? null;
 
   return (
     <DocumentShell title="Job Order" documentNumber={jo.joNumber}>
@@ -55,7 +56,7 @@ export default async function JobOrderPrintPage({ params }: PageProps<"/job-orde
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DocumentField label="Customer" value={jo.order.customer.name} />
         <DocumentField label="Contact" value={contact} />
-        <DocumentField label="Address" value={null} />
+        <DocumentField label="Address" value={jo.order.customer.address} />
         <DocumentField label="Related Order" value={jo.order.orderNumber} />
       </div>
 

@@ -23,6 +23,8 @@ import {
   markInstalledAction,
 } from "@/app/actions/fulfillment";
 import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
+import { DocumentShareManager } from "@/components/documents/document-share-manager";
+import { findActiveShareLink } from "@/lib/document-sharing";
 
 export default async function JobOrderDetailPage({
   params,
@@ -72,6 +74,8 @@ export default async function JobOrderDetailPage({
   const canMarkInstalled = isAdmin || (await can(user, "FULFILLMENT_MARK_INSTALLED"));
   const canScheduleFulfillment = canSchedulePickup || canScheduleDelivery || canMarkInstalled;
   const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
+  const canShare = isAdmin || user.role === "CUSTOMER" || (isStaffLike && (await can(user, "DOCUMENT_SHARE")));
+  const activeShareLink = canShare ? await findActiveShareLink("JOB_ORDER", jo.id) : null;
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const release = releaseJobOrderAction.bind(null, jo.id);
@@ -379,6 +383,31 @@ export default async function JobOrderDetailPage({
 
       {((isStaffLike && canViewComms) || user.role === "CUSTOMER") && (
         <DiscussInChatboxButton refType="JOB_ORDER" refId={jo.id} label={jo.joNumber} />
+      )}
+
+      {canShare && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Share Document</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DocumentShareManager
+              docType="JOB_ORDER"
+              docId={jo.id}
+              isCustomer={user.role === "CUSTOMER"}
+              activeLink={
+                activeShareLink
+                  ? {
+                      id: activeShareLink.id,
+                      token: activeShareLink.token,
+                      accessLevel: activeShareLink.accessLevel,
+                      expiresAt: activeShareLink.expiresAt ? activeShareLink.expiresAt.toISOString() : null,
+                    }
+                  : null
+              }
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
