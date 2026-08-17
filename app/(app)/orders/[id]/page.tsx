@@ -22,6 +22,8 @@ import { getOrCreateConversation } from "@/lib/conversations";
 import { getConversationMessagesAction } from "@/app/actions/messages";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
+import { TrackingLinkManager } from "./tracking-link-manager";
+import { findActiveTrackingLink } from "@/lib/order-tracking";
 
 export default async function OrderDetailPage({
   params,
@@ -63,11 +65,15 @@ export default async function OrderDetailPage({
   const canViewPayments = isAdmin || (await can(user, "PAYMENT_VIEW"));
   const canStartProduction = isAdmin || (await can(user, "PRODUCTION_UPDATE_STAGE"));
   const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
+  const canManageTracking = isAdmin || (await can(user, "ORDER_TRACKING_MANAGE"));
 
   const summary = await paymentSummary(order.id);
   const templates = isStaffLike
     ? await prisma.workflowTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } })
     : [];
+
+  const activeTrackingLink =
+    isStaffLike && canManageTracking ? await findActiveTrackingLink(order.id) : null;
 
   const conversation = await getOrCreateConversation(order.customerId, "ORDER", order.id);
   const commsData = !isStaffLike || canViewComms ? await getConversationMessagesAction(conversation.id) : null;
@@ -301,6 +307,28 @@ export default async function OrderDetailPage({
                 </div>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {isStaffLike && canManageTracking && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Order Tracking Link</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TrackingLinkManager
+              orderId={order.id}
+              activeLink={
+                activeTrackingLink
+                  ? {
+                      id: activeTrackingLink.id,
+                      token: activeTrackingLink.token,
+                      expiresAt: activeTrackingLink.expiresAt ? activeTrackingLink.expiresAt.toISOString() : null,
+                    }
+                  : null
+              }
+            />
           </CardContent>
         </Card>
       )}
