@@ -215,6 +215,11 @@ enum Permission {
   DOCUMENT_DOWNLOAD
   DOCUMENT_REVOKE
   ORDER_TRACKING_MANAGE
+
+  SOA_VIEW
+  SOA_GENERATE
+  SOA_SHARE
+  SOA_REVOKE
 }
 
 // ---------- Core ----------
@@ -251,6 +256,9 @@ model User {
   conversationParticipant ConversationParticipant[]
   documentSharesCreated   DocumentShareLink[]
   trackingLinksCreated    OrderTrackingLink[]
+  statementsGenerated     StatementOfAccount[]
+  adjustmentsCreated      AccountAdjustment[]
+  statementSchedulesCreated StatementSchedule[]
 }
 
 // Existence of a row = granted. Only meaningful for role=STAFF users — ADMIN
@@ -288,6 +296,9 @@ model Customer {
   vouchers     Voucher[]
   quotationRevisionRequests QuotationRevisionRequest[]
   conversations Conversation[]
+  statements    StatementOfAccount[]
+  adjustments   AccountAdjustment[]
+  statementSchedules StatementSchedule[]
 
   @@index([name])
   @@index([email])
@@ -377,6 +388,10 @@ model Order {
   releaseException Boolean         @default(false)
   releaseExceptionBy String?
   releaseExceptionReason String?
+  // Payment due date — optional, set by Staff at order creation (or later).
+  // Nothing is ever marked "Overdue" without this being both set AND past,
+  // per the SOA spec's explicit rule.
+  dueDate          DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -387,6 +402,7 @@ model Order {
   conversations Conversation[]
   shareLinks    DocumentShareLink[]
   trackingLinks OrderTrackingLink[]
+  adjustments   AccountAdjustment[]
 }
 
 model WorkflowTemplate {
@@ -806,7 +822,39 @@ model BusinessSettings {
 
   assignmentMode StaffAssignmentMode @default(MANUAL)
 
+  // Free-text payment instructions (e.g. GCash/bank account details) shown
+  // on the Invoice and Statement of Account documents — no structured
+  // "business payment accounts" model exists, and a single editable block
+  // covers the actual requirement without inventing one.
+  paymentInstructions String?
+
+  // ---------- Centralized Email Notification System ----------
+  emailEnabled          Boolean       @default(false)
+  emailProvider         EmailProvider?
+  emailSenderName       String?
+  emailSenderAddress    String?
+  emailSmtpHost         String?
+  emailSmtpPort         Int?
+  emailSmtpSecure       Boolean       @default(true)
+  emailSmtpUsername     String?
+  // AES-256-GCM encrypted at rest (see lib/email-crypto.ts) — never
+  // returned by any read path used client-side, never logged.
+  emailSmtpPasswordEnc  String?
+  // Per-event overrides: { "PAYMENT_CONFIRMED": false, ... }. A key absent
+  // from this map means "on" (the safe default once the master switch and
+  // a provider are configured) — see lib/email-events.ts.
+  emailEventSettings    Json          @default("{}")
+  emailLastTestAt       DateTime?
+  emailLastTestOk       Boolean?
+
   updatedAt DateTime @updatedAt
+}
+
+enum EmailProvider {
+  GMAIL
+  YAHOO
+  OUTLOOK
+  CUSTOM_SMTP
 }
 
 enum DocumentAccessLevel {
@@ -855,6 +903,8 @@ model DocumentShareLink {
   order       Order?              @relation(fields: [orderId], references: [id])
   jobOrderId  String?
   jobOrder    JobOrder?           @relation(fields: [jobOrderId], references: [id])
+  statementId String?
+  statement   StatementOfAccount? @relation(fields: [statementId], references: [id])
   accessLevel DocumentAccessLevel @default(VIEW_ONLY)
   createdById String
   createdBy   User                @relation(fields: [createdById], references: [id])
@@ -865,4 +915,127 @@ model DocumentShareLink {
   downloadCount    Int       @default(0)
   lastDownloadedAt DateTime?
   createdAt   DateTime  @default(now())
+}
+
+enum AccountAdjustmentType {
+  CHARGE
+  CREDIT
+}
+
+/**
+ * A manual credit or charge against a Customer's account balance — e.g. a
+ * goodwill credit, a write-off, or a correction — factored into
+ * lib/soa.ts's Statement of Account computation alongside real Orders/
+ * Payments. Optionally tied to one Order for context; the balance impact
+ * is always customer-level.
+ */
+model AccountAdjustment {
+  id          String                @id @default(cuid())
+  customerId  String
+  customer    Customer              @relation(fields: [customerId], references: [id])
+  orderId     String?
+  order       Order?                @relation(fields: [orderId], references: [id])
+  type        AccountAdjustmentType
+  amount      Decimal               @db.Decimal(12, 2)
+  description String
+  createdById String
+  createdBy   User                  @relation(fields: [createdById], references: [id])
+  createdAt   DateTime              @default(now())
+}
+
+/**
+ * A generated Statement of Account is a persisted snapshot (statement
+ * number + period + the four summary totals) so a previously-issued
+ * statement stays stable for history/audit even as new transactions land —
+ * but the actual transaction-by-transaction breakdown table is always
+ * recomputed live from Order/Payment/AccountAdjustment records within
+ * [periodStart, periodEnd) at render time (see lib/soa.ts), never stored
+ * separately, per the spec's "use existing financial records as the
+ * source of truth, do not create a separate calculation system."
+ */
+model StatementOfAccount {
+  id                 String    @id @default(cuid())
+  statementNumber    String    @unique
+  customerId         String
+  customer           Customer  @relation(fields: [customerId], references: [id])
+  periodStart        DateTime
+  periodEnd          DateTime
+  openingBalance     Decimal   @db.Decimal(12, 2)
+  totalCharges       Decimal   @db.Decimal(12, 2)
+  totalPayments      Decimal   @db.Decimal(12, 2)
+  adjustments        Decimal   @default(0) @db.Decimal(12, 2)
+  outstandingBalance Decimal   @db.Decimal(12, 2)
+  generatedById      String?
+  generatedBy        User?     @relation(fields: [generatedById], references: [id])
+  generatedAt        DateTime  @default(now())
+
+  shareLinks DocumentShareLink[]
+}
+
+enum StatementDeliveryMethod {
+  EMAIL
+}
+
+/**
+ * Admin-configured recurring SOA schedule for one customer — structure to
+ * support automation (spec: "Future SOA Automation"), never fires on its
+ * own until explicitly enabled. Swept the same opportunistic way as the
+ * existing 24h chat-response reminder (lib/response-reminders.ts): a
+ * debounced check on SSE connect, plus a dedicated cron route for anyone
+ * wiring up a real external scheduler.
+ */
+model StatementSchedule {
+  id                String                   @id @default(cuid())
+  customerId        String
+  customer          Customer                 @relation(fields: [customerId], references: [id])
+  dayOfMonth        Int                      @default(1)
+  deliveryMethod    StatementDeliveryMethod  @default(EMAIL)
+  onlyIfOutstanding Boolean                  @default(true)
+  enabled           Boolean                  @default(false)
+  createdById       String
+  createdBy         User                     @relation(fields: [createdById], references: [id])
+  lastRunAt         DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+}
+
+enum EmailStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+}
+
+/**
+ * Doubles as the email queue and the email log (spec explicitly wants
+ * both): a row is created QUEUED the instant an event fires, then updated
+ * in place as it's attempted — there's no separate queue table to keep in
+ * sync. See lib/email.ts.
+ */
+model EmailLog {
+  id             String      @id @default(cuid())
+  recipientEmail String
+  subject        String
+  eventType      String
+  relatedType    String?
+  relatedId      String?
+  status         EmailStatus @default(QUEUED)
+  failureReason  String?
+  attemptCount   Int         @default(0)
+  createdAt      DateTime    @default(now())
+  sentAt         DateTime?
+}
+
+/**
+ * Admin-editable subject/body per email event key, with {{variable}}
+ * placeholders (see lib/email-events.ts for the canonical key list and
+ * default content). A missing row for a given key just means "use the
+ * built-in default" — Admin only needs to create a row to override one.
+ */
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  subject   String
+  bodyHtml  String
+  updatedAt DateTime @updatedAt
 }

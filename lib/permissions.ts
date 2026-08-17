@@ -135,6 +135,15 @@ export const PERMISSION_GROUPS = [
       { key: "ORDER_TRACKING_MANAGE", label: "Generate/revoke Customer Order Tracking links" },
     ],
   },
+  {
+    category: "Statement of Account",
+    permissions: [
+      { key: "SOA_VIEW", label: "View statements of account" },
+      { key: "SOA_GENERATE", label: "Generate statements of account" },
+      { key: "SOA_SHARE", label: "Share/send statements of account" },
+      { key: "SOA_REVOKE", label: "Revoke SOA sharing links" },
+    ],
+  },
 ] as const;
 
 export type Permission = (typeof PERMISSION_GROUPS)[number]["permissions"][number]["key"];
@@ -181,6 +190,9 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "PAYMENT_RECORD",
     "PAYMENT_VERIFY",
     "PAYMENT_REJECT",
+    "SOA_VIEW",
+    "SOA_GENERATE",
+    "SOA_SHARE",
     "COMMUNICATION_VIEW",
     "COMMUNICATION_SEND",
     "COMMUNICATION_ATTACHMENT",
@@ -210,6 +222,10 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "DOCUMENT_DOWNLOAD",
     "DOCUMENT_REVOKE",
     "ORDER_TRACKING_MANAGE",
+    "SOA_VIEW",
+    "SOA_GENERATE",
+    "SOA_SHARE",
+    "SOA_REVOKE",
   ],
   "Production Staff": [
     "ORDER_VIEW",
