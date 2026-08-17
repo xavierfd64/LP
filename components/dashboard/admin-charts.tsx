@@ -96,6 +96,27 @@ export function RevenueTrendChart({ data }: { data: { month: string; revenue: nu
   );
 }
 
+export function PaymentsByMethodChart({ data }: { data: { method: string; total: number }[] }) {
+  if (data.length === 0) {
+    return <p className="text-sm text-slate-400">No confirmed payments in this period.</p>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+        <XAxis dataKey="method" tick={axisTick} tickFormatter={label} />
+        <YAxis
+          tick={axisTick}
+          width={44}
+          tickFormatter={(v: number) => (v >= 1000 ? `₱${Math.round(v / 1000)}k` : `₱${v}`)}
+        />
+        <Tooltip formatter={(value) => [`₱${Number(value).toLocaleString()}`, "Total"]} labelFormatter={(v) => label(String(v))} contentStyle={tooltipStyle} />
+        <Bar dataKey="total" radius={[4, 4, 0, 0]} fill="#dc2626" />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function ProductionStatusChart({ data }: { data: { status: string; count: number }[] }) {
   if (data.length === 0) {
     return <p className="text-sm text-slate-400">No job orders yet.</p>;
