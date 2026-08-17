@@ -16,6 +16,7 @@ const STAFF_NAV_RULES: { label: string; href: string; permission?: Permission }[
   { label: "Services", href: "/admin/services", permission: "SERVICE_VIEW" },
   { label: "Reward Rules", href: "/admin/rewards", permission: "REWARDS_MANAGE_CONFIG" },
   { label: "Email Log", href: "/admin/email-log", permission: "EMAIL_LOG_VIEW" },
+  { label: "Messenger Log", href: "/admin/messenger-log", permission: "EMAIL_LOG_VIEW" },
 ];
 
 /**
@@ -45,6 +46,8 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "Business Settings", href: "/admin/settings" },
         { label: "Email Settings", href: "/admin/email-settings" },
         { label: "Email Log", href: "/admin/email-log" },
+        { label: "Messenger Settings", href: "/admin/messenger-settings" },
+        { label: "Messenger Log", href: "/admin/messenger-log" },
       ];
     case "STAFF":
       return STAFF_NAV_RULES.filter((item) => !item.permission || staffPermissions?.has(item.permission)).map(

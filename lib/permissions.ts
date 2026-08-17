@@ -153,7 +153,8 @@ export const PERMISSION_GROUPS = [
   },
   {
     category: "Email",
-    permissions: [{ key: "EMAIL_LOG_VIEW", label: "View email log and retry failed emails" }],
+    // Also gates the Messenger Log (same "notification delivery log" role, one permission) rather than adding a second near-identical grant.
+    permissions: [{ key: "EMAIL_LOG_VIEW", label: "View email/Messenger logs and retry failed sends" }],
   },
 ] as const;
 

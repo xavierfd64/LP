@@ -33,6 +33,12 @@ export type BusinessSettings = {
   emailEventSettings: unknown;
   emailLastTestAt: Date | null;
   emailLastTestOk: boolean | null;
+  messengerEnabled: boolean;
+  messengerPageId: string | null;
+  messengerPageAccessTokenEnc: string | null;
+  messengerVerifyToken: string | null;
+  messengerAppSecretEnc: string | null;
+  messengerEventSettings: unknown;
 };
 
 const FALLBACK: BusinessSettings = {
@@ -64,6 +70,12 @@ const FALLBACK: BusinessSettings = {
   emailEventSettings: {},
   emailLastTestAt: null,
   emailLastTestOk: null,
+  messengerEnabled: false,
+  messengerPageId: null,
+  messengerPageAccessTokenEnc: null,
+  messengerVerifyToken: null,
+  messengerAppSecretEnc: null,
+  messengerEventSettings: {},
 };
 
 /**

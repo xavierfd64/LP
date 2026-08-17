@@ -1,11 +1,24 @@
 import { prisma } from "@/lib/prisma";
 import { publishToUser } from "@/lib/realtime";
 import { sendEmailEvent } from "@/lib/email";
+import { sendMessengerEvent } from "@/lib/messenger";
+import { findActiveTrackingLink } from "@/lib/order-tracking";
 
 function absoluteLink(link?: string): string {
   if (!link) return "";
   const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
   return link.startsWith("http") ? link : `${base}${link}`;
+}
+
+/** Best-effort: if this notification's internal link points at an Order that already has an active public tracking link, surface that same link in the Messenger message's "[ Track Your Order ]" line. */
+async function resolveTrackingLink(link?: string): Promise<string | undefined> {
+  if (!link) return undefined;
+  const match = link.match(/^\/orders\/([a-zA-Z0-9_-]+)/);
+  if (!match) return undefined;
+  const activeLink = await findActiveTrackingLink(match[1]);
+  if (!activeLink) return undefined;
+  const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  return `${base}/track/${activeLink.token}`;
 }
 
 /**
@@ -58,6 +71,12 @@ export async function notifyCustomer(customerId: string, type: string, message: 
     select: { userId: true, email: true, name: true },
   });
   if (!customer) return;
+
+  // Messenger is customer-facing regardless of whether they have a login —
+  // unlike the bell/email split below, it doesn't depend on customer.userId.
+  const trackingLink = await resolveTrackingLink(link);
+  await sendMessengerEvent(type, customerId, { message, trackingLink });
+
   if (customer.userId) {
     await notifyUser(customer.userId, type, message, link);
   } else if (customer.email) {

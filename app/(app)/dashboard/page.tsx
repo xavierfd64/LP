@@ -3,8 +3,11 @@ import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import Link from "next/link";
+import { getBusinessSettings } from "@/lib/business-settings";
+import { messengerOptinLink } from "@/lib/messenger";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -61,6 +64,14 @@ async function CustomerDashboard({ userId, name }: { userId: string; name: strin
     const confirmed = o.payments.reduce((s, p) => s + Number(p.amount), 0);
     return sum + Math.max(Number(o.totalAmount) - confirmed, 0);
   }, 0);
+
+  const businessSettings = await getBusinessSettings();
+  const [messengerLink, messengerConnection] = businessSettings.messengerEnabled
+    ? await Promise.all([
+        messengerOptinLink(customer.id),
+        prisma.messengerConnection.findUnique({ where: { customerId: customer.id } }),
+      ])
+    : [null, null];
 
   return (
     <div className="space-y-6">
@@ -148,6 +159,28 @@ async function CustomerDashboard({ userId, name }: { userId: string; name: strin
           </CardContent>
         </Card>
       </div>
+
+      {messengerLink && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Order Updates via Messenger</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {messengerConnection?.connected ? (
+              <p className="text-sm font-medium text-green-700">Connected — you&apos;ll receive order updates on Messenger.</p>
+            ) : (
+              <>
+                <p className="mb-2 text-sm text-slate-500">
+                  Get order, payment, and delivery updates on Facebook Messenger, in addition to email and your account.
+                </p>
+                <a href={messengerLink} target="_blank" rel="noreferrer">
+                  <Button type="button">Connect Messenger</Button>
+                </a>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

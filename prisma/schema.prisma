@@ -913,6 +913,11 @@ model BusinessSettings {
   messengerPageId           String?
   messengerPageAccessTokenEnc String?
   messengerVerifyToken       String?
+  /// HMAC key for verifying the webhook's X-Hub-Signature-256 header against
+  /// the raw request body — real Meta App Secret, optional (webhook still
+  /// works unverified if unset, same honest-stub tradeoff as the rest of
+  /// this integration) but required for a production-grade connection.
+  messengerAppSecretEnc      String?
   messengerEventSettings     Json    @default("{}")
 
   updatedAt DateTime @updatedAt

@@ -11,7 +11,9 @@ const PUBLIC_PATHS = ["/", "/login", "/register"];
 // Login-free public pages — token-authorized by the page itself (see
 // app/(public)/), not by session. Prefix-matched since both take a dynamic
 // [token] segment.
-const PUBLIC_PATH_PREFIXES = ["/track/", "/documents/"];
+// Meta's webhook has no session either — it authenticates itself via the
+// hub.verify_token handshake / X-Hub-Signature-256, checked inside the route.
+const PUBLIC_PATH_PREFIXES = ["/track/", "/documents/", "/api/messenger/"];
 
 // Path prefix -> roles allowed. Missing entry = any authenticated role.
 const ROLE_RULES: { prefix: string; roles: string[] }[] = [
