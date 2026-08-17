@@ -93,6 +93,14 @@ export async function startProduction(jobOrderId: string, actorId: string | null
 
   const { logAudit } = await import("@/lib/audit");
   await logAudit(actorId, "START_PRODUCTION", "JobOrder", jobOrderId, { stage: first.name });
+
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: jo.orderId } });
+  await notifyCustomer(
+    order.customerId,
+    "PRODUCTION_STARTED",
+    `Production has started on job order ${jo.joNumber} — currently at ${first.name}.`,
+    `/job-orders/${jobOrderId}`
+  );
 }
 
 /**

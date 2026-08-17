@@ -135,9 +135,10 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
     },
   });
 
-  await prisma.order.update({ where: { id: data.orderId }, data: { status: "OPEN" } });
+  const order = await prisma.order.update({ where: { id: data.orderId }, data: { status: "OPEN" } });
 
   await logAudit(user.id, "JOB_ORDER_CREATED", "JobOrder", jo.id, { joNumber, orderId: data.orderId });
+  await notifyCustomer(order.customerId, "JOB_ORDER_CREATED", `Job order ${joNumber} has been created for your order ${order.orderNumber}.`, `/orders/${data.orderId}`);
 
   redirect(`/orders/${data.orderId}`);
 }
