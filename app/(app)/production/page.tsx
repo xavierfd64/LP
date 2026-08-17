@@ -1,16 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
-import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
-import { formatDate } from "@/lib/utils";
-import { markStageInProgressAction } from "@/app/actions/production";
-import { CompleteStageForm } from "./complete-stage-form";
+import { KanbanBoard, type KanbanJobOrder } from "./kanban-board";
 
 export default async function ProductionQueuePage({ searchParams }: PageProps<"/production">) {
   const user = await requireRole(["PRODUCTION", "ADMIN", "STAFF"]);
@@ -20,87 +13,63 @@ export default async function ProductionQueuePage({ searchParams }: PageProps<"/
   const sp = await searchParams;
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
 
-  const jobOrders = await prisma.jobOrder.findMany({
-    where: { status: { in: ["IN_PROGRESS", "REWORK", "QC"] } },
-    include: {
-      order: { include: { customer: true } },
-      stageLogs: { orderBy: { createdAt: "desc" } },
-    },
-    orderBy: { deadline: "asc" },
+  const [jobOrders, templates] = await Promise.all([
+    prisma.jobOrder.findMany({
+      where: { status: { in: ["IN_PROGRESS", "REWORK", "QC", "READY"] } },
+      include: {
+        order: { include: { customer: true } },
+        stageLogs: { orderBy: { createdAt: "desc" }, include: { assignedTo: true } },
+      },
+      orderBy: { deadline: "asc" },
+    }),
+    prisma.workflowTemplate.findMany({
+      where: { active: true },
+      include: { stages: { orderBy: { order: "asc" } } },
+    }),
+  ]);
+
+  // Columns = the union of configured stage names across active workflow
+  // templates, in first-seen order — reuses the existing WorkflowTemplate/
+  // WorkflowStage architecture instead of inventing a separate stage list.
+  const READY_COLUMN = "Ready for Fulfillment";
+  const columnNames: string[] = [];
+  for (const t of templates) {
+    for (const s of t.stages) {
+      if (!columnNames.includes(s.name)) columnNames.push(s.name);
+    }
+  }
+  columnNames.push(READY_COLUMN);
+
+  const items: KanbanJobOrder[] = jobOrders.map((jo) => {
+    const currentLog = jo.stageLogs.find((l) => l.stageOrder === jo.currentStageOrder && l.status !== "COMPLETED");
+    const column = jo.status === "READY" ? READY_COLUMN : currentLog?.stageName ?? READY_COLUMN;
+    return {
+      id: jo.id,
+      joNumber: jo.joNumber,
+      productType: jo.productType,
+      quantity: jo.quantity,
+      deadline: jo.deadline ? jo.deadline.toISOString() : null,
+      status: jo.status,
+      orderNumber: jo.order.orderNumber,
+      customerName: jo.order.customer.name,
+      column,
+      currentLogId: currentLog?.id ?? null,
+      currentLogStatus: currentLog?.status ?? null,
+      assignedStaffName: currentLog?.assignedTo?.name ?? null,
+    };
   });
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Production Queue</h1>
+      <h1 className="text-2xl font-bold text-slate-900">Production Board</h1>
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
-      <Card>
-        <Table>
-          <THead>
-            <TR>
-              <TH>JO #</TH>
-              <TH>Product</TH>
-              <TH>Qty</TH>
-              <TH>Customer</TH>
-              <TH>Deadline</TH>
-              <TH>Current stage</TH>
-              <TH />
-            </TR>
-          </THead>
-          <TBody>
-            {jobOrders.map((jo) => {
-              const currentLog = jo.stageLogs.find(
-                (l) => l.stageOrder === jo.currentStageOrder && l.status !== "COMPLETED"
-              );
-              const markIP = currentLog
-                ? markStageInProgressAction.bind(null, currentLog.id)
-                : undefined;
-
-              return (
-                <TR key={jo.id}>
-                  <TD className="font-medium text-slate-900">
-                    <Link href={`/job-orders/${jo.id}`} className="underline">
-                      {jo.joNumber}
-                    </Link>
-                  </TD>
-                  <TD>{jo.productType}</TD>
-                  <TD>{jo.quantity}</TD>
-                  <TD>{jo.order.customer.name}</TD>
-                  <TD>{formatDate(jo.deadline)}</TD>
-                  <TD>
-                    {jo.status === "QC" ? (
-                      <span className="text-sm text-blue-700 font-medium">Awaiting QC</span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        {currentLog?.stageName ?? "—"}
-                        {currentLog && <StatusBadge status={currentLog.status} />}
-                      </span>
-                    )}
-                  </TD>
-                  <TD>
-                    {jo.status === "QC" ? (
-                      <Link href={`/job-orders/${jo.id}`} className="text-sm font-medium text-slate-900 underline">
-                        Go to QC
-                      </Link>
-                    ) : currentLog?.status === "READY" ? (
-                      canUpdateStage && (
-                        <form action={markIP}>
-                          <Button type="submit" size="sm" variant="outline">
-                            Start Stage
-                          </Button>
-                        </form>
-                      )
-                    ) : currentLog?.status === "IN_PROGRESS" ? (
-                      canMarkStageComplete && <CompleteStageForm jobOrderId={jo.id} stageLogId={currentLog.id} />
-                    ) : null}
-                  </TD>
-                </TR>
-              );
-            })}
-          </TBody>
-        </Table>
-        {jobOrders.length === 0 && <EmptyState label="Nothing in production right now." />}
-      </Card>
+      <KanbanBoard
+        columns={columnNames}
+        jobOrders={items}
+        canUpdateStage={canUpdateStage}
+        canMarkStageComplete={canMarkStageComplete}
+      />
     </div>
   );
 }

@@ -126,7 +126,16 @@ export async function completeCurrentStage(
   await prisma.$transaction(async (tx) => {
     await tx.jobOrderStageLog.update({
       where: { id: stageLogId },
-      data: { status: "COMPLETED", completedAt: new Date(), notes },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+        notes,
+        // Record who approved this stage even if nobody explicitly "started"
+        // it first (assignedToId would already be set in that case) — the
+        // Kanban board's "Approve for Next Stage" action needs an approver
+        // of record regardless of which path got here.
+        assignedToId: log.assignedToId ?? actorId ?? undefined,
+      },
     });
 
     if (isReworkCompletion) {

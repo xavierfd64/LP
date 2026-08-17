@@ -5,14 +5,22 @@ import { completeStageAction } from "@/app/actions/production";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 
-export function CompleteStageForm({ jobOrderId, stageLogId }: { jobOrderId: string; stageLogId: string }) {
+export function CompleteStageForm({
+  jobOrderId,
+  stageLogId,
+  label = "Complete Stage",
+}: {
+  jobOrderId: string;
+  stageLogId: string;
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
   const action = completeStageAction.bind(null, jobOrderId, stageLogId);
 
   if (!open) {
     return (
       <Button size="sm" onClick={() => setOpen(true)}>
-        Complete Stage
+        {label}
       </Button>
     );
   }
