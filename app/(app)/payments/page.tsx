@@ -22,11 +22,14 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
   if (!isStaffLike) {
     const customer = await getCurrentCustomer(user.id);
-    const orders = await prisma.order.findMany({
-      where: { customerId: customer.id },
-      include: { payments: { orderBy: { paymentDate: "desc" } } },
-      orderBy: { createdAt: "desc" },
-    });
+    const [orders, statements] = await Promise.all([
+      prisma.order.findMany({
+        where: { customerId: customer.id },
+        include: { payments: { orderBy: { paymentDate: "desc" } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.statementOfAccount.findMany({ where: { customerId: customer.id }, orderBy: { generatedAt: "desc" }, take: 12 }),
+    ]);
 
     const allPayments = orders
       .flatMap((o) => o.payments.map((p) => ({ ...p, order: o })))
@@ -75,6 +78,42 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Statement of Account</CardTitle>
+          </CardHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Statement No.</TH>
+                  <TH>Period</TH>
+                  <TH>Outstanding Balance</TH>
+                  <TH />
+                </TR>
+              </THead>
+              <TBody>
+                {statements.map((s) => (
+                  <TR key={s.id}>
+                    <TD className="font-medium text-slate-900">{s.statementNumber}</TD>
+                    <TD className="text-sm text-slate-500">
+                      {new Date(s.periodStart).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })} –{" "}
+                      {new Date(s.periodEnd.getTime() - 1).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                    </TD>
+                    <TD>{formatCurrency(s.outstandingBalance.toString())}</TD>
+                    <TD>
+                      <Link href={`/soa/${s.id}/print`} target="_blank" className="text-sm font-medium text-brand-600 underline">
+                        View
+                      </Link>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
+          {statements.length === 0 && <EmptyState label="No statements have been issued yet." />}
+        </Card>
 
         <Card>
           <CardHeader>

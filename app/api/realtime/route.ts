@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { subscribeUser, type RealtimeEvent } from "@/lib/realtime";
 import { triggerResponseReminderSweepIfDue } from "@/lib/response-reminders";
 import { triggerFallbackAssignmentSweepIfDue } from "@/lib/auto-assignment";
+import { triggerStatementScheduleSweepIfDue } from "@/lib/statement-schedule-sweep";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export async function GET(req: Request) {
   // keeps one open. Fire-and-forget: never block the connection on it.
   void triggerResponseReminderSweepIfDue();
   void triggerFallbackAssignmentSweepIfDue();
+  void triggerStatementScheduleSweepIfDue();
 
   const encoder = new TextEncoder();
 

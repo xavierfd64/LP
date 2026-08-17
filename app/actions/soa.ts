@@ -5,13 +5,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions-guard";
-import { nextStatementNumber } from "@/lib/numbering";
-import {
-  computeStatementOfAccount,
-  resolveSoaPeriod,
-  findCustomersWithOutstandingBalance,
-  type SoaPeriodSelection,
-} from "@/lib/soa";
+import { resolveSoaPeriod, findCustomersWithOutstandingBalance, type SoaPeriodSelection } from "@/lib/soa";
+import { createStatementAndNotify } from "@/lib/soa-generate";
 import { notifyCustomer } from "@/lib/notifications";
 import { logAudit } from "@/lib/audit";
 import { formatCurrency } from "@/lib/utils";
@@ -20,40 +15,6 @@ const periodSchema = z.union([
   z.object({ type: z.literal("monthly"), month: z.coerce.number().min(1).max(12), year: z.coerce.number() }),
   z.object({ type: z.literal("custom"), startDate: z.string().min(1), endDate: z.string().min(1) }),
 ]);
-
-async function createStatement(customerId: string, range: { start: Date; end: Date }, generatedById: string) {
-  const computation = await computeStatementOfAccount(customerId, range.start, range.end);
-  const statementNumber = await nextStatementNumber(range.end);
-
-  const statement = await prisma.statementOfAccount.create({
-    data: {
-      statementNumber,
-      customerId,
-      periodStart: range.start,
-      periodEnd: range.end,
-      openingBalance: computation.openingBalance,
-      totalCharges: computation.totalCharges,
-      totalPayments: computation.totalPayments,
-      adjustments: computation.adjustments,
-      outstandingBalance: computation.outstandingBalance,
-      generatedById,
-    },
-  });
-
-  await logAudit(generatedById, "SOA_GENERATED", "StatementOfAccount", statement.id, {
-    customerId,
-    outstandingBalance: computation.outstandingBalance,
-  });
-
-  await notifyCustomer(
-    customerId,
-    "SOA_GENERATED",
-    `Your Statement of Account ${statementNumber} is ready. Outstanding balance: ${formatCurrency(computation.outstandingBalance)}.`,
-    `/soa/view/${statement.id}`
-  );
-
-  return statement;
-}
 
 export async function generateStatementAction(customerId: string, _prevState: string | undefined, formData: FormData) {
   const user = await requirePermission("SOA_GENERATE");
@@ -69,7 +30,7 @@ export async function generateStatementAction(customerId: string, _prevState: st
   const range = resolveSoaPeriod(parsed.data as SoaPeriodSelection);
   if (range.end <= range.start) return "The statement period end must be after its start.";
 
-  const statement = await createStatement(customerId, range, user.id);
+  const statement = await createStatementAndNotify(customerId, range, user.id);
   redirect(`/soa/view/${statement.id}`);
 }
 
@@ -81,7 +42,7 @@ export async function generateAllStatementsForMonthAction(month: number, year: n
 
   let created = 0;
   for (const c of customers) {
-    await createStatement(c.customer.id, range, user.id);
+    await createStatementAndNotify(c.customer.id, range, user.id);
     created += 1;
   }
 
@@ -93,7 +54,7 @@ export async function generateAllStatementsForMonthAction(month: number, year: n
 export async function generateStatementForCustomerAndMonthAction(customerId: string, month: number, year: number) {
   const user = await requirePermission("SOA_GENERATE");
   const range = resolveSoaPeriod({ type: "monthly", month, year });
-  const statement = await createStatement(customerId, range, user.id);
+  const statement = await createStatementAndNotify(customerId, range, user.id);
   revalidatePath("/soa/monthly");
   return { statementId: statement.id };
 }
@@ -149,6 +110,50 @@ export async function sendStatementEmailAction(statementId: string) {
 
   await logAudit(user.id, "SOA_EMAILED", "StatementOfAccount", statementId, {});
   revalidatePath(`/soa/view/${statementId}`);
+}
+
+const scheduleSchema = z.object({
+  dayOfMonth: z.coerce.number().min(1).max(28),
+  onlyIfOutstanding: z.coerce.boolean(),
+});
+
+/** Creates (or updates, if one already exists) the customer's recurring SOA schedule — always saved disabled first; Admin enables it as a separate explicit step (toggleStatementScheduleAction), matching the spec's "configurable and explicitly enabled by Admin." */
+export async function saveStatementScheduleAction(customerId: string, _prevState: string | undefined, formData: FormData) {
+  const user = await requirePermission("SOA_GENERATE");
+
+  const parsed = scheduleSchema.safeParse({
+    dayOfMonth: formData.get("dayOfMonth"),
+    onlyIfOutstanding: formData.get("onlyIfOutstanding") === "on",
+  });
+  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+
+  const existing = await prisma.statementSchedule.findFirst({ where: { customerId } });
+  if (existing) {
+    await prisma.statementSchedule.update({
+      where: { id: existing.id },
+      data: { dayOfMonth: parsed.data.dayOfMonth, onlyIfOutstanding: parsed.data.onlyIfOutstanding },
+    });
+  } else {
+    await prisma.statementSchedule.create({
+      data: {
+        customerId,
+        dayOfMonth: parsed.data.dayOfMonth,
+        onlyIfOutstanding: parsed.data.onlyIfOutstanding,
+        createdById: user.id,
+        enabled: false,
+      },
+    });
+  }
+
+  await logAudit(user.id, "SOA_SCHEDULE_SAVED", "Customer", customerId, {});
+  revalidatePath(`/soa/customer/${customerId}`);
+}
+
+export async function toggleStatementScheduleAction(scheduleId: string, enabled: boolean) {
+  const user = await requirePermission("SOA_GENERATE");
+  const schedule = await prisma.statementSchedule.update({ where: { id: scheduleId }, data: { enabled } });
+  await logAudit(user.id, "SOA_SCHEDULE_TOGGLED", "Customer", schedule.customerId, { enabled });
+  revalidatePath(`/soa/customer/${schedule.customerId}`);
 }
 
 /** Prefills the floating Chatbox with a link to this statement in the customer's own conversation — reuses the existing Chatbox rather than a separate send mechanism. */

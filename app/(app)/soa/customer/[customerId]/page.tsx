@@ -10,6 +10,7 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { computeStatementOfAccount, deriveSoaBalanceStatus } from "@/lib/soa";
 import { PeriodForm } from "./period-form";
 import { AdjustmentForm } from "./adjustment-form";
+import { ScheduleForm } from "./schedule-form";
 
 const STATUS_TONE = { CURRENT: "blue", DUE: "yellow", OVERDUE: "red" } as const;
 
@@ -22,9 +23,10 @@ export default async function CustomerSoaPage({ params }: PageProps<"/soa/custom
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
   if (!customer) notFound();
 
-  const [statements, openOrders] = await Promise.all([
+  const [statements, openOrders, schedule] = await Promise.all([
     prisma.statementOfAccount.findMany({ where: { customerId }, orderBy: { generatedAt: "desc" }, take: 20 }),
     prisma.order.findMany({ where: { customerId, status: { not: "CANCELLED" } }, select: { dueDate: true } }),
+    prisma.statementSchedule.findFirst({ where: { customerId } }),
   ]);
 
   const snapshot = await computeStatementOfAccount(customerId, new Date(0), new Date());
@@ -89,6 +91,30 @@ export default async function CustomerSoaPage({ params }: PageProps<"/soa/custom
           </CardHeader>
           <CardContent>
             <AdjustmentForm customerId={customerId} />
+          </CardContent>
+        </Card>
+      )}
+
+      {canGenerate && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly Statement Schedule</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScheduleForm
+              customerId={customerId}
+              schedule={
+                schedule
+                  ? {
+                      id: schedule.id,
+                      dayOfMonth: schedule.dayOfMonth,
+                      onlyIfOutstanding: schedule.onlyIfOutstanding,
+                      enabled: schedule.enabled,
+                      lastRunAt: schedule.lastRunAt ? schedule.lastRunAt.toISOString() : null,
+                    }
+                  : null
+              }
+            />
           </CardContent>
         </Card>
       )}
