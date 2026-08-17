@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
-import { markAllNotificationsReadAction, openNotificationAction } from "@/app/actions/notifications";
+import { markAllNotificationsReadAction, openNotificationAction, markNotificationReadAction } from "@/app/actions/notifications";
+
+/** Notification types created by the messaging system (see app/actions/messages.ts, lib/auto-assignment.ts, lib/response-reminders.ts) — all link to /messages/{conversationId}. Clicking these should open the floating Chatbox straight to that conversation instead of navigating to the old standalone page. */
+const CHAT_NOTIFICATION_TYPES = new Set([
+  "NEW_MESSAGE",
+  "CONVERSATION_ASSIGNED",
+  "PRIVATE_CHAT_STARTED",
+  "GROUP_CHAT_CREATED",
+  "CHAT_RESPONSE_REMINDER",
+]);
 
 type NotificationItem = {
   id: string;
@@ -86,18 +95,42 @@ export function NotificationBell({
                 <p className="px-3 py-6 text-center text-sm text-slate-400">No notifications yet.</p>
               )}
               {notifications.map((n) => {
+                const isChat = CHAT_NOTIFICATION_TYPES.has(n.type) && n.link?.startsWith("/messages/");
+                const rowClassName = cn(
+                  "block w-full border-b border-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-50",
+                  !n.read && "bg-brand-50/60"
+                );
+                const rowContent = (
+                  <>
+                    <p className={cn("text-slate-800", !n.read && "font-medium")}>{n.message}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(n.createdAt)}</p>
+                  </>
+                );
+
+                if (isChat) {
+                  const conversationId = n.link!.slice("/messages/".length);
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className={rowClassName}
+                      onClick={() => {
+                        handleOpen(n.id);
+                        setOpen(false);
+                        markNotificationReadAction(n.id);
+                        window.dispatchEvent(new CustomEvent("chatbox:open-conversation", { detail: { conversationId } }));
+                      }}
+                    >
+                      {rowContent}
+                    </button>
+                  );
+                }
+
                 const openAction = openNotificationAction.bind(null, n.id);
                 return (
                   <form key={n.id} action={openAction} onSubmit={() => handleOpen(n.id)}>
-                    <button
-                      type="submit"
-                      className={cn(
-                        "block w-full border-b border-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-50",
-                        !n.read && "bg-brand-50/60"
-                      )}
-                    >
-                      <p className={cn("text-slate-800", !n.read && "font-medium")}>{n.message}</p>
-                      <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(n.createdAt)}</p>
+                    <button type="submit" className={rowClassName}>
+                      {rowContent}
                     </button>
                   </form>
                 );

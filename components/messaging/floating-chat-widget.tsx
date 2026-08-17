@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { MessageCircle, X, ChevronLeft, Search, Users, UserPlus, ArrowRightLeft } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
 import {
@@ -119,6 +118,22 @@ export function FloatingChatWidget({ currentUserId, role }: { currentUserId: str
     }
     window.addEventListener("chatbox:open-reference", onOpenReference);
     return () => window.removeEventListener("chatbox:open-reference", onOpenReference);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clicking a chat-related notification (see NotificationBell) dispatches
+  // this instead of navigating to the old /messages page — open (or
+  // re-open) the widget straight to that conversation, wherever the user
+  // currently is in the app.
+  useEffect(() => {
+    function onOpenConversation(e: Event) {
+      const detail = (e as CustomEvent<{ conversationId: string }>).detail;
+      setOpen(true);
+      hasOpenedOnce.current = true;
+      openThread(detail.conversationId);
+    }
+    window.addEventListener("chatbox:open-conversation", onOpenConversation);
+    return () => window.removeEventListener("chatbox:open-conversation", onOpenConversation);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -419,11 +434,6 @@ function ConversationList({
             </div>
           </button>
         ))}
-      </div>
-      <div className="border-t border-slate-100 p-2 text-center">
-        <Link href="/messages" className="text-xs text-slate-500 underline hover:text-slate-800">
-          View full message history
-        </Link>
       </div>
     </div>
   );

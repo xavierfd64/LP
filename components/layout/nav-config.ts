@@ -11,7 +11,6 @@ const STAFF_NAV_RULES: { label: string; href: string; permission?: Permission }[
   { label: "Inventory", href: "/inventory" },
   { label: "Payments", href: "/payments", permission: "PAYMENT_VIEW" },
   { label: "Reward Rules", href: "/admin/rewards", permission: "REWARDS_MANAGE_CONFIG" },
-  { label: "Messages", href: "/messages", permission: "COMMUNICATION_VIEW" },
 ];
 
 /**
@@ -31,7 +30,6 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "Production", href: "/production" },
         { label: "Inventory", href: "/inventory" },
         { label: "Payments", href: "/payments" },
-        { label: "Messages", href: "/messages" },
         { label: "Workflow Templates", href: "/admin/workflow-templates" },
         { label: "Users", href: "/admin/users" },
         { label: "Staff & Permissions", href: "/admin/staff-permissions" },
@@ -56,7 +54,6 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "My Orders", href: "/orders" },
         { label: "Payment", href: "/payments" },
         { label: "My Rewards", href: "/account/rewards" },
-        { label: "Messages", href: "/messages" },
       ];
     default:
       return [];
