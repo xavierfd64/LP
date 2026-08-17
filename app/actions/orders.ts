@@ -17,6 +17,7 @@ const orderSchema = z.object({
   requiredPartialPct: z.coerce.number().int().min(0).max(100).default(50),
   termsApprovedBy: z.string().optional(),
   termsReason: z.string().optional(),
+  dueDate: z.string().optional(),
 });
 
 export async function createOrderAction(_prevState: string | undefined, formData: FormData) {
@@ -30,6 +31,7 @@ export async function createOrderAction(_prevState: string | undefined, formData
     requiredPartialPct: formData.get("requiredPartialPct") || 50,
     termsApprovedBy: formData.get("termsApprovedBy") || undefined,
     termsReason: formData.get("termsReason") || undefined,
+    dueDate: formData.get("dueDate") || undefined,
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
@@ -50,6 +52,7 @@ export async function createOrderAction(_prevState: string | undefined, formData
       requiredPartialPct: data.requiredPartialPct,
       termsApprovedBy: data.paymentTermType === "APPROVED_TERMS" ? data.termsApprovedBy : undefined,
       termsReason: data.paymentTermType === "APPROVED_TERMS" ? data.termsReason : undefined,
+      dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
     },
   });
 

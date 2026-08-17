@@ -50,6 +50,11 @@ export function OrderForm({
             <Input id="totalAmount" name="totalAmount" type="number" min={0} step="0.01" required defaultValue={defaultTotal ?? 0} />
           </div>
           <div>
+            <Label htmlFor="dueDate">Payment Due Date (optional)</Label>
+            <Input id="dueDate" name="dueDate" type="date" />
+            <p className="mt-1 text-xs text-slate-400">Drives Due/Overdue status on the Statement of Account.</p>
+          </div>
+          <div>
             <Label htmlFor="paymentTermType">Payment Terms</Label>
             <Select
               id="paymentTermType"
