@@ -138,6 +138,7 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
                     name: inquiry.service.name,
                     category: inquiry.service.category,
                     specFields: (inquiry.service.specFields as string[]) ?? [],
+                    workflowTemplateId: inquiry.service.workflowTemplateId,
                   }
                 : null,
             }}

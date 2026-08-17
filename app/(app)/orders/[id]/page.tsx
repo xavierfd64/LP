@@ -40,7 +40,7 @@ export default async function OrderDetailPage({
     where: { id },
     include: {
       customer: true,
-      quotation: true,
+      quotation: { include: { lineItems: { include: { service: true } } } },
       jobOrders: { include: { workflowTemplate: true }, orderBy: { joNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
       fulfillments: { orderBy: { createdAt: "desc" }, include: { jobOrder: true } },
@@ -74,6 +74,20 @@ export default async function OrderDetailPage({
   const templates = isStaffLike
     ? await prisma.workflowTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } })
     : [];
+
+  // "Encode once, carry forward": prefill a new Job Order from the Order's
+  // Quotation so staff don't retype the Service, specs, and quantity that
+  // were already captured — still fully editable/overridable in the form.
+  const carryOverLineItem = order.quotation?.lineItems[0];
+  const defaultJoService = carryOverLineItem?.service
+    ? {
+        id: carryOverLineItem.service.id,
+        name: carryOverLineItem.service.name,
+        category: carryOverLineItem.service.category,
+        specFields: (carryOverLineItem.service.specFields as string[]) ?? [],
+        workflowTemplateId: carryOverLineItem.service.workflowTemplateId,
+      }
+    : null;
 
   const activeTrackingLink =
     isStaffLike && canManageTracking ? await findActiveTrackingLink(order.id) : null;
@@ -232,7 +246,16 @@ export default async function OrderDetailPage({
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Job Orders</CardTitle>
-          {isStaffLike && canModifyOrder && <AddJobOrderForm orderId={order.id} templates={templates} />}
+          {isStaffLike && canModifyOrder && (
+            <AddJobOrderForm
+              orderId={order.id}
+              templates={templates}
+              defaultService={defaultJoService}
+              defaultQuantity={carryOverLineItem?.qty}
+              defaultDescription={carryOverLineItem?.description}
+              defaultSpecs={(carryOverLineItem?.specs as Record<string, string> | null) ?? null}
+            />
+          )}
         </CardHeader>
         <Table>
           <THead>

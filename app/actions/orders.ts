@@ -79,7 +79,8 @@ export async function createOrderAction(_prevState: string | undefined, formData
 
 const jobOrderSchema = z.object({
   orderId: z.string().min(1),
-  productType: z.string().min(1),
+  serviceId: z.string().min(1, "Please select a service."),
+  specs: z.string().optional(),
   description: z.string().min(1),
   quantity: z.coerce.number().int().positive(),
   workflowTemplateId: z.string().min(1),
@@ -92,7 +93,8 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
 
   const parsed = jobOrderSchema.safeParse({
     orderId: formData.get("orderId"),
-    productType: formData.get("productType"),
+    serviceId: formData.get("serviceId"),
+    specs: formData.get("specs") || undefined,
     description: formData.get("description"),
     quantity: formData.get("quantity"),
     workflowTemplateId: formData.get("workflowTemplateId"),
@@ -102,13 +104,28 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
   const data = parsed.data;
+
+  const service = await prisma.service.findUnique({ where: { id: data.serviceId } });
+  if (!service || !service.active) return "Please select a valid, active service.";
+
+  let specs: Record<string, string> | undefined;
+  if (data.specs) {
+    try {
+      specs = JSON.parse(data.specs);
+    } catch {
+      specs = undefined;
+    }
+  }
+
   const joNumber = await nextJoNumber(data.orderId);
 
   const jo = await prisma.jobOrder.create({
     data: {
       orderId: data.orderId,
       joNumber,
-      productType: data.productType,
+      productType: service.name,
+      serviceId: service.id,
+      specs,
       description: data.description,
       quantity: data.quantity,
       workflowTemplateId: data.workflowTemplateId,

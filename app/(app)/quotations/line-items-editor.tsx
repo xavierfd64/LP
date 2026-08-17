@@ -24,7 +24,7 @@ const emptyItem: LineItem = { serviceId: "", productType: "", description: "", q
 
 function toServiceResult(li: LineItem): ServiceSearchResult | null {
   if (!li.serviceId) return null;
-  return { id: li.serviceId, name: li.productType, category: li.category ?? null, specFields: li.specFields ?? [] };
+  return { id: li.serviceId, name: li.productType, category: li.category ?? null, specFields: li.specFields ?? [], workflowTemplateId: null };
 }
 
 export function LineItemsEditor({ initialItems }: { initialItems: LineItem[] }) {

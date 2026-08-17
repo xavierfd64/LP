@@ -5,12 +5,34 @@ import { createJobOrderAction } from "@/app/actions/orders";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { ServicePicker } from "@/components/services/service-picker";
+import { SpecFieldsEditor } from "@/components/services/spec-fields-editor";
+import type { ServiceSearchResult } from "@/app/actions/services";
 
 type Template = { id: string; name: string };
 
-export function AddJobOrderForm({ orderId, templates }: { orderId: string; templates: Template[] }) {
+export function AddJobOrderForm({
+  orderId,
+  templates,
+  defaultService,
+  defaultQuantity,
+  defaultDescription,
+  defaultSpecs,
+}: {
+  orderId: string;
+  templates: Template[];
+  defaultService?: ServiceSearchResult | null;
+  defaultQuantity?: number;
+  defaultDescription?: string;
+  defaultSpecs?: Record<string, string> | null;
+}) {
   const [error, formAction, pending] = useActionState(createJobOrderAction, undefined);
   const [open, setOpen] = useState(false);
+  const [service, setService] = useState<ServiceSearchResult | null>(defaultService ?? null);
+  // Prefilled from the selected Service's configured production flow (spec: "the
+  // system automatically loads that service's production flow"), but staff can
+  // still override it via the dropdown below.
+  const [workflowTemplateId, setWorkflowTemplateId] = useState(defaultService?.workflowTemplateId ?? "");
 
   if (!open) {
     return (
@@ -24,10 +46,27 @@ export function AddJobOrderForm({ orderId, templates }: { orderId: string; templ
     <form action={formAction} className="space-y-3 rounded-md border border-slate-200 p-4">
       <input type="hidden" name="orderId" value={orderId} />
       {error && <Alert tone="error">{error}</Alert>}
+      <ServicePicker
+        name="serviceId"
+        initialService={defaultService}
+        onSelect={(s) => {
+          setService(s);
+          if (s.workflowTemplateId) setWorkflowTemplateId(s.workflowTemplateId);
+        }}
+      />
+      {service && service.specFields.length > 0 && (
+        <SpecFieldsEditor name="specs" fields={service.specFields} initialSpecs={defaultSpecs} />
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <Label htmlFor="workflowTemplateId">Workflow template</Label>
-          <Select id="workflowTemplateId" name="workflowTemplateId" required>
+          <Label htmlFor="workflowTemplateId">Production flow</Label>
+          <Select
+            id="workflowTemplateId"
+            name="workflowTemplateId"
+            required
+            value={workflowTemplateId}
+            onChange={(e) => setWorkflowTemplateId(e.target.value)}
+          >
             <option value="">Select...</option>
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
@@ -37,12 +76,8 @@ export function AddJobOrderForm({ orderId, templates }: { orderId: string; templ
           </Select>
         </div>
         <div>
-          <Label htmlFor="productType">Product type</Label>
-          <Input id="productType" name="productType" required placeholder="e.g. Jersey" />
-        </div>
-        <div>
           <Label htmlFor="quantity">Quantity</Label>
-          <Input id="quantity" name="quantity" type="number" min={1} required />
+          <Input id="quantity" name="quantity" type="number" min={1} required defaultValue={defaultQuantity} />
         </div>
         <div>
           <Label htmlFor="deadline">Deadline</Label>
@@ -51,7 +86,7 @@ export function AddJobOrderForm({ orderId, templates }: { orderId: string; templ
       </div>
       <div>
         <Label htmlFor="description">Description</Label>
-        <Textarea id="description" name="description" rows={2} required />
+        <Textarea id="description" name="description" rows={2} required defaultValue={defaultDescription} />
       </div>
       <div>
         <Label htmlFor="productionInstructions">Production Instructions (optional)</Label>
@@ -63,7 +98,7 @@ export function AddJobOrderForm({ orderId, templates }: { orderId: string; templ
         />
       </div>
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
+        <Button type="submit" size="sm" disabled={pending || !service}>
           {pending ? "Adding..." : "Add Job Order"}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>

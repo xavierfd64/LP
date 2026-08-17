@@ -13,6 +13,7 @@ export type ServiceSearchResult = {
   name: string;
   category: string | null;
   specFields: string[];
+  workflowTemplateId: string | null;
 };
 
 /**
@@ -34,9 +35,15 @@ export async function searchActiveServicesAction(query: string): Promise<Service
     },
     take: 10,
     orderBy: { name: "asc" },
-    select: { id: true, name: true, category: true, specFields: true },
+    select: { id: true, name: true, category: true, specFields: true, workflowTemplateId: true },
   });
-  return services.map((s) => ({ id: s.id, name: s.name, category: s.category, specFields: (s.specFields as string[]) ?? [] }));
+  return services.map((s) => ({
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    specFields: (s.specFields as string[]) ?? [],
+    workflowTemplateId: s.workflowTemplateId,
+  }));
 }
 
 const serviceSchema = z.object({
@@ -114,7 +121,10 @@ export async function quickAddServiceAction(formData: FormData): Promise<
   });
 
   await logAudit(user.id, "SERVICE_CREATED", "Service", service.id, { name: service.name });
-  return { ok: true, service: { id: service.id, name: service.name, category: service.category, specFields } };
+  return {
+    ok: true,
+    service: { id: service.id, name: service.name, category: service.category, specFields, workflowTemplateId: service.workflowTemplateId },
+  };
 }
 
 export async function updateServiceAction(serviceId: string, _prevState: string | undefined, formData: FormData) {
