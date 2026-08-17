@@ -22,7 +22,7 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
 
   const inquiry = await prisma.inquiry.findUnique({
     where: { id },
-    include: { customer: true, quotations: true },
+    include: { customer: true, quotations: true, service: true },
   });
   if (!inquiry) notFound();
 
@@ -130,8 +130,16 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
             inquiry={{
               id: inquiry.id,
               description: inquiry.description,
-              desiredProduct: inquiry.desiredProduct,
               roughQty: inquiry.roughQty,
+              specs: (inquiry.specs as Record<string, string> | null) ?? null,
+              service: inquiry.service
+                ? {
+                    id: inquiry.service.id,
+                    name: inquiry.service.name,
+                    category: inquiry.service.category,
+                    specFields: (inquiry.service.specFields as string[]) ?? [],
+                  }
+                : null,
             }}
           />
           <form action={cancelAction}>

@@ -12,9 +12,19 @@ import { notifyStaff } from "@/lib/notifications";
 const inquirySchema = z.object({
   customerId: z.string().optional(),
   description: z.string().min(5, "Please describe what you need."),
-  desiredProduct: z.string().min(1, "Product type is required."),
+  serviceId: z.string().min(1, "Please select a service."),
+  specs: z.string().optional(),
   roughQty: z.coerce.number().int().positive().optional(),
 });
+
+function parseSpecs(raw: string | undefined): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
 
 export async function createInquiryAction(_prevState: string | undefined, formData: FormData) {
   const user = await requireUser();
@@ -24,7 +34,8 @@ export async function createInquiryAction(_prevState: string | undefined, formDa
   const parsed = inquirySchema.safeParse({
     customerId: formData.get("customerId") || undefined,
     description: formData.get("description"),
-    desiredProduct: formData.get("desiredProduct"),
+    serviceId: formData.get("serviceId"),
+    specs: formData.get("specs") || undefined,
     roughQty: formData.get("roughQty") || undefined,
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
@@ -36,11 +47,16 @@ export async function createInquiryAction(_prevState: string | undefined, formDa
   }
   if (!customerId) return "Please select a customer.";
 
+  const service = await prisma.service.findUnique({ where: { id: parsed.data.serviceId } });
+  if (!service || !service.active) return "Please select a valid, active service.";
+
   const inquiry = await prisma.inquiry.create({
     data: {
       customerId,
       description: parsed.data.description,
-      desiredProduct: parsed.data.desiredProduct,
+      desiredProduct: service.name,
+      serviceId: service.id,
+      specs: parseSpecs(parsed.data.specs),
       roughQty: parsed.data.roughQty,
     },
   });
@@ -65,7 +81,8 @@ export async function closeInquiryAction(inquiryId: string) {
 
 const editInquirySchema = z.object({
   description: z.string().min(5, "Please describe what you need."),
-  desiredProduct: z.string().min(1, "Product type is required."),
+  serviceId: z.string().min(1, "Please select a service."),
+  specs: z.string().optional(),
   roughQty: z.coerce.number().int().positive().optional(),
 });
 
@@ -86,17 +103,27 @@ export async function updateInquiryAction(inquiryId: string, _prevState: string 
 
   const parsed = editInquirySchema.safeParse({
     description: formData.get("description"),
-    desiredProduct: formData.get("desiredProduct"),
+    serviceId: formData.get("serviceId"),
+    specs: formData.get("specs") || undefined,
     roughQty: formData.get("roughQty") || undefined,
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
+  const service = await prisma.service.findUnique({ where: { id: parsed.data.serviceId } });
+  if (!service || !service.active) return "Please select a valid, active service.";
+
   await prisma.inquiry.update({
     where: { id: inquiryId },
-    data: parsed.data,
+    data: {
+      description: parsed.data.description,
+      desiredProduct: service.name,
+      serviceId: service.id,
+      specs: parseSpecs(parsed.data.specs),
+      roughQty: parsed.data.roughQty,
+    },
   });
 
-  await logAudit(user.id, "INQUIRY_UPDATED", "Inquiry", inquiryId, parsed.data);
+  await logAudit(user.id, "INQUIRY_UPDATED", "Inquiry", inquiryId, { desiredProduct: service.name });
 
   redirect(`/inquiries/${inquiryId}`);
 }

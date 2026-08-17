@@ -1,37 +1,25 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createInquiryAction } from "@/app/actions/inquiries";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Textarea, Select } from "@/components/ui/input";
+import { Input, Label, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { CustomerPicker } from "@/components/customers/customer-picker";
+import { ServicePicker } from "@/components/services/service-picker";
+import { SpecFieldsEditor } from "@/components/services/spec-fields-editor";
+import type { ServiceSearchResult } from "@/app/actions/services";
 
-type Customer = { id: string; name: string; companyName: string | null };
-
-export function InquiryForm({ customers }: { customers?: Customer[] }) {
+export function InquiryForm({ showCustomerPicker }: { showCustomerPicker?: boolean }) {
   const [error, formAction, pending] = useActionState(createInquiryAction, undefined);
+  const [service, setService] = useState<ServiceSearchResult | null>(null);
 
   return (
     <form action={formAction} className="space-y-4">
       {error && <Alert tone="error">{error}</Alert>}
-      {customers && (
-        <div>
-          <Label htmlFor="customerId">Customer</Label>
-          <Select id="customerId" name="customerId" required>
-            <option value="">Select a customer...</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.companyName ? ` (${c.companyName})` : ""}
-              </option>
-            ))}
-          </Select>
-        </div>
-      )}
-      <div>
-        <Label htmlFor="desiredProduct">Product type</Label>
-        <Input id="desiredProduct" name="desiredProduct" required placeholder="e.g. Jersey, Tarpaulin, Signage" />
-      </div>
+      {showCustomerPicker && <CustomerPicker name="customerId" />}
+      <ServicePicker name="serviceId" canAddService={showCustomerPicker} onSelect={setService} />
+      {service && <SpecFieldsEditor name="specs" fields={service.specFields} />}
       <div>
         <Label htmlFor="roughQty">Rough quantity</Label>
         <Input id="roughQty" name="roughQty" type="number" min={1} placeholder="e.g. 25" />
@@ -40,7 +28,7 @@ export function InquiryForm({ customers }: { customers?: Customer[] }) {
         <Label htmlFor="description">Description</Label>
         <Textarea id="description" name="description" required rows={4} placeholder="Tell us what you need..." />
       </div>
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending || !service}>
         {pending ? "Submitting..." : "Submit Inquiry"}
       </Button>
     </form>
