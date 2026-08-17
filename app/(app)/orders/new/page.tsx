@@ -11,13 +11,8 @@ export default async function NewOrderPage({ searchParams }: PageProps<"/orders/
   const sp = await searchParams;
   const quotationId = typeof sp.quotationId === "string" ? sp.quotationId : undefined;
 
-  const customers = await prisma.customer.findMany({
-    select: { id: true, name: true, companyName: true, isQualifiedForTerms: true },
-    orderBy: { name: "asc" },
-  });
-
   const quotation = quotationId
-    ? await prisma.quotation.findUnique({ where: { id: quotationId } })
+    ? await prisma.quotation.findUnique({ where: { id: quotationId }, include: { customer: true } })
     : null;
 
   return (
@@ -29,9 +24,21 @@ export default async function NewOrderPage({ searchParams }: PageProps<"/orders/
         </CardHeader>
         <CardContent>
           <OrderForm
-            customers={customers}
             quotationId={quotation?.id}
-            defaultCustomerId={quotation?.customerId}
+            defaultCustomer={
+              quotation
+                ? {
+                    id: quotation.customer.id,
+                    displayId: quotation.customer.displayId,
+                    name: quotation.customer.name,
+                    companyName: quotation.customer.companyName,
+                    email: quotation.customer.email,
+                    contactNumber: quotation.customer.contactNumber,
+                    hasLogin: !!quotation.customer.userId,
+                    isQualifiedForTerms: quotation.customer.isQualifiedForTerms,
+                  }
+                : null
+            }
             defaultTotal={quotation ? Number(quotation.total) : undefined}
           />
         </CardContent>

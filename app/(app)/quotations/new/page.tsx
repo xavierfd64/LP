@@ -12,13 +12,8 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
   const sp = await searchParams;
   const inquiryId = typeof sp.inquiryId === "string" ? sp.inquiryId : undefined;
 
-  const customers = await prisma.customer.findMany({
-    select: { id: true, name: true, companyName: true },
-    orderBy: { name: "asc" },
-  });
-
   const inquiry = inquiryId
-    ? await prisma.inquiry.findUnique({ where: { id: inquiryId } })
+    ? await prisma.inquiry.findUnique({ where: { id: inquiryId }, include: { customer: true } })
     : null;
 
   // If this inquiry was reopened by a customer's revision request, prefill
@@ -47,9 +42,21 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
         </CardHeader>
         <CardContent>
           <QuotationForm
-            customers={customers}
             inquiryId={inquiry?.id}
-            defaultCustomerId={inquiry?.customerId}
+            defaultCustomer={
+              inquiry
+                ? {
+                    id: inquiry.customer.id,
+                    displayId: inquiry.customer.displayId,
+                    name: inquiry.customer.name,
+                    companyName: inquiry.customer.companyName,
+                    email: inquiry.customer.email,
+                    contactNumber: inquiry.customer.contactNumber,
+                    hasLogin: !!inquiry.customer.userId,
+                    isQualifiedForTerms: inquiry.customer.isQualifiedForTerms,
+                  }
+                : null
+            }
             defaultProductType={inquiry?.desiredProduct}
             defaultLineItems={priorQuotation?.lineItems.map((li) => ({
               productType: li.productType,

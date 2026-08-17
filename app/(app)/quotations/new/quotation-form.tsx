@@ -3,22 +3,20 @@
 import { useActionState } from "react";
 import { createQuotationAction } from "@/app/actions/quotations";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Textarea, Select } from "@/components/ui/input";
+import { Input, Label, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { LineItemsEditor } from "../line-items-editor";
-
-type Customer = { id: string; name: string; companyName: string | null };
+import { CustomerPicker } from "@/components/customers/customer-picker";
+import type { CustomerSearchResult } from "@/app/actions/customers";
 
 export function QuotationForm({
-  customers,
   inquiryId,
-  defaultCustomerId,
+  defaultCustomer,
   defaultProductType,
   defaultLineItems,
 }: {
-  customers: Customer[];
   inquiryId?: string;
-  defaultCustomerId?: string;
+  defaultCustomer?: CustomerSearchResult | null;
   defaultProductType?: string;
   defaultLineItems?: { productType: string; description: string; qty: number; unitPrice: number }[];
 }) {
@@ -29,18 +27,7 @@ export function QuotationForm({
       {error && <Alert tone="error">{error}</Alert>}
       {inquiryId && <input type="hidden" name="inquiryId" value={inquiryId} />}
 
-      <div>
-        <Label htmlFor="customerId">Customer</Label>
-        <Select id="customerId" name="customerId" required defaultValue={defaultCustomerId ?? ""}>
-          <option value="">Select a customer...</option>
-          {customers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.companyName ? ` (${c.companyName})` : ""}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <CustomerPicker name="customerId" initialCustomer={defaultCustomer} />
 
       <div>
         <Label htmlFor="validUntil">Valid until</Label>

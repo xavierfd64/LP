@@ -5,11 +5,13 @@ export type NavItem = { label: string; href: string };
 const STAFF_NAV_RULES: { label: string; href: string; permission?: Permission }[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Inquiries", href: "/inquiries", permission: "INQUIRY_VIEW" },
+  { label: "Customers", href: "/customers", permission: "CUSTOMER_VIEW" },
   { label: "Quotations", href: "/quotations", permission: "QUOTATION_VIEW" },
   { label: "Orders", href: "/orders", permission: "ORDER_VIEW" },
   { label: "Production", href: "/production", permission: "PRODUCTION_VIEW" },
   { label: "Inventory", href: "/inventory" },
   { label: "Payments", href: "/payments", permission: "PAYMENT_VIEW" },
+  { label: "Transaction Summary", href: "/reports/summary", permission: "REPORTS_VIEW" },
   { label: "Reward Rules", href: "/admin/rewards", permission: "REWARDS_MANAGE_CONFIG" },
 ];
 
