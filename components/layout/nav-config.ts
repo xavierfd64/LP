@@ -13,6 +13,7 @@ const STAFF_NAV_RULES: { label: string; href: string; permission?: Permission }[
   { label: "Payments", href: "/payments", permission: "PAYMENT_VIEW" },
   { label: "Statement of Account", href: "/soa", permission: "SOA_VIEW" },
   { label: "Transaction Summary", href: "/reports/summary", permission: "REPORTS_VIEW" },
+  { label: "Services", href: "/admin/services", permission: "SERVICE_VIEW" },
   { label: "Reward Rules", href: "/admin/rewards", permission: "REWARDS_MANAGE_CONFIG" },
   { label: "Email Log", href: "/admin/email-log", permission: "EMAIL_LOG_VIEW" },
 ];
@@ -35,6 +36,7 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "Inventory", href: "/inventory" },
         { label: "Payments", href: "/payments" },
         { label: "Statement of Account", href: "/soa" },
+        { label: "Services", href: "/admin/services" },
         { label: "Workflow Templates", href: "/admin/workflow-templates" },
         { label: "Users", href: "/admin/users" },
         { label: "Staff & Permissions", href: "/admin/staff-permissions" },
