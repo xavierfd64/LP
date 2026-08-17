@@ -13,7 +13,11 @@ import { logAudit } from "@/lib/audit";
 const expirySchema = z.object({
   expiresOption: z.enum(["none", "7", "30", "custom"]),
   customDate: z.string().optional(),
-  accessLevel: z.enum(["VIEW_ONLY", "VIEW_DOWNLOAD"]),
+  // Optional: the Customer self-service form never renders this field at
+  // all (self-service sharing is always View Only, enforced below), so
+  // formData.get("accessLevel") is null for that submission — requiring
+  // the key would make every customer share silently fail validation.
+  accessLevel: z.enum(["VIEW_ONLY", "VIEW_DOWNLOAD"]).optional(),
 });
 
 function resolveExpiresAt(input: z.infer<typeof expirySchema>): Date | null {
@@ -50,13 +54,13 @@ export async function generateDocumentShareLinkAction(docType: ShareDocType, doc
   const parsed = expirySchema.safeParse({
     expiresOption: formData.get("expiresOption"),
     customDate: formData.get("customDate") || undefined,
-    accessLevel: formData.get("accessLevel"),
+    accessLevel: formData.get("accessLevel") || undefined,
   });
   if (!parsed.success) return;
 
   // A Customer sharing their own document may never grant PDF download —
   // that's an Admin/authorized-Staff decision only.
-  const accessLevel = user.role === "CUSTOMER" ? "VIEW_ONLY" : parsed.data.accessLevel;
+  const accessLevel = user.role === "CUSTOMER" ? "VIEW_ONLY" : (parsed.data.accessLevel ?? "VIEW_ONLY");
 
   const token = generateSecureToken();
   await prisma.documentShareLink.create({
@@ -93,10 +97,10 @@ export async function regenerateDocumentShareLinkAction(docType: ShareDocType, d
   const parsed = expirySchema.safeParse({
     expiresOption: formData.get("expiresOption"),
     customDate: formData.get("customDate") || undefined,
-    accessLevel: formData.get("accessLevel"),
+    accessLevel: formData.get("accessLevel") || undefined,
   });
   if (!parsed.success) return;
-  const accessLevel = user.role === "CUSTOMER" ? "VIEW_ONLY" : parsed.data.accessLevel;
+  const accessLevel = user.role === "CUSTOMER" ? "VIEW_ONLY" : (parsed.data.accessLevel ?? "VIEW_ONLY");
 
   await prisma.documentShareLink.updateMany({
     where: { ...shareLinkWhereForDoc(docType, docId), revokedAt: null },

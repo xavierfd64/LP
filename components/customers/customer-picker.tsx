@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Search, Plus, X, Check } from "lucide-react";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -182,7 +183,16 @@ export function QuickAddCustomerModal({
     onCreated(result.customer);
   }
 
-  return (
+  // Rendered via a portal straight onto document.body: QuickAddCustomerModal
+  // is opened from inside CustomerPicker, which itself lives inside the
+  // outer Quotation/Order preparation <form> — nesting this modal's own
+  // <form> inside that one is invalid HTML and silently breaks submission
+  // (the browser/React can't tell which form a nested submit belongs to).
+  // A portal keeps the DOM node a sibling of <body>, not a descendant of
+  // any surrounding form, regardless of where CustomerPicker is used.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
@@ -233,6 +243,7 @@ export function QuickAddCustomerModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
