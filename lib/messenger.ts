@@ -132,6 +132,63 @@ export async function handleMessengerOptin(psid: string, optinRef: string): Prom
   return true;
 }
 
+export type ManualDispatchResult =
+  | { status: "SENT" }
+  | { status: "FAILED"; reason: string }
+  | { status: "SKIPPED"; reason: string };
+
+/**
+ * Kanban "Messenger Dispatch" send path — a Staff-composed/edited message is
+ * sent verbatim (no event template wrapping, no category on/off override:
+ * this is an explicit one-off action a Staff member just triggered, not an
+ * automatic notification). Shares the same real constraints and MessengerLog
+ * trail as sendMessengerEvent (never a second, parallel send path): the
+ * master switch must be on, the Page must be configured, and the customer
+ * must have actually connected/opted in — otherwise this is SKIPPED with a
+ * truthful reason rather than silently pretending to send.
+ */
+export async function sendManualMessengerDispatch(
+  customerId: string,
+  text: string,
+  related: { type: string; id: string }
+): Promise<ManualDispatchResult> {
+  const settings = await getBusinessSettings();
+  if (!settings.messengerEnabled) {
+    return { status: "SKIPPED", reason: "Messenger integration is turned off." };
+  }
+
+  const connection = await prisma.messengerConnection.findUnique({ where: { customerId } });
+  if (!connection?.connected || !connection.psid) {
+    return { status: "SKIPPED", reason: "This customer has not connected Messenger yet." };
+  }
+  if (!settings.messengerPageId || !settings.messengerPageAccessTokenEnc) {
+    return { status: "SKIPPED", reason: "Messenger Page is not configured yet." };
+  }
+
+  const log = await prisma.messengerLog.create({
+    data: {
+      customerId,
+      message: text,
+      eventType: "MANUAL_DISPATCH",
+      relatedType: related.type,
+      relatedId: related.id,
+      status: "QUEUED",
+    },
+  });
+
+  await prisma.messengerLog.update({ where: { id: log.id }, data: { status: "SENDING" } });
+  try {
+    const pageAccessToken = decryptSecret(settings.messengerPageAccessTokenEnc);
+    await callSendAPI(pageAccessToken, connection.psid, text);
+    await prisma.messengerLog.update({ where: { id: log.id }, data: { status: "SENT", sentAt: new Date() } });
+    return { status: "SENT" };
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : "Unknown error.";
+    await prisma.messengerLog.update({ where: { id: log.id }, data: { status: "FAILED", failureReason: reason } });
+    return { status: "FAILED", reason };
+  }
+}
+
 export async function sendTestMessengerMessage(customerId: string): Promise<{ ok: boolean; error?: string }> {
   const settings = await getBusinessSettings();
   if (!settings.messengerPageId || !settings.messengerPageAccessTokenEnc) {

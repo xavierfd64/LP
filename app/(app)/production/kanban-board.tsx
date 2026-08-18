@@ -10,6 +10,7 @@ import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { markStageInProgressAction } from "@/app/actions/production";
 import { openTransactionInChatAction } from "@/app/actions/messages";
 import { CompleteStageForm } from "./complete-stage-form";
+import { MessengerDispatchDialog } from "@/components/production/messenger-dispatch-dialog";
 
 export type KanbanJobOrder = {
   id: string;
@@ -44,11 +45,13 @@ export function KanbanBoard({
   jobOrders,
   canUpdateStage,
   canMarkStageComplete,
+  canDispatchMessenger,
 }: {
   columns: string[];
   jobOrders: KanbanJobOrder[];
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
+  canDispatchMessenger: boolean;
 }) {
   const services = useMemo(() => Array.from(new Set(jobOrders.map((j) => j.productType))).sort(), [jobOrders]);
   const [service, setService] = useState("");
@@ -108,6 +111,7 @@ export function KanbanBoard({
           items={filtered.filter((j) => j.column === mobileStage)}
           canUpdateStage={canUpdateStage}
           canMarkStageComplete={canMarkStageComplete}
+          canDispatchMessenger={canDispatchMessenger}
           className="mt-3"
         />
       </div>
@@ -120,6 +124,7 @@ export function KanbanBoard({
             items={filtered.filter((j) => j.column === col)}
             canUpdateStage={canUpdateStage}
             canMarkStageComplete={canMarkStageComplete}
+            canDispatchMessenger={canDispatchMessenger}
             className="w-72 shrink-0"
           />
         ))}
@@ -133,12 +138,14 @@ function StageColumn({
   items,
   canUpdateStage,
   canMarkStageComplete,
+  canDispatchMessenger,
   className,
 }: {
   col: string;
   items: KanbanJobOrder[];
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
+  canDispatchMessenger: boolean;
   className?: string;
 }) {
   return (
@@ -149,7 +156,13 @@ function StageColumn({
       </div>
       <div className="max-h-[70vh] space-y-2 overflow-y-auto p-2">
         {items.map((jo) => (
-          <JobOrderCard key={jo.id} jo={jo} canUpdateStage={canUpdateStage} canMarkStageComplete={canMarkStageComplete} />
+          <JobOrderCard
+            key={jo.id}
+            jo={jo}
+            canUpdateStage={canUpdateStage}
+            canMarkStageComplete={canMarkStageComplete}
+            canDispatchMessenger={canDispatchMessenger}
+          />
         ))}
         {items.length === 0 && (
           <div className="flex flex-col items-center gap-1 rounded-md border border-dashed border-slate-200 py-8 text-center">
@@ -166,10 +179,12 @@ function JobOrderCard({
   jo,
   canUpdateStage,
   canMarkStageComplete,
+  canDispatchMessenger,
 }: {
   jo: KanbanJobOrder;
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
+  canDispatchMessenger: boolean;
 }) {
   const markIP = jo.currentLogId ? markStageInProgressAction.bind(null, jo.currentLogId) : undefined;
 
@@ -236,6 +251,7 @@ function JobOrderCard({
         <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" aria-label="Chat" onClick={handleChat}>
           <MessageCircle className="h-3.5 w-3.5" />
         </Button>
+        {canDispatchMessenger && <MessengerDispatchDialog jobOrderId={jo.id} joNumber={jo.joNumber} />}
 
         <div className="ml-auto">
           {jo.status === "QC" ? (

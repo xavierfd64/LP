@@ -97,6 +97,7 @@ export const PERMISSION_GROUPS = [
       { key: "COMMUNICATION_ATTACHMENT", label: "Send file/image attachments" },
       { key: "COMMUNICATION_REFERENCE_TRANSACTION", label: "Reference an Inquiry/Quotation/Job Order in chat" },
       { key: "COMMUNICATION_SEARCH_CUSTOMER", label: "Search customers and start new conversations" },
+      { key: "MESSENGER_DISPATCH", label: "Send Messenger production updates from the Kanban" },
     ],
   },
   {
@@ -229,6 +230,7 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "COMMUNICATION_ATTACHMENT",
     "COMMUNICATION_REFERENCE_TRANSACTION",
     "COMMUNICATION_SEARCH_CUSTOMER",
+    "MESSENGER_DISPATCH",
     "DOCUMENT_VIEW",
     "DOCUMENT_SHARE",
     "DOCUMENT_DOWNLOAD",

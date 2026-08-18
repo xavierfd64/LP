@@ -29,6 +29,39 @@ export const ORDER_TRACKING_INCLUDE = {
 
 export type TimelineStep = { label: string; state: "done" | "current" | "upcoming"; date: Date | null };
 
+export type JobOrderStageSnapshot = Prisma.JobOrderGetPayload<{
+  include: { workflowTemplate: { include: { stages: true } }; stageLogs: true };
+}>;
+
+/**
+ * The production-stage portion of a Job Order's progress, derived entirely
+ * from its own Service's configured WorkflowTemplate/WorkflowStage sequence
+ * (never a hard-coded stage list) — shared by the public tracking timeline
+ * below and the Messenger Dispatch message generator, so "current stage" and
+ * "step X of Y" are always computed identically everywhere from one source.
+ */
+export function buildJobOrderStageSteps(jo: JobOrderStageSnapshot): TimelineStep[] {
+  const stages = [...jo.workflowTemplate.stages].sort((a, b) => a.order - b.order);
+  return stages.map((stage) => {
+    const log = jo.stageLogs.find((l) => l.stageOrder === stage.order);
+    let state: TimelineStep["state"] = "upcoming";
+    if (log?.status === "COMPLETED") state = "done";
+    else if (stage.order === jo.currentStageOrder && jo.status !== "READY" && jo.status !== "COMPLETED" && jo.status !== "RELEASED") {
+      state = "current";
+    } else if (jo.status === "READY" || jo.status === "COMPLETED" || jo.status === "RELEASED") {
+      state = "done";
+    }
+    return { label: stage.name, state, date: log?.completedAt ?? null };
+  });
+}
+
+/** Job-order-level current-stage label, e.g. for the Messenger dispatch dialog (order-level equivalent is currentStageLabel below). */
+export function currentStageLabelForJobOrder(jo: JobOrderStageSnapshot): string {
+  if (jo.status === "READY" || jo.status === "COMPLETED" || jo.status === "RELEASED") return "Ready for Fulfillment";
+  const stage = jo.workflowTemplate.stages.find((s) => s.order === jo.currentStageOrder);
+  return stage?.name ?? "In Production";
+}
+
 /**
  * Customer-safe order progress timeline — reuses the real Quotation status
  * and the real JobOrder/WorkflowStage production sequence rather than a
@@ -52,18 +85,7 @@ export function buildOrderTimeline(order: OrderTrackingSnapshot): TimelineStep[]
   steps.push({ label: "Job Order", state: jo ? "done" : "upcoming", date: jo?.createdAt ?? null });
 
   if (jo) {
-    const stages = [...jo.workflowTemplate.stages].sort((a, b) => a.order - b.order);
-    for (const stage of stages) {
-      const log = jo.stageLogs.find((l) => l.stageOrder === stage.order);
-      let state: TimelineStep["state"] = "upcoming";
-      if (log?.status === "COMPLETED") state = "done";
-      else if (stage.order === jo.currentStageOrder && jo.status !== "READY" && jo.status !== "COMPLETED" && jo.status !== "RELEASED") {
-        state = "current";
-      } else if (jo.status === "READY" || jo.status === "COMPLETED" || jo.status === "RELEASED") {
-        state = "done";
-      }
-      steps.push({ label: stage.name, state, date: log?.completedAt ?? null });
-    }
+    steps.push(...buildJobOrderStageSteps(jo));
   }
 
   steps.push({

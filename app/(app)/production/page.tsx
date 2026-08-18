@@ -10,6 +10,10 @@ export default async function ProductionQueuePage({ searchParams }: PageProps<"/
   if (user.role === "STAFF" && !(await can(user, "PRODUCTION_VIEW"))) redirect("/dashboard");
   const canUpdateStage = user.role !== "STAFF" || (await can(user, "PRODUCTION_UPDATE_STAGE"));
   const canMarkStageComplete = user.role !== "STAFF" || (await can(user, "PRODUCTION_MARK_STAGE_COMPLETE"));
+  // Messenger dispatch is a customer-communication action, not a production-
+  // floor one — PRODUCTION never sees it (mirrors canSeeAmount below), ADMIN
+  // always does, STAFF needs the explicit grant.
+  const canDispatchMessenger = user.role === "ADMIN" || (user.role === "STAFF" && (await can(user, "MESSENGER_DISPATCH")));
   // Production-floor staff don't need to see order values — amounts are a
   // Staff/Admin-facing detail (spec: "Amount, where appropriate for
   // Staff/Admin").
@@ -101,6 +105,7 @@ export default async function ProductionQueuePage({ searchParams }: PageProps<"/
         jobOrders={items}
         canUpdateStage={canUpdateStage}
         canMarkStageComplete={canMarkStageComplete}
+        canDispatchMessenger={canDispatchMessenger}
       />
     </div>
   );

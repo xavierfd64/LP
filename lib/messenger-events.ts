@@ -36,6 +36,10 @@ export const MESSENGER_EVENTS: Record<string, { category: MessengerCategory; lab
   ORDER_COMPLETED: { category: "DELIVERY", label: "Order Completed" },
   SOA_GENERATED: { category: "SOA_REMINDER", label: "Statement of Account Generated" },
   SOA_PAYMENT_REMINDER: { category: "SOA_REMINDER", label: "SOA Payment Reminder" },
+  // Sent from the Production Kanban's Messenger Dispatch dialog, not the
+  // automatic per-event funnel above — label-only entry (never checked
+  // against messengerEventSettings) so it displays cleanly in the log.
+  MANUAL_DISPATCH: { category: "PRODUCTION", label: "Manual Kanban Update" },
 };
 
 /** Kept deliberately short — Messenger is a quick heads-up, not the full document (spec: "kept concise with example message formats including a [Track Your Order] link"). */
