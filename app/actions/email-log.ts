@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions-guard";
-import { resolveEmailTransport } from "@/lib/email";
+import { resolveEmailTransport, classifyEmailError } from "@/lib/email";
 import { logAudit } from "@/lib/audit";
 
 /**
@@ -38,7 +38,7 @@ export async function retryEmailAction(logId: string) {
       where: { id: logId },
       data: {
         status: "FAILED",
-        failureReason: e instanceof Error ? e.message : "Unknown error.",
+        failureReason: classifyEmailError(e),
         attemptCount: { increment: 1 },
       },
     });

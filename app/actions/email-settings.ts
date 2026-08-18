@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/email-crypto";
-import { sendTestEmail } from "@/lib/email";
+import { sendTestEmail, testEmailConnection, type TestEmailResult } from "@/lib/email";
 import { EMAIL_EVENTS, type EmailEventKey } from "@/lib/email-events";
 
 const providerSchema = z.object({
@@ -99,9 +99,14 @@ export async function updateEmailEventSettingAction(key: string, enabled: boolea
   redirect("/admin/email-settings");
 }
 
-export type TestEmailResult = { ok: boolean; error?: string };
+/** "Test Email Connection" — verifies SMTP host/port/TLS/auth only, sends nothing. No recipient needed. */
+export async function testEmailConnectionAction(): Promise<TestEmailResult> {
+  await requireRole(["ADMIN"]);
+  return testEmailConnection();
+}
 
-export async function testEmailConnectionAction(recipient: string): Promise<TestEmailResult> {
+/** "Send Test Email" — a separate, explicit action that actually delivers one message to the given recipient. */
+export async function sendTestEmailAction(recipient: string): Promise<TestEmailResult> {
   await requireRole(["ADMIN"]);
   if (!recipient || !recipient.includes("@")) return { ok: false, error: "Enter a valid test recipient email." };
   return sendTestEmail(recipient);

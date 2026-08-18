@@ -57,7 +57,12 @@ export default async function EmailSettingsPage() {
               </Badge>
             )}
           </div>
-          <EmailProviderForm settings={settings} />
+          {/* The encrypted password ciphertext is only ever used for a
+              truthiness check ("unchanged" placeholder) client-side — it
+              must never actually reach the browser, so it's swapped for a
+              plain marker string before this crosses the server/client
+              boundary. */}
+          <EmailProviderForm settings={{ ...settings, emailSmtpPasswordEnc: settings.emailSmtpPasswordEnc ? "set" : null }} />
           <div className="border-t border-slate-100 pt-3">
             <TestEmailForm />
           </div>

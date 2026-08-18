@@ -40,11 +40,54 @@ export type ResolvedEmailTransport = {
   fromName: string;
 };
 
-/** Builds a nodemailer transporter from the currently-saved Business Settings. Throws with a clear message if nothing is configured yet — callers decide whether that's fatal (Test Email) or just a skip (a queued send). */
+const SMTP_TIMEOUTS = {
+  // Nodemailer's own defaults (2min connect / 10min socket) leave a "Test
+  // Email Connection" click stuck on "Sending..." for far too long against
+  // a blocked or unreachable host — common on hosts that silently drop
+  // outbound SMTP on some plans/ports rather than refusing the connection.
+  // Fail fast with a clear, classified error instead (see classifyEmailError).
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 15_000,
+};
+
+/**
+ * Builds a nodemailer transporter from the currently-saved Business
+ * Settings — or, when the GMAIL provider is selected and
+ * EMAIL_GMAIL_APP_PASSWORD is set, straight from the environment instead.
+ * That env path is the "secure environment configuration" mechanism: the
+ * App Password is never typed into the Admin UI, never persisted to the
+ * database, and never leaves the server process — it only ever comes from
+ * whatever secret-store mechanism the hosting platform provides (Render's
+ * environment variables, a local gitignored .env, etc.), and this function
+ * never returns it to any caller. Throws with a clear message if nothing is
+ * configured yet — callers decide whether that's fatal (Test Email) or just
+ * a skip (a queued send).
+ */
 export async function resolveEmailTransport(): Promise<ResolvedEmailTransport> {
   const settings = await getBusinessSettings();
+
+  const envGmailPassword = process.env.EMAIL_GMAIL_APP_PASSWORD;
+  if (settings.emailProvider === "GMAIL" && envGmailPassword) {
+    const address = process.env.EMAIL_GMAIL_ADDRESS || settings.emailSenderAddress;
+    if (!address) {
+      throw new Error("Set EMAIL_GMAIL_ADDRESS, or a Sender / Login Email in Business Settings, alongside EMAIL_GMAIL_APP_PASSWORD.");
+    }
+    return {
+      transporter: nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: { user: address, pass: envGmailPassword },
+        ...SMTP_TIMEOUTS,
+      }),
+      fromAddress: address,
+      fromName: settings.emailSenderName || settings.businessName,
+    };
+  }
+
   if (!settings.emailProvider || !settings.emailSenderAddress || !settings.emailSmtpPasswordEnc) {
-    throw new Error("Email is not configured yet. Set a provider and credentials in Business Settings.");
+    throw new Error("Email is not configured yet. Set a provider and credentials in Business Settings, or set EMAIL_GMAIL_APP_PASSWORD.");
   }
   const password = decryptSecret(settings.emailSmtpPasswordEnc);
 
@@ -66,14 +109,7 @@ export async function resolveEmailTransport(): Promise<ResolvedEmailTransport> {
     port: conn.port,
     secure: conn.secure,
     auth: { user: settings.emailSmtpUsername || settings.emailSenderAddress, pass: password },
-    // Nodemailer's own defaults (2min connect / 10min socket) leave a "Test
-    // Email Connection" click stuck on "Sending..." for far too long against
-    // a blocked or unreachable host — common on hosts like Render, which
-    // silently drop outbound SMTP on some plans/ports rather than refusing
-    // the connection. Fail fast with a clear error instead.
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 15_000,
+    ...SMTP_TIMEOUTS,
   });
 
   return {
@@ -83,10 +119,67 @@ export async function resolveEmailTransport(): Promise<ResolvedEmailTransport> {
   };
 }
 
-export async function sendTestEmail(toAddress: string): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Turns a raw nodemailer/Node network error into a specific, actionable
+ * message — never the generic "something went wrong," and never anything
+ * that could contain the password (nodemailer's connection/auth errors
+ * never include the credential value itself, only the fact that auth
+ * failed). Distinguishing "can't reach the server" from "wrong
+ * credentials" is the whole point: a stuck timeout and a rejected login
+ * need completely different fixes, and this is what actually lets Admin
+ * (or whoever's debugging the deploy) tell them apart instead of guessing.
+ */
+export function classifyEmailError(e: unknown): string {
+  const err = e as { code?: string; responseCode?: number; command?: string; message?: string } | undefined;
+  switch (err?.code) {
+    case "ETIMEDOUT":
+    case "ESOCKET":
+    case "ECONNECTION":
+      return `Could not reach the mail server (${err.code}). Double-check the host and port, and confirm your hosting provider allows outbound SMTP traffic on that port — some platforms block it.`;
+    case "ECONNREFUSED":
+      return "The mail server refused the connection. Double-check the host and port.";
+    case "EDNS":
+      return "Could not resolve the mail server's hostname. Double-check the SMTP host.";
+    case "EAUTH":
+      return "Authentication failed. Double-check the email address and App Password.";
+    case "EENVELOPE":
+      return "The mail server rejected the sender or recipient address.";
+    default:
+      return err?.message ?? "Unknown error.";
+  }
+}
+
+export type TestEmailResult = { ok: boolean; error?: string };
+
+/**
+ * "Test Email Connection" — verifies SMTP host/port/TLS/authentication
+ * only (nodemailer's SMTP handshake + AUTH command), never sends a
+ * message. Kept as a distinct action from sendTestEmail below per spec:
+ * connection testing and actually sending a message are different
+ * operations, and neither should ever be confused with — or trigger — a
+ * real business notification (Quotation/Payment/SOA/Order/Production).
+ */
+export async function testEmailConnection(): Promise<TestEmailResult> {
+  try {
+    const { transporter } = await resolveEmailTransport();
+    await transporter.verify();
+    await prisma.businessSettings.update({
+      where: { id: "default" },
+      data: { emailLastTestAt: new Date(), emailLastTestOk: true },
+    });
+    return { ok: true };
+  } catch (e) {
+    await prisma.businessSettings
+      .update({ where: { id: "default" }, data: { emailLastTestAt: new Date(), emailLastTestOk: false } })
+      .catch(() => {});
+    return { ok: false, error: classifyEmailError(e) };
+  }
+}
+
+/** "Send Test Email" — actually delivers one message to the given recipient, for confirming end-to-end delivery once the connection itself tests OK. */
+export async function sendTestEmail(toAddress: string): Promise<TestEmailResult> {
   try {
     const { transporter, fromAddress, fromName } = await resolveEmailTransport();
-    await transporter.verify();
     await transporter.sendMail({
       from: `"${fromName}" <${fromAddress}>`,
       to: toAddress,
@@ -102,7 +195,7 @@ export async function sendTestEmail(toAddress: string): Promise<{ ok: boolean; e
     await prisma.businessSettings
       .update({ where: { id: "default" }, data: { emailLastTestAt: new Date(), emailLastTestOk: false } })
       .catch(() => {});
-    return { ok: false, error: e instanceof Error ? e.message : "Unknown error." };
+    return { ok: false, error: classifyEmailError(e) };
   }
 }
 
@@ -132,7 +225,7 @@ async function attemptSend(logId: string, toAddress: string, subject: string, bo
       where: { id: logId },
       data: {
         status: "FAILED",
-        failureReason: e instanceof Error ? e.message : "Unknown error.",
+        failureReason: classifyEmailError(e),
         attemptCount: { increment: 1 },
       },
     });

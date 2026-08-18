@@ -49,7 +49,17 @@ export default async function MessengerSettingsPage() {
             <p className="break-all font-mono">{webhookUrl}</p>
             <p className="mt-1">Paste this and your Verify Token into your Meta App&apos;s Messenger &gt; Webhooks setup.</p>
           </div>
-          <ProviderForm settings={settings} />
+          {/* Same reasoning as Email Settings — the encrypted token/secret
+              ciphertext is only ever used for a truthiness check
+              client-side, so it's swapped for a plain marker before
+              crossing the server/client boundary. */}
+          <ProviderForm
+            settings={{
+              ...settings,
+              messengerPageAccessTokenEnc: settings.messengerPageAccessTokenEnc ? "set" : null,
+              messengerAppSecretEnc: settings.messengerAppSecretEnc ? "set" : null,
+            }}
+          />
           <div className="border-t border-slate-100 pt-3">
             <TestMessengerForm />
           </div>
