@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireRole } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
+import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,13 +18,24 @@ import { DiscussSoaButton } from "./discuss-soa-button";
 const STATUS_TONE = { CURRENT: "blue", DUE: "yellow", OVERDUE: "red" } as const;
 
 export default async function SoaViewPage({ params }: PageProps<"/soa/view/[id]">) {
-  const user = await requireRole(["STAFF", "ADMIN"]);
-  if (user.role === "STAFF" && !(await can(user, "SOA_VIEW"))) redirect("/dashboard");
-  const canShare = user.role === "ADMIN" || (await can(user, "SOA_SHARE"));
+  const user = await requireUser();
+  const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
 
   const { id } = await params;
   const statement = await prisma.statementOfAccount.findUnique({ where: { id }, include: { customer: true, generatedBy: true } });
   if (!statement) notFound();
+
+  // A customer clicking their own "Statement of Account Available"
+  // notification must land here directly (spec: "the customer should
+  // immediately see the relevant SOA," not get bounced to the dashboard) —
+  // mirrors the same ownership check already used by /soa/[id]/print.
+  if (!isStaffLike) {
+    const customer = await getCurrentCustomer(user.id);
+    if (statement.customerId !== customer.id) redirect("/payments");
+  } else if (user.role === "STAFF" && !(await can(user, "SOA_VIEW"))) {
+    redirect("/dashboard");
+  }
+  const canShare = user.role === "ADMIN" || (isStaffLike && (await can(user, "SOA_SHARE")));
 
   const [computation, openOrders, activeShareLink] = await Promise.all([
     computeStatementOfAccount(statement.customerId, statement.periodStart, statement.periodEnd),
