@@ -66,6 +66,7 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "My Orders", href: "/orders" },
         { label: "Payment", href: "/payments" },
         { label: "My Rewards", href: "/account/rewards" },
+        { label: "My Profile", href: "/account/profile" },
       ];
     default:
       return [];
