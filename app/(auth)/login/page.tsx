@@ -2,13 +2,20 @@ import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { LoginForm } from "./login-form";
-import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { OAuthButtons, OrDivider } from "@/components/auth/oauth-buttons";
 import { availableOAuthProviders } from "@/lib/oauth-providers";
+import { friendlyAuthError } from "@/lib/auth-errors";
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const sp = await searchParams;
-  const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
+  const rawError = typeof sp.error === "string" ? sp.error : undefined;
+  const errorMsg = friendlyAuthError(rawError);
   const providers = availableOAuthProviders();
+  // Set by proxy.ts when an unauthenticated visit to a protected page was
+  // redirected here — carried through sign-in so the customer lands back
+  // where they meant to go instead of always the dashboard (spec item 33).
+  const callbackUrl = typeof sp.callbackUrl === "string" ? sp.callbackUrl : undefined;
+  const registerHref = callbackUrl ? `/register?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/register";
 
   return (
     <div className="space-y-6">
@@ -19,9 +26,21 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
-      <OAuthButtons google={providers.google} facebook={providers.facebook} />
+      <LoginForm callbackUrl={callbackUrl} />
 
-      <LoginForm />
+      {(providers.google || providers.facebook) && (
+        <>
+          <OrDivider />
+          <OAuthButtons google={providers.google} facebook={providers.facebook} callbackUrl={callbackUrl} />
+        </>
+      )}
+
+      <p className="text-center text-sm text-slate-500">
+        Don&apos;t have an account?{" "}
+        <Link href={registerHref} className="font-medium text-brand-600 underline hover:text-brand-700">
+          Sign Up
+        </Link>
+      </p>
 
       <div className="rounded-md border border-slate-200 bg-white p-3 text-center">
         <p className="text-sm text-slate-500">Don&apos;t want to log in?</p>

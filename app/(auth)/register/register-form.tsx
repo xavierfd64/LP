@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 
-export function RegisterForm() {
+export function RegisterForm({ callbackUrl }: { callbackUrl?: string }) {
   const [error, formAction, pending] = useActionState(registerAction, undefined);
 
   return (
     <form action={formAction} className="space-y-4">
+      {callbackUrl && <input type="hidden" name="callbackUrl" value={callbackUrl} />}
       {error && <Alert tone={error.startsWith("Account created") ? "success" : "error"}>{error}</Alert>}
       <div>
         <Label htmlFor="name">Full name</Label>
@@ -31,6 +32,10 @@ export function RegisterForm() {
       <div>
         <Label htmlFor="password">Password</Label>
         <Input id="password" name="password" type="password" required minLength={6} placeholder="At least 6 characters" />
+      </div>
+      <div>
+        <Label htmlFor="confirmPassword">Confirm password</Label>
+        <Input id="confirmPassword" name="confirmPassword" type="password" required minLength={6} placeholder="Re-enter your password" />
       </div>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Creating account..." : "Create account"}

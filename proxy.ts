@@ -7,13 +7,14 @@ const { auth } = NextAuth(authConfig);
 // "/" is the public tracking landing page for anonymous visitors — it
 // handles its own redirect to the right dashboard once signed in (see
 // app/page.tsx), so it must not be gated here.
-const PUBLIC_PATHS = ["/", "/login", "/register"];
+const PUBLIC_PATHS = ["/", "/login", "/register", "/forgot-password"];
 // Login-free public pages — token-authorized by the page itself (see
 // app/(public)/), not by session. Prefix-matched since both take a dynamic
-// [token] segment.
+// [token] segment. /reset-password/[token] is the same shape (the reset
+// token IS the authorization, like /track and /documents).
 // Meta's webhook has no session either — it authenticates itself via the
 // hub.verify_token handshake / X-Hub-Signature-256, checked inside the route.
-const PUBLIC_PATH_PREFIXES = ["/track/", "/documents/", "/api/messenger/"];
+const PUBLIC_PATH_PREFIXES = ["/track/", "/documents/", "/reset-password/", "/api/messenger/"];
 
 // Path prefix -> roles allowed. Missing entry = any authenticated role.
 const ROLE_RULES: { prefix: string; roles: string[] }[] = [

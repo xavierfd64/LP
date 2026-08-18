@@ -241,10 +241,17 @@ model User {
   phone        String?
   active       Boolean   @default(true)
   lastActiveAt DateTime?
+  /// Set (and refreshed) whenever this account signs in via that provider —
+  /// drives the "Login & Security" connected-methods display. No separate
+  /// Account/adapter table (see lib/auth.ts) since email is the only join
+  /// key this app needs.
+  googleConnectedAt   DateTime?
+  facebookConnectedAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   customer         Customer?
+  passwordResetTokens PasswordResetToken[]
   stageLogs        JobOrderStageLog[]
   uploadedFiles    File[]
   recordedPayments Payment[]          @relation("PaymentRecordedBy")
@@ -281,6 +288,21 @@ model StaffPermission {
   @@unique([userId, permission])
 }
 
+/// One-time, expiring, single-use token for the email/password Forgot
+/// Password flow — also doubles as "set your first password" for an
+/// OAuth-only account (passwordHash null), since both are the same
+/// underlying operation (spec item 14). Role-agnostic: works for any
+/// email/password-capable account, not customer-only.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
 model Customer {
   id                  String   @id @default(cuid())
   displayId           String   @unique
@@ -292,6 +314,11 @@ model Customer {
   contactNumber       String?
   address             String?
   facebookUrl         String?
+  /// Populated from the Google/Facebook profile image on first social
+  /// sign-up, only when not already set — never overwrites a value the
+  /// customer or Staff set. Display-only on the customer's own My Profile
+  /// page; never used for login/sidebar branding (spec item 13).
+  profileImageUrl     String?
   isQualifiedForTerms Boolean  @default(false)
   rewardPointsBalance Int      @default(0)
   createdAt           DateTime @default(now())

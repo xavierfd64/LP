@@ -8,20 +8,28 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 
-export function LoginForm() {
+export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
   const [error, formAction, pending] = useActionState(loginAction, undefined);
   const [showPassword, setShowPassword] = useState(false);
 
   return (
     <form action={formAction} className="space-y-4">
+      {callbackUrl && <input type="hidden" name="callbackUrl" value={callbackUrl} />}
       {error && <Alert tone="error">{error}</Alert>}
       <div>
         <Label htmlFor="email">Email</Label>
         <Input id="email" name="email" type="email" required placeholder="you@company.com" />
       </div>
       <div>
-        <Label htmlFor="password">Password</Label>
-        <div className="relative">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password" className="mb-0">
+            Password
+          </Label>
+          <Link href="/forgot-password" className="text-xs font-medium text-brand-600 underline hover:text-brand-700">
+            Forgot password?
+          </Link>
+        </div>
+        <div className="relative mt-1">
           <Input
             id="password"
             name="password"
@@ -43,12 +51,6 @@ export function LoginForm() {
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Signing in..." : "Sign in"}
       </Button>
-      <p className="text-center text-sm text-slate-500">
-        New customer?{" "}
-        <Link href="/register" className="font-medium text-brand-600 underline hover:text-brand-700">
-          Create an account
-        </Link>
-      </p>
     </form>
   );
 }

@@ -44,6 +44,7 @@ export const EMAIL_EVENTS = {
   SOA_GENERATED: { label: "Statement of Account Generated", category: "Statement of Account" },
   SOA_SHARED: { label: "Statement of Account Shared", category: "Statement of Account" },
   SOA_PAYMENT_REMINDER: { label: "SOA Payment Reminder", category: "Statement of Account" },
+  PASSWORD_RESET: { label: "Password Reset Requested", category: "Account" },
 } as const;
 
 /** Notification types that stay bell/Chatbox-only — chat activity and short-lived reminders aren't a good fit for an external email per event. */
@@ -77,6 +78,7 @@ export const EMAIL_VARIABLES = [
   "tracking_link",
   "document_link",
   "soa_link",
+  "reset_link",
   "business_name",
   "business_phone",
   "business_email",
@@ -97,6 +99,8 @@ export function defaultSubjectFor(key: EmailEventKey): string {
       return "Your Statement of Account – {{statement_number}}";
     case "SOA_PAYMENT_REMINDER":
       return "Payment Reminder – Outstanding Balance";
+    case "PASSWORD_RESET":
+      return "Reset Your Password – {{business_name}}";
     case "BALANCE_REMINDER":
       return "Payment Reminder – {{order_number}}";
     default:
@@ -131,6 +135,19 @@ export function defaultBodyFor(key: EmailEventKey): string {
         "Please review your Statement of Account for complete details.",
         "",
         "[ View Statement of Account ]({{soa_link}})",
+        "",
+        "Thank you,",
+        "{{business_name}}",
+      ].join("\n");
+    case "PASSWORD_RESET":
+      return [
+        "Hello {{customer_name}},",
+        "",
+        "We received a request to reset the password for your account.",
+        "",
+        "[ Reset Your Password ]({{reset_link}})",
+        "",
+        "This link expires in 1 hour. If you didn't request this, you can safely ignore this email.",
         "",
         "Thank you,",
         "{{business_name}}",
