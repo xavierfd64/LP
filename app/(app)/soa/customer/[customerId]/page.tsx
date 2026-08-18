@@ -43,23 +43,11 @@ export default async function CustomerSoaPage({ params }: PageProps<"/soa/custom
       </div>
 
       <Card>
-        <CardContent className="grid grid-cols-2 gap-4 py-4 sm:grid-cols-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Address</p>
-            <p className="text-sm text-slate-900">{customer.address || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Email</p>
-            <p className="text-sm text-slate-900">{customer.email || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Contact Number</p>
-            <p className="text-sm text-slate-900">{customer.contactNumber || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Facebook</p>
-            <p className="text-sm text-slate-900">{customer.facebookUrl || "—"}</p>
-          </div>
+        <CardContent className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
+          <CustomerInfoField label="Address" value={customer.address} />
+          <CustomerInfoField label="Email" value={customer.email} />
+          <CustomerInfoField label="Contact Number" value={customer.contactNumber} />
+          <CustomerInfoField label="Facebook" value={customer.facebookUrl} isLink />
         </CardContent>
       </Card>
 
@@ -153,6 +141,33 @@ export default async function CustomerSoaPage({ params }: PageProps<"/soa/custom
         </Table>
         {statements.length === 0 && <EmptyState label="No statements generated yet." />}
       </Card>
+    </div>
+  );
+}
+
+/**
+ * One field of the customer information card (9th update fix). `min-w-0`
+ * is the actual fix for the Facebook-overflow bug: CSS grid items default
+ * to `min-width: auto`, which lets an unbroken string like a URL force its
+ * column wider than the card and push past the card boundary — `min-w-0`
+ * plus `break-words` lets the value wrap inside its own column instead.
+ * Generalized to every field here (not a Facebook-only patch) since email
+ * and address can be just as long. Facebook renders as a real clickable
+ * link when it's a value, normalized to a full https:// URL if the stored
+ * value is a bare "facebook.com/..." string.
+ */
+function CustomerInfoField({ label, value, isLink }: { label: string; value: string | null; isLink?: boolean }) {
+  const href = isLink && value ? (value.startsWith("http") ? value : `https://${value}`) : null;
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+      {href ? (
+        <a href={href} target="_blank" rel="noreferrer" className="break-words text-sm text-brand-600 underline">
+          {value}
+        </a>
+      ) : (
+        <p className="break-words text-sm text-slate-900">{value || "—"}</p>
+      )}
     </div>
   );
 }

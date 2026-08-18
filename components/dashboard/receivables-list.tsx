@@ -8,6 +8,7 @@ import { SectionHeader } from "./section-header";
 import { EmptyState } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
 import { startCustomerConversationAction } from "@/app/actions/messages";
+import { ReceivableDetailsModal } from "./receivable-details-modal";
 import type { ReceivableRow } from "@/lib/dashboard-data";
 import type { SoaBalanceStatus } from "@/lib/soa";
 
@@ -39,11 +40,7 @@ export function ReceivablesList({ rows, canMessage }: { rows: ReceivableRow[]; c
             </div>
             <p className="mt-0.5 text-sm font-semibold text-slate-700">{formatCurrency(r.balance)} outstanding</p>
             <div className="mt-2 flex gap-1.5">
-              <Link href={`/customers/${r.customerId}`}>
-                <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs">
-                  View
-                </Button>
-              </Link>
+              <ReceivableDetailsModal customerId={r.customerId} canMessage={canMessage} />
               <Link href={`/soa/customer/${r.customerId}`}>
                 <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs">
                   SOA

@@ -165,6 +165,131 @@ export async function getReceivablesRequiringAttention(limit = 6): Promise<Recei
     .slice(0, limit);
 }
 
+export type ReceivableTransactionRow = {
+  id: string;
+  type: "Invoice";
+  reference: string;
+  date: Date;
+  dueDate: Date | null;
+  total: number;
+  paid: number;
+  outstanding: number;
+  status: "UNPAID" | "PARTIALLY_PAID" | "OVERDUE";
+  href: string;
+};
+
+export type ReceivableRecentPayment = {
+  id: string;
+  reference: string;
+  date: Date;
+  amount: number;
+  method: string;
+  status: string;
+};
+
+export type ReceivableDetails = {
+  customer: { id: string; name: string; displayId: string; contactNumber: string | null; email: string | null };
+  totalOutstanding: number;
+  current: number;
+  due: number;
+  overdue: number;
+  status: SoaBalanceStatus;
+  transactions: ReceivableTransactionRow[];
+  recentPayments: ReceivableRecentPayment[];
+};
+
+/**
+ * Backs the Receivable Details modal (9th update) — the "why is this
+ * customer on the Receivables list" drill-down. `totalOutstanding`,
+ * `overdue`, and `status` are read directly off the exact same
+ * findCustomersWithOutstandingBalance() entry the Receivables card itself
+ * used to decide this customer belongs on the list at all (spec item 6:
+ * "the amounts must remain consistent throughout the system") — never
+ * recomputed. `current`/`due` are derived by subtraction from that same
+ * `overdue` figure and a per-order due-date bucketing, so the three
+ * buckets always sum to exactly `totalOutstanding` by construction, even
+ * if a manual AccountAdjustment (which the aggregate total includes but
+ * has no due date of its own) is part of the balance.
+ */
+export async function getReceivableDetails(customerId: string): Promise<ReceivableDetails | null> {
+  const [customer, balances] = await Promise.all([
+    prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true, name: true, displayId: true, contactNumber: true, email: true },
+    }),
+    findCustomersWithOutstandingBalance(new Date()),
+  ]);
+  if (!customer) return null;
+
+  const entry = balances.find((b) => b.customer.id === customerId);
+  const recentPayments = await getRecentPaymentsForCustomer(customerId);
+
+  if (!entry) {
+    // Balance was likely just paid off between the dashboard load and opening this modal — show the honest current state rather than stale numbers.
+    return { customer, totalOutstanding: 0, current: 0, due: 0, overdue: 0, status: "CURRENT", transactions: [], recentPayments };
+  }
+
+  const orders = await prisma.order.findMany({
+    where: { customerId, status: { not: "CANCELLED" } },
+    include: { payments: { where: { status: "CONFIRMED" } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const now = Date.now();
+  let due = 0;
+  const transactions: ReceivableTransactionRow[] = [];
+  for (const o of orders) {
+    const paid = o.payments.reduce((s, p) => s + Number(p.amount), 0);
+    const total = Number(o.totalAmount);
+    const outstanding = total - paid;
+    if (outstanding <= 0.01) continue;
+    const isOverdue = !!(o.dueDate && o.dueDate.getTime() < now);
+    if (o.dueDate && !isOverdue) due += outstanding;
+    transactions.push({
+      id: o.id,
+      type: "Invoice",
+      reference: o.orderNumber,
+      date: o.createdAt,
+      dueDate: o.dueDate,
+      total,
+      paid,
+      outstanding,
+      status: isOverdue ? "OVERDUE" : paid > 0 ? "PARTIALLY_PAID" : "UNPAID",
+      href: `/orders/${o.id}`,
+    });
+  }
+
+  const overdue = entry.overdueAmount;
+  const current = Math.max(entry.outstandingBalance - overdue - due, 0);
+
+  return {
+    customer,
+    totalOutstanding: entry.outstandingBalance,
+    current,
+    due,
+    overdue,
+    status: entry.balanceStatus,
+    transactions,
+    recentPayments,
+  };
+}
+
+async function getRecentPaymentsForCustomer(customerId: string, limit = 5): Promise<ReceivableRecentPayment[]> {
+  const payments = await prisma.payment.findMany({
+    where: { order: { customerId } },
+    orderBy: { paymentDate: "desc" },
+    take: limit,
+  });
+  return payments.map((p) => ({
+    id: p.id,
+    reference: p.referenceNumber || `PAY-${p.id.slice(-6).toUpperCase()}`,
+    date: p.paymentDate,
+    amount: Number(p.amount),
+    method: p.method,
+    status: p.status,
+  }));
+}
+
 export type ProductionStageCount = { stage: string; count: number };
 
 /** Spec item 17 — the exact same "union of configured active WorkflowTemplate stages, in first-seen order" derivation the Production Kanban itself uses (app/(app)/production/page.tsx), never a hard-coded stage list. */
