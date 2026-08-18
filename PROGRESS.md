@@ -845,3 +845,45 @@ The sidebar's icon lookup was first written passing actual Lucide icon *componen
 - Permission-gating re-confirmed live across two different Staff permission presets on the same shared component: the Manager preset (has `PAYMENT_VIEW`) correctly showed Outstanding Balance and Financial Overview; the Sales Staff preset (no `PAYMENT_VIEW`) correctly hid Outstanding Balance, Receivables Requiring Attention, and Revenue & Orders Trend, while still showing the non-financial Needs Attention and Production Today sections.
 - A 7-page regression sweep (`/quotations`, `/orders`, `/production`, `/payments`, `/customers`, `/soa`, `/inventory`) confirmed core transaction pages were untouched and still load correctly.
 - Redeploy-safety: clean git status, zero Prisma migration drift, `next build` succeeding with Postgres stopped.
+
+## August 18 — 8th update: Customer Portal, Login/Sign Up, Tracking & Branding UI/UX redesign
+
+The customer-facing counterpart to the 7th update's Admin/Staff redesign — framed the same way: primarily UI/UX, reuse existing data/actions/permissions, no business-logic changes. No schema migration was needed at all.
+
+### Branding: the real root cause of a previously-observed broken logo
+
+Business Settings' logo/favicon fields only ever supported file upload, saved to `/public/uploads` via `saveUploadedFile`. That directory does not survive a redeploy on this container's filesystem — confirmed directly, not assumed: this very session watched its own redeploy happen mid-conversation, and any file written to `public/uploads` at runtime is gone afterward. That is almost certainly why a previously-configured logo showed as broken. Fixed by making **Image URL** a first-class source alongside Upload and Default: `BusinessSettingsForm` now has a Source radio per image (Upload / Image URL / Default), `updateBusinessSettingsAction` validates a pasted URL is genuinely `http(s)://` before saving it (rejects `javascript:`/`data:` and similar), and no schema change was needed since `logoPath`/`faviconPath` already just store a string — an uploaded path and a pasted URL are both valid values for the same field.
+
+The bigger fix underneath: a `settings.logoPath ? <Image ...> : <initial-letter div>` ternary — with no fallback if the configured src ever failed to load — was independently duplicated across 9 files (Shell, DesktopSidebar, MobileNav, the auth layout, the homepage, DocumentShell, BusinessInfoBanner, TransactionBrandHeader, the public tracking page). Replaced all of them with one shared `BrandLogo` component: a plain `<img>` (deliberately not `next/image`, which would require every external logo host to be allow-listed in `next.config.ts` — defeating the point of letting Admin paste any URL) with an `onError` handler that swaps to the business's initial letter. Verified live: pasting an external URL this sandbox's network genuinely can't reach (its outbound proxy blocks unlisted hosts) correctly triggered the fallback everywhere the logo renders, rather than a broken-image icon — the real scenario the spec called out.
+
+### Login / Sign Up
+
+Both already had most of the spec's requirements from earlier updates (OAuth buttons, Forgot Password, callbackUrl return-to-page, Sign Up/Sign In cross-links, Track Your Order on Login). Two real gaps closed: the Sign Up page had no way to reach tracking at all (added a "Track Your Order" link); the `(auth)` layout's form panel was flush against the branding panel with no visual separation, now wrapped in a bordered/shadowed card with three compact value-prop bullets in the branding panel, matching the reference's more polished split layout — using `BrandLogo` for the same broken-image protection described above.
+
+### Customer Dashboard — full rebuild
+
+New `lib/customer-dashboard-data.ts` query layer, one function per section, each reusing existing logic rather than recomputing it: `getCustomerPaymentSummary`/KPI balance both wrap `findCustomersWithOutstandingBalance`/`deriveSoaBalanceStatus` from `lib/soa.ts` (never a second balance-aging calculation); `getCustomerActiveOrders`'s per-order production-stage progress reuses `buildJobOrderStageSteps`/`currentStageLabelForJobOrder` from the tracking module verbatim; the Unread Messages KPI sums `unreadCount` from the existing `getMyConversationsAction()` rather than a second unread query.
+
+New `CustomerDashboard` component (`components/dashboard/customer-dashboard.tsx`) replaces the old ad hoc "4 stat cards + 2 lists" customer dashboard: a greeting header, 5 KPI cards (Active Orders/Outstanding Balance/Pending Quotations/Unread Messages/Reward Points), Active Orders showing real per-order stage-by-stage progress dots, Recent Transactions (Quotation/Order-as-Invoice/Payment merged and sorted, same shape as the Admin dashboard's Today's Activity), Payment Summary, Quotations Awaiting Action (reuses the existing `approveQuotationAction` — no duplicate approval logic), Upcoming Deadlines (only real `Order.dueDate` values, never invented), the pre-existing Connect Messenger card (carried over unchanged), and a Quick Actions row. A small `ChatOpenButton` client wrapper lets server-rendered cards open the floating Chatbox without turning the whole async dashboard into a Client Component — same lesson from the 7th update's icon-passing bug, applied proactively this time.
+
+### Customer navigation
+
+Sidebar regrouped into MAIN / FINANCE / ACCOUNT (`components/layout/nav-config.ts`), adding "Invoices" and "Statement of Account" as distinct labels the spec's reference nav expects — both point at the real existing `/orders` and `/payments` routes rather than invented pages, since this app has no separate Invoice entity (an Invoice is an Order's print view) and `/payments` already doubles as the customer's Payments + SOA hub, the same architectural call already made for the Admin Quick Actions menu in the 7th update. New `MobileBottomNav` (Dashboard/Orders/Invoices/SOA/More, Customer role only) gives mobile customers a proper bottom nav instead of only the hamburger drawer, with a "More" sheet for Quotations/Payments/Rewards/Profile/Login & Security/Sign Out/Chat.
+
+### Public Tracking — the timeline connector fix
+
+The spec explicitly called out a previously-observed broken/discontinuous connecting line between timeline checkpoints. The prior implementation (from the 6th update) already reasoned carefully about flex-stretch to keep each per-item line segment continuous with its neighbor — but it was still, structurally, N independent segments, each capable of showing a sub-pixel gap at its boundary. Replaced it with a single continuous absolutely-positioned line spanning the whole list (verified directly: one DOM element, height matching the full list), with step icons rendered on top of it in normal flow, plus a second brand-colored overlay line clipped to the fraction of steps completed so far for an at-a-glance sense of progress. Also gave the public tracking page's "link no longer available" state a way back to tracking instead of a dead end.
+
+### My Profile
+
+Added the spec's requested Customer ID and Account status display (both genuine fields — `Customer.displayId` and the real `User.active` flag — not invented), and swapped the profile-photo `<Image>` for `BrandLogo` for the same broken-image protection.
+
+### A real bug found during verification: duplicate React keys
+
+Live Playwright caught 3 console errors ("Encountered two children with the same key") on every customer page — `SidebarNav` keyed each nav item on `item.href` alone, and the new nav intentionally has three pairs of items sharing an href (Orders/Invoices, Payments/Statement of Account, My Profile/Login & Security). Fixed by keying on `href + label`. Re-verified afterward: zero console errors, zero page errors.
+
+### Verification
+
+- Live Playwright pass: homepage tracking entry point, Login (branding, OAuth, Forgot Password, Track Order, mobile — zero horizontal overflow), Sign Up (Track Order link), Customer Dashboard desktop and mobile (all sections present with real seeded data, bottom nav, "More" sheet, Chat tile opening the widget), My Profile (Customer ID, Active badge, Login & Security), public tracking lookup by reference number (continuous single-element connector confirmed directly via the DOM), and Business Settings branding (Image URL source switch, save, and a genuinely-unreachable URL correctly falling back to the initial-letter tile instead of a broken image — then reset to default, confirmed cleared in the database).
+- Full regression sweep: Admin dashboard (7th update) and its sidebar groups still intact after the shared `nav-config.ts`/`sidebar-nav.tsx` changes, Staff dashboard, Production board, and eleven core transaction/admin pages all still load correctly, plus a full Order detail page load confirming "View Invoice" still works.
+- Redeploy-safety: clean git status, zero Prisma migration drift, `next build` succeeding with Postgres stopped.
