@@ -7,6 +7,20 @@ import { requireRole } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { saveUploadedFile } from "@/lib/upload";
 
+/**
+ * Only http(s) URLs are accepted for a pasted logo/favicon URL — rejects
+ * javascript:/data:/vbscript: and anything else that isn't a normal image
+ * link (spec item 57's "prevent HTML/script injection" for URL inputs).
+ */
+function isSafeImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const settingsSchema = z.object({
   businessName: z.string().min(1, "Business name is required."),
   tagline: z.string().optional(),
@@ -64,16 +78,45 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
     paymentInstructions: parsed.data.paymentInstructions ?? null,
   };
 
-  const logoFile = formData.get("logo") as File | null;
-  if (logoFile && logoFile.size > 0) {
-    const saved = await saveUploadedFile(logoFile);
-    data.logoPath = saved.path;
+  // Branding source (spec items 48/49): each of logo/favicon independently
+  // resolves from an Upload, a pasted Image URL, or "Default" (clears it).
+  // Upload remains supported for environments with persistent storage, but
+  // Image URL is the first-class, Render-safe option — this app's own
+  // /public/uploads directory does not survive a redeploy on this
+  // container's ephemeral filesystem, which is the exact cause of a
+  // previously-observed broken logo image after a redeploy (spec item 53).
+  const logoSource = formData.get("logoSource");
+  if (logoSource === "default") {
+    data.logoPath = null;
+  } else if (logoSource === "url") {
+    const logoUrl = (formData.get("logoUrl") as string | null)?.trim();
+    if (logoUrl) {
+      if (!isSafeImageUrl(logoUrl)) return "Logo URL must be a valid http:// or https:// link.";
+      data.logoPath = logoUrl;
+    }
+  } else if (logoSource === "upload") {
+    const logoFile = formData.get("logo") as File | null;
+    if (logoFile && logoFile.size > 0) {
+      const saved = await saveUploadedFile(logoFile);
+      data.logoPath = saved.path;
+    }
   }
 
-  const faviconFile = formData.get("favicon") as File | null;
-  if (faviconFile && faviconFile.size > 0) {
-    const saved = await saveUploadedFile(faviconFile);
-    data.faviconPath = saved.path;
+  const faviconSource = formData.get("faviconSource");
+  if (faviconSource === "default") {
+    data.faviconPath = null;
+  } else if (faviconSource === "url") {
+    const faviconUrl = (formData.get("faviconUrl") as string | null)?.trim();
+    if (faviconUrl) {
+      if (!isSafeImageUrl(faviconUrl)) return "Favicon URL must be a valid http:// or https:// link.";
+      data.faviconPath = faviconUrl;
+    }
+  } else if (faviconSource === "upload") {
+    const faviconFile = formData.get("favicon") as File | null;
+    if (faviconFile && faviconFile.size > 0) {
+      const saved = await saveUploadedFile(faviconFile);
+      data.faviconPath = saved.path;
+    }
   }
 
   await prisma.businessSettings.upsert({

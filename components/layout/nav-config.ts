@@ -117,15 +117,43 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "Inventory", href: "/inventory" },
       ]) }];
     case "CUSTOMER":
-      return [{ section: "MAIN", items: withIcons([
-        { label: "Dashboard", href: "/dashboard" },
-        { label: "My Inquiries", href: "/inquiries" },
-        { label: "My Quotations", href: "/quotations" },
-        { label: "My Orders", href: "/orders" },
-        { label: "Payment", href: "/payments" },
-        { label: "My Rewards", href: "/account/rewards" },
-        { label: "My Profile", href: "/account/profile" },
-      ]) }];
+      // Grouped per spec item 9. "Invoices" and "Statement of Account" are
+      // deliberately separate labels over the same real routes as their
+      // sibling items (/orders, /payments) rather than invented pages —
+      // this app has no standalone Invoice entity (an Invoice is an
+      // Order's print view, same call already made for the Admin Quick
+      // Actions menu) and /payments already doubles as this customer's
+      // Payments + Statement of Account hub. Chat/Notifications aren't
+      // routes — they stay header-only (bell + chat icon), so there's no
+      // COMMUNICATION section here, matching the explicit instruction not
+      // to reintroduce a standalone Messages page.
+      return [
+        {
+          section: "MAIN",
+          items: [
+            { label: "Dashboard", href: "/dashboard", iconKey: "dashboard" },
+            { label: "Inquiries", href: "/inquiries", iconKey: "inbox" },
+            { label: "Quotations", href: "/quotations", iconKey: "fileText" },
+            { label: "Orders", href: "/orders", iconKey: "package" },
+            { label: "Invoices", href: "/orders", iconKey: "receipt" },
+          ],
+        },
+        {
+          section: "FINANCE",
+          items: [
+            { label: "Payments", href: "/payments", iconKey: "wallet" },
+            { label: "Statement of Account", href: "/payments", iconKey: "barChart" },
+          ],
+        },
+        {
+          section: "ACCOUNT",
+          items: [
+            { label: "My Rewards", href: "/account/rewards", iconKey: "gift" },
+            { label: "My Profile", href: "/account/profile", iconKey: "userCircle" },
+            { label: "Login & Security", href: "/account/profile", iconKey: "keyRound" },
+          ],
+        },
+      ];
     default:
       return [];
   }

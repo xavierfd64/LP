@@ -1,5 +1,5 @@
-import Image from "next/image";
 import { getBusinessSettings, formatBusinessAddress } from "@/lib/business-settings";
+import { BrandLogo } from "@/components/branding/brand-logo";
 
 /**
  * Compact "Business Information" header for the Quotation/Order/Job Order
@@ -14,20 +14,7 @@ export async function BusinessInfoBanner() {
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      {settings.logoPath ? (
-        <Image
-          src={settings.logoPath}
-          alt={settings.businessName}
-          width={40}
-          height={40}
-          className="h-10 w-10 shrink-0 object-contain"
-          unoptimized
-        />
-      ) : (
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-brand-600 text-lg font-bold text-white">
-          {settings.businessName.charAt(0)}
-        </div>
-      )}
+      <BrandLogo src={settings.logoPath} alt={settings.businessName} size={40} />
       <div className="min-w-0 text-sm">
         <p className="font-semibold text-slate-900">{settings.businessName}</p>
         <p className="truncate text-xs text-slate-500">{[address, ...contactBits].filter(Boolean).join(" · ") || "—"}</p>

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { SidebarNav } from "./sidebar-nav";
 import { NavSection } from "./nav-config";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/branding/brand-logo";
 
 const STORAGE_KEY = "lp-sidebar-collapsed";
 
@@ -43,9 +43,7 @@ export function DesktopSidebar({
       )}
     >
       <div className={cn("mb-6 flex items-center px-2", collapsed ? "justify-center" : "gap-2")}>
-        {logoPath && (
-          <Image src={logoPath} alt={businessName} width={32} height={32} className="h-8 w-8 shrink-0 rounded object-contain" unoptimized />
-        )}
+        <BrandLogo src={logoPath} alt={businessName} size={32} />
         {!collapsed && (
           <div className="min-w-0">
             <p className="truncate text-lg font-bold text-slate-900">{businessName}</p>

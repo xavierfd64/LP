@@ -1,10 +1,11 @@
-import Image from "next/image";
 import { requireRole } from "@/lib/session";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import { formatDate } from "@/lib/utils";
+import { BrandLogo } from "@/components/branding/brand-logo";
 import { formatDateTime } from "@/lib/utils";
 import { availableOAuthProviders } from "@/lib/oauth-providers";
 import { friendlyAuthError } from "@/lib/auth-errors";
@@ -31,19 +32,14 @@ export default async function CustomerProfilePage({ searchParams }: PageProps<"/
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
-      {customer.profileImageUrl && (
-        <div className="flex items-center gap-3">
-          <Image
-            src={customer.profileImageUrl}
-            alt={customer.name}
-            width={56}
-            height={56}
-            className="h-14 w-14 rounded-full object-cover"
-            unoptimized
-          />
-          <p className="text-sm text-slate-500">Profile photo from your connected account</p>
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4">
+        <BrandLogo src={customer.profileImageUrl} alt={customer.name} size={56} rounded="rounded-full" imgClassName="object-cover" />
+        <div className="flex-1">
+          <p className="font-semibold text-slate-900">{customer.name}</p>
+          <p className="text-xs text-slate-500">Customer ID: {customer.displayId} · Customer since {formatDate(customer.createdAt)}</p>
         </div>
-      )}
+        <Badge tone={user.active ? "green" : "slate"}>{user.active ? "Active" : "Inactive"}</Badge>
+      </div>
 
       <Card>
         <CardHeader>

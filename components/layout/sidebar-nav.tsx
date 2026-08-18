@@ -74,7 +74,7 @@ export function SidebarNav({ sections, collapsed = false }: { sections: NavSecti
             const Icon = item.iconKey ? ICON_COMPONENTS[item.iconKey] : undefined;
             return (
               <Link
-                key={item.href}
+                key={`${item.href}-${item.label}`}
                 href={item.href}
                 title={collapsed ? item.label : undefined}
                 className={cn(

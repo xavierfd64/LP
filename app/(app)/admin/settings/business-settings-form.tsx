@@ -1,15 +1,25 @@
 "use client";
 
-import { useActionState } from "react";
-import Image from "next/image";
+import { useActionState, useState } from "react";
 import { updateBusinessSettingsAction } from "@/app/actions/business-settings";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { BrandLogo } from "@/components/branding/brand-logo";
 import type { BusinessSettings } from "@/lib/business-settings";
+
+type ImageSource = "upload" | "url" | "default";
+
+/** An uploaded file's path always starts with /uploads/ (see lib/upload.ts) — anything else configured must have come from a pasted URL. */
+function inferSource(path: string | null): ImageSource {
+  if (!path) return "default";
+  return path.startsWith("/uploads/") ? "upload" : "url";
+}
 
 export function BusinessSettingsForm({ settings }: { settings: BusinessSettings }) {
   const [error, formAction, pending] = useActionState(updateBusinessSettingsAction, undefined);
+  const [logoSource, setLogoSource] = useState<ImageSource>(inferSource(settings.logoPath));
+  const [faviconSource, setFaviconSource] = useState<ImageSource>(inferSource(settings.faviconPath));
 
   return (
     <form action={formAction} className="space-y-8">
@@ -30,27 +40,33 @@ export function BusinessSettingsForm({ settings }: { settings: BusinessSettings 
           <Textarea id="description" name="description" rows={3} defaultValue={settings.description ?? ""} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="logo">Business logo</Label>
-            {settings.logoPath && (
-              <div className="mb-2 flex h-16 items-center rounded-md border border-slate-200 bg-slate-50 px-3">
-                <Image src={settings.logoPath} alt="Current logo" width={120} height={48} className="max-h-12 w-auto object-contain" unoptimized />
-              </div>
-            )}
-            <Input id="logo" name="logo" type="file" accept="image/*" />
-            <p className="mt-1 text-xs text-slate-400">Used on the login page, sidebar, and portals. Any dimensions are fine — it's scaled to fit.</p>
-          </div>
-          <div>
-            <Label htmlFor="favicon">Favicon</Label>
-            {settings.faviconPath && (
-              <div className="mb-2 flex h-16 items-center rounded-md border border-slate-200 bg-slate-50 px-3">
-                <Image src={settings.faviconPath} alt="Current favicon" width={32} height={32} className="h-8 w-8 object-contain" unoptimized />
-              </div>
-            )}
-            <Input id="favicon" name="favicon" type="file" accept="image/*" />
-            <p className="mt-1 text-xs text-slate-400">Shown in the browser tab. Falls back to the logo if not set.</p>
-          </div>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <BrandingImageField
+            label="Business logo"
+            hint="Used on Login, Sign Up, the Customer Portal, Admin/Staff header, Tracking, and printed documents."
+            previewSize={64}
+            currentPath={settings.logoPath}
+            businessName={settings.businessName}
+            source={logoSource}
+            onSourceChange={setLogoSource}
+            fileFieldName="logo"
+            sourceFieldName="logoSource"
+            urlFieldName="logoUrl"
+            idPrefix="logo"
+          />
+          <BrandingImageField
+            label="Favicon"
+            hint="Shown in the browser tab across the whole app. Falls back to the logo, then the system default, if not set."
+            previewSize={32}
+            currentPath={settings.faviconPath}
+            businessName={settings.businessName}
+            source={faviconSource}
+            onSourceChange={setFaviconSource}
+            fileFieldName="favicon"
+            sourceFieldName="faviconSource"
+            urlFieldName="faviconUrl"
+            idPrefix="favicon"
+          />
         </div>
       </section>
 
@@ -131,5 +147,86 @@ export function BusinessSettingsForm({ settings }: { settings: BusinessSettings 
         {pending ? "Saving..." : "Save Business Settings"}
       </Button>
     </form>
+  );
+}
+
+/**
+ * One logo/favicon field: a live preview (via the same fallback-safe
+ * BrandLogo used everywhere else the image renders) plus a Source radio
+ * that swaps between Upload / Image URL / Default. Only the fields for the
+ * *selected* source are submitted meaningfully — the server action reads
+ * `${idPrefix}Source` first and only looks at the file/URL input matching
+ * that choice (see updateBusinessSettingsAction), so switching tabs can't
+ * accidentally resurrect a stale value from an input the admin isn't using.
+ */
+function BrandingImageField({
+  label,
+  hint,
+  previewSize,
+  currentPath,
+  businessName,
+  source,
+  onSourceChange,
+  fileFieldName,
+  sourceFieldName,
+  urlFieldName,
+  idPrefix,
+}: {
+  label: string;
+  hint: string;
+  previewSize: number;
+  currentPath: string | null;
+  businessName: string;
+  source: ImageSource;
+  onSourceChange: (s: ImageSource) => void;
+  fileFieldName: string;
+  sourceFieldName: string;
+  urlFieldName: string;
+  idPrefix: string;
+}) {
+  return (
+    <div className="space-y-3 rounded-md border border-slate-200 p-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-slate-100 bg-slate-50">
+          <BrandLogo src={currentPath} alt={businessName} size={previewSize} />
+        </div>
+        <div>
+          <Label className="mb-0">{label}</Label>
+          <p className="text-xs text-slate-400">{hint}</p>
+        </div>
+      </div>
+
+      <input type="hidden" name={sourceFieldName} value={source} />
+
+      <div className="flex flex-wrap gap-3 text-xs text-slate-600">
+        {(["upload", "url", "default"] as const).map((opt) => (
+          <label key={opt} className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              name={`${idPrefix}-source-radio`}
+              checked={source === opt}
+              onChange={() => onSourceChange(opt)}
+            />
+            {opt === "upload" ? "Upload Image" : opt === "url" ? "Image URL" : "Use Default"}
+          </label>
+        ))}
+      </div>
+
+      {source === "upload" && (
+        <Input id={`${idPrefix}-file`} name={fileFieldName} type="file" accept="image/*" />
+      )}
+      {source === "url" && (
+        <Input
+          id={`${idPrefix}-url`}
+          name={urlFieldName}
+          type="url"
+          placeholder="https://example.com/logo.png"
+          defaultValue={currentPath && !currentPath.startsWith("/uploads/") ? currentPath : ""}
+        />
+      )}
+      {source === "default" && (
+        <p className="text-xs text-slate-400">Saving will reset {label.toLowerCase()} to the system default.</p>
+      )}
+    </div>
   );
 }

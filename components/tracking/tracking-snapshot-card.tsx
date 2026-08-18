@@ -63,45 +63,38 @@ export function TrackingSnapshotCard({ data }: { data: PublicOrderTracking }) {
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-700">Order Progress</p>
-        {/* Icon and connector live in their own flex column, stretched by
-            the flex row to the same height as the content column on their
-            right — the browser computes each segment's length from actual
-            layout, so it always reaches exactly to the next icon no matter
-            how tall a given step's content is. This avoids the previous
-            absolute-positioned line (anchored with a fixed top + height:100%
-            of each <li>'s own auto height), which broke visibly wherever a
-            step's box was taller or shifted than its neighbors — most
-            visibly at the "current" step, whose left border was also
-            widening that one row and throwing off alignment further. The
-            border/background emphasis for the current step now lives only
-            on the content column, so it can never shift the icon/line
-            column's position. */}
-        <ol>
+        {/* A single continuous vertical line (this <div>, not N per-item
+            spans) is what actually guarantees an unbroken connector — the
+            earlier per-item-span approach was still, structurally, N
+            separate fragile segments that could show a gap at every
+            boundary depending on exact pixel rounding. Icons render in
+            normal flow on top of it (z-10, bg-white) so the line reads as
+            passing cleanly behind each one. A second, brand-colored overlay
+            line is clipped to the fraction of steps completed so far, for
+            an at-a-glance sense of progress. */}
+        <ol className="relative">
+          <div className="absolute left-[9px] top-2 bottom-2 w-0.5 bg-slate-200" aria-hidden="true" />
+          <div
+            className="absolute left-[9px] top-2 w-0.5 bg-brand-600 transition-all"
+            style={{ height: `calc((100% - 1rem) * ${progressFraction(data.timeline)})` }}
+            aria-hidden="true"
+          />
           {data.timeline.map((step, i) => {
             const isLast = i === data.timeline.length - 1;
             return (
-              <li key={step.label} className="flex gap-3">
-                <div className="flex flex-col items-center">
-                  <span className="shrink-0 bg-white">
-                    {step.state === "done" ? (
-                      <CheckCircle2 className="h-5 w-5 text-brand-600" />
-                    ) : step.state === "current" ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-brand-600" />
-                    ) : (
-                      <Circle className="h-5 w-5 text-slate-300" />
-                    )}
-                  </span>
-                  {!isLast && (
-                    <span
-                      className="mt-1 w-0.5 flex-1"
-                      style={{ backgroundColor: step.state === "done" ? "#dc2626" : "#e2e8f0", minHeight: "1.5rem" }}
-                    />
+              <li key={step.label} className={cn("relative flex gap-3", !isLast && "pb-5")}>
+                <span className="relative z-10 shrink-0 bg-white">
+                  {step.state === "done" ? (
+                    <CheckCircle2 className="h-5 w-5 text-brand-600" />
+                  ) : step.state === "current" ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-brand-600" />
+                  ) : (
+                    <Circle className="h-5 w-5 text-slate-300" />
                   )}
-                </div>
+                </span>
                 <div
                   className={cn(
-                    "min-w-0 flex-1 rounded-md px-2 py-1.5",
-                    isLast ? "pb-1.5" : "pb-4",
+                    "min-w-0 flex-1 rounded-md px-2 py-1",
                     step.state === "current" && "-ml-2 border-l-4 border-brand-600 bg-brand-50 pl-3"
                   )}
                 >
@@ -173,6 +166,14 @@ function CopyButton({ value }: { value: string }) {
       {copied ? <Check className="h-4 w-4 text-brand-600" /> : <Copy className="h-4 w-4" />}
     </button>
   );
+}
+
+/** Fraction of the timeline that's done-or-current, for the progress overlay line — a "current" step counts as half-complete so the line visibly stops partway through it rather than jumping a full step ahead. */
+function progressFraction(timeline: PublicOrderTracking["timeline"]): number {
+  if (timeline.length === 0) return 0;
+  const doneCount = timeline.filter((s) => s.state === "done").length;
+  const hasCurrent = timeline.some((s) => s.state === "current");
+  return Math.min(1, (doneCount + (hasCurrent ? 0.5 : 0)) / timeline.length);
 }
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {

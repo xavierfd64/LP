@@ -1,6 +1,6 @@
-import Image from "next/image";
 import { getBusinessSettings, formatBusinessAddress } from "@/lib/business-settings";
 import { PrintButton } from "./print-button";
+import { BrandLogo } from "@/components/branding/brand-logo";
 
 /**
  * Shared layout for the Quotation/Invoice/Job Order document pages
@@ -33,20 +33,7 @@ export async function DocumentShell({
 
       <header className="flex flex-col gap-4 border-b-2 border-brand-600 pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          {settings.logoPath ? (
-            <Image
-              src={settings.logoPath}
-              alt={settings.businessName}
-              width={64}
-              height={64}
-              className="h-16 w-16 shrink-0 object-contain"
-              unoptimized
-            />
-          ) : (
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-brand-600 text-2xl font-bold text-white">
-              {settings.businessName.charAt(0)}
-            </div>
-          )}
+          <BrandLogo src={settings.logoPath} alt={settings.businessName} size={64} />
           <div className="min-w-0">
             <p className="text-lg font-bold text-slate-900">{settings.businessName}</p>
             {settings.tagline && <p className="text-sm text-slate-500">{settings.tagline}</p>}

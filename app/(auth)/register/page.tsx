@@ -25,6 +25,14 @@ export default async function RegisterPage({ searchParams }: PageProps<"/registe
           Sign In
         </Link>
       </p>
+
+      <p className="text-center text-xs text-slate-400">
+        Just checking on an order?{" "}
+        <Link href="/" className="font-medium text-brand-600 underline hover:text-brand-700">
+          Track Your Order
+        </Link>{" "}
+        — no account needed.
+      </p>
     </div>
   );
 }

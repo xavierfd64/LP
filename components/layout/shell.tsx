@@ -1,6 +1,6 @@
-import Image from "next/image";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { MobileNav } from "./mobile-nav";
+import { MobileBottomNav } from "./mobile-bottom-nav";
 import { LogoutButton } from "./logout-button";
 import { NotificationBell } from "./notification-bell";
 import { GlobalSearch } from "./global-search";
@@ -12,6 +12,7 @@ import { getStaffPermissions } from "@/lib/permissions-guard";
 import { RealtimeProvider } from "@/components/realtime/realtime-provider";
 import { FloatingChatWidget } from "@/components/messaging/floating-chat-widget";
 import { getBusinessSettings } from "@/lib/business-settings";
+import { BrandLogo } from "@/components/branding/brand-logo";
 
 export async function Shell({
   role,
@@ -50,9 +51,7 @@ export async function Shell({
           <div className="flex shrink-0 items-center gap-2">
             <MobileNav sections={sections} businessName={settings.businessName} tagline={settings.tagline} logoPath={settings.logoPath} />
             <div className="flex items-center gap-2 font-bold text-slate-900 md:hidden">
-              {settings.logoPath && (
-                <Image src={settings.logoPath} alt={settings.businessName} width={24} height={24} className="h-6 w-6 rounded object-contain" unoptimized />
-              )}
+              <BrandLogo src={settings.logoPath} alt={settings.businessName} size={24} />
               {settings.businessName}
             </div>
           </div>
@@ -78,9 +77,10 @@ export async function Shell({
             <GlobalSearch />
           </div>
         )}
-        <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-6">{children}</main>
+        <main className={`min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-6 ${role === "CUSTOMER" ? "pb-20 md:pb-6" : ""}`}>{children}</main>
       </div>
       {showChatWidget && <FloatingChatWidget currentUserId={userId} role={role} />}
+      {role === "CUSTOMER" && <MobileBottomNav />}
     </div>
   );
 }

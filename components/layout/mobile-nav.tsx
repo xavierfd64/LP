@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
 import { Menu, X } from "lucide-react";
 import { SidebarNav } from "./sidebar-nav";
 import { NavSection } from "./nav-config";
+import { BrandLogo } from "@/components/branding/brand-logo";
 
 export function MobileNav({
   sections,
@@ -42,9 +42,7 @@ export function MobileNav({
           <aside className="fixed inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col overflow-y-auto border-r border-slate-200 bg-white px-3 py-4 shadow-xl">
             <div className="mb-6 flex items-center justify-between px-2">
               <div className="flex min-w-0 items-center gap-2">
-                {logoPath && (
-                  <Image src={logoPath} alt={businessName} width={28} height={28} className="h-7 w-7 shrink-0 rounded object-contain" unoptimized />
-                )}
+                <BrandLogo src={logoPath} alt={businessName} size={28} />
                 <div className="min-w-0">
                   <p className="truncate text-lg font-bold text-slate-900">{businessName}</p>
                   {tagline && <p className="truncate text-xs text-slate-400">{tagline}</p>}
