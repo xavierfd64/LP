@@ -68,6 +68,7 @@ export function LineItemsEditor({ initialItems }: { initialItems: LineItem[] }) 
                 <Label htmlFor={`li-desc-${i}`}>Description</Label>
                 <Input
                   id={`li-desc-${i}`}
+                  name="description"
                   placeholder="Description"
                   value={li.description}
                   onChange={(e) => updateItem(i, "description", e.target.value)}
@@ -77,6 +78,7 @@ export function LineItemsEditor({ initialItems }: { initialItems: LineItem[] }) 
                 <Label htmlFor={`li-qty-${i}`}>Qty</Label>
                 <Input
                   id={`li-qty-${i}`}
+                  name="qty"
                   type="number"
                   min={1}
                   placeholder="Qty"
@@ -88,6 +90,7 @@ export function LineItemsEditor({ initialItems }: { initialItems: LineItem[] }) 
                 <Label htmlFor={`li-price-${i}`}>Unit price</Label>
                 <Input
                   id={`li-price-${i}`}
+                  name="unitPrice"
                   type="number"
                   min={0}
                   step="0.01"
