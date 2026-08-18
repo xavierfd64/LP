@@ -5,15 +5,15 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Menu, X } from "lucide-react";
 import { SidebarNav } from "./sidebar-nav";
-import { NavItem } from "./nav-config";
+import { NavSection } from "./nav-config";
 
 export function MobileNav({
-  items,
+  sections,
   businessName,
   tagline,
   logoPath,
 }: {
-  items: NavItem[];
+  sections: NavSection[];
   businessName: string;
   tagline?: string | null;
   logoPath?: string | null;
@@ -59,7 +59,7 @@ export function MobileNav({
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <SidebarNav items={items} />
+            <SidebarNav sections={sections} />
           </aside>
         </div>
       )}

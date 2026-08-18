@@ -137,6 +137,24 @@ export function FloatingChatWidget({ currentUserId, role }: { currentUserId: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The header's Chat icon (spec item 33) dispatches this to open the
+  // widget generally — no specific conversation, unlike the two listeners
+  // above. Mirrors handleToggle's own "just opened" branch.
+  useEffect(() => {
+    function onOpenGeneral() {
+      setOpen(true);
+      if (!hasOpenedOnce.current) {
+        hasOpenedOnce.current = true;
+        refreshConversations().then((list) => {
+          if (!isStaffLike && list.length > 0) openThread(list[0].id);
+        });
+      }
+    }
+    window.addEventListener("chatbox:open", onOpenGeneral);
+    return () => window.removeEventListener("chatbox:open", onOpenGeneral);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleToggle() {
     const next = !open;
     setOpen(next);

@@ -8,6 +8,9 @@ import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import Link from "next/link";
 import { getBusinessSettings } from "@/lib/business-settings";
 import { messengerOptinLink } from "@/lib/messenger";
+import { can } from "@/lib/permissions-guard";
+import { AdminStaffDashboard } from "@/components/dashboard/admin-staff-dashboard";
+import type { QuickAction } from "@/components/dashboard/quick-action-menu";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -16,30 +19,32 @@ export default async function DashboardPage() {
     return <CustomerDashboard userId={user.id} name={user.name ?? "there"} />;
   }
 
-  const links = [
-    { href: "/inquiries", label: "Inquiries" },
-    { href: "/quotations", label: "Quotations" },
-    { href: "/orders", label: "Orders" },
-    { href: "/inventory", label: "Inventory" },
-    { href: "/payments", label: "Payments" },
+  // Same dashboard Admin sees (spec item 37) — data and quick actions are
+  // gated by this Staff account's actual granted permissions, never a
+  // second, parallel Staff-specific dashboard implementation.
+  const [canSeeFinancials, canMessageCustomers, canCreateInquiry, canCreateQuotation, canCreateOrder, canRecordPayment] = await Promise.all([
+    can(user, "PAYMENT_VIEW"),
+    can(user, "COMMUNICATION_SEARCH_CUSTOMER"),
+    can(user, "INQUIRY_HANDLE"),
+    can(user, "QUOTATION_CREATE"),
+    can(user, "ORDER_CREATE"),
+    can(user, "PAYMENT_RECORD"),
+  ]);
+
+  const quickActions: QuickAction[] = [
+    ...(canCreateInquiry ? [{ label: "New Inquiry", href: "/inquiries/new" }] : []),
+    ...(canCreateQuotation ? [{ label: "New Quotation", href: "/quotations/new" }] : []),
+    ...(canCreateOrder ? [{ label: "New Order", href: "/orders/new" }] : []),
+    ...(canRecordPayment ? [{ label: "Record Payment", href: "/payments" }] : []),
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Welcome, {user.name}</h1>
-        <p className="mt-1 text-sm text-slate-500">Here&apos;s a quick jump-off point.</p>
-      </div>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        {links.map((l) => (
-          <Link key={l.href} href={l.href}>
-            <Card className="border-l-4 border-l-brand-600 transition-shadow hover:shadow-md">
-              <CardContent className="py-6 text-center font-semibold text-slate-800">{l.label}</CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
-    </div>
+    <AdminStaffDashboard
+      name={user.name ?? "there"}
+      canSeeFinancials={canSeeFinancials}
+      canMessageCustomers={canMessageCustomers}
+      quickActions={quickActions}
+    />
   );
 }
 
