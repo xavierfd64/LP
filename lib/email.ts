@@ -66,6 +66,14 @@ export async function resolveEmailTransport(): Promise<ResolvedEmailTransport> {
     port: conn.port,
     secure: conn.secure,
     auth: { user: settings.emailSmtpUsername || settings.emailSenderAddress, pass: password },
+    // Nodemailer's own defaults (2min connect / 10min socket) leave a "Test
+    // Email Connection" click stuck on "Sending..." for far too long against
+    // a blocked or unreachable host — common on hosts like Render, which
+    // silently drop outbound SMTP on some plans/ports rather than refusing
+    // the connection. Fail fast with a clear error instead.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
   });
 
   return {
