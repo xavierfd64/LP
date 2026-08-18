@@ -130,7 +130,10 @@ export function MessengerDispatchDialog({ jobOrderId, joNumber }: { jobOrderId: 
       setSendState("sent");
     } else if (result.status === "FAILED") {
       setSendState("failed");
-      setSendMessage(result.reason);
+      // Never surface the raw API error here (spec item 33) — the real
+      // reason is still recorded in the audit trail and Messenger Log for
+      // Admin to review.
+      setSendMessage("Unable to send Messenger update. Please try again or use Copy Message.");
     } else if (result.status === "DUPLICATE_GUARD") {
       setSendState("duplicate");
       setSendMessage(`An update for this stage was already sent ${formatDateTime(result.recentAt)}.`);
@@ -159,8 +162,8 @@ export function MessengerDispatchDialog({ jobOrderId, joNumber }: { jobOrderId: 
             <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-5 py-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <Badge tone="blue">FACEBOOK MESSENGER DISPATCH</Badge>
-                  <Badge tone="purple">Live Production Status Update</Badge>
+                  <Badge tone="slate">FACEBOOK MESSENGER DISPATCH</Badge>
+                  <Badge tone="red">Live Production Status Update</Badge>
                 </div>
                 <h2 className="mt-1 text-base font-bold text-slate-900">Send Update for {joNumber}</h2>
                 <p className="text-xs text-slate-500">
