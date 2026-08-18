@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { confirmedPaymentTotal } from "@/lib/workflow";
+import { messengerOptinLink } from "@/lib/messenger";
 import {
   ORDER_TRACKING_INCLUDE,
   buildOrderTimeline,
@@ -27,6 +28,14 @@ export type PublicOrderTracking = {
   jobOrderNumber: string | null;
   quantity: number | null;
   timeline: { label: string; state: "done" | "current" | "upcoming"; date: string | null }[];
+  /**
+   * Real m.me opt-in deep link (see lib/messenger.ts) for "Follow via
+   * Messenger" (LBC-style follow-up) — null whenever Messenger isn't
+   * enabled/configured, so the button can be hidden cleanly rather than
+   * offered and failing. Never the customer's raw internal id — this is
+   * the only Messenger-related field this public response ever carries.
+   */
+  messengerFollowLink: string | null;
 };
 
 /**
@@ -59,6 +68,7 @@ export async function buildPublicSnapshot(order: OrderTrackingSnapshot): Promise
   const outstanding = Math.max(total - amountPaid, 0);
   const paymentStatus = amountPaid <= 0 ? "UNPAID" : amountPaid >= total ? "PAID" : "PARTIALLY_PAID";
   const jo = order.jobOrders[0];
+  const messengerFollowLink = await messengerOptinLink(order.customerId);
   return {
     customerName: order.customer.name,
     orderNumber: order.orderNumber,
@@ -76,5 +86,6 @@ export async function buildPublicSnapshot(order: OrderTrackingSnapshot): Promise
       state: s.state,
       date: s.date ? s.date.toISOString() : null,
     })),
+    messengerFollowLink,
   };
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Circle, Loader2, Copy, Check, Home } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, Copy, Check, Home, MessageCircle } from "lucide-react";
 import type { PublicOrderTracking } from "@/app/actions/public-tracking";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { Button } from "@/components/ui/button";
@@ -127,6 +127,20 @@ export function TrackingSnapshotCard({ data }: { data: PublicOrderTracking }) {
           })}
         </ol>
       </div>
+
+      {data.messengerFollowLink && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="mb-2 text-sm font-medium text-slate-900">Follow Order Updates</p>
+          <p className="mb-3 text-xs text-slate-500">
+            Would you like to receive updates for this order through Messenger?
+          </p>
+          <a href={data.messengerFollowLink} target="_blank" rel="noreferrer">
+            <Button type="button" variant="outline" className="w-full">
+              <MessageCircle className="h-4 w-4" /> Follow via Messenger
+            </Button>
+          </a>
+        </div>
+      )}
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs text-slate-500">
         <p>
