@@ -1,65 +1,45 @@
 import { Permission } from "@/lib/permissions";
-import {
-  LayoutDashboard,
-  Inbox,
-  FileText,
-  Package,
-  Factory,
-  Boxes,
-  Wrench,
-  GitBranch,
-  Wallet,
-  Receipt,
-  BarChart3,
-  Users,
-  UserCog,
-  ShieldCheck,
-  Gift,
-  ScrollText,
-  Settings,
-  Mail,
-  MailCheck,
-  MessageSquare,
-  MessagesSquare,
-  KeyRound,
-  UserCircle,
-  type LucideIcon,
-} from "lucide-react";
 
-export type NavItem = { label: string; href: string; icon?: LucideIcon };
+export type NavItem = { label: string; href: string; iconKey?: string };
 export type NavSection = { section: string; items: NavItem[] };
 
-/** One shared icon per destination — sidebar-nav.tsx renders these next to the label (expanded) or alone with a tooltip (collapsed), spec item 6/7. */
-const ICONS: Record<string, LucideIcon> = {
-  "/admin/dashboard": LayoutDashboard,
-  "/dashboard": LayoutDashboard,
-  "/inquiries": Inbox,
-  "/quotations": FileText,
-  "/orders": Package,
-  "/production": Factory,
-  "/inventory": Boxes,
-  "/admin/services": Wrench,
-  "/admin/workflow-templates": GitBranch,
-  "/payments": Wallet,
-  "/soa": Receipt,
-  "/reports/summary": BarChart3,
-  "/customers": Users,
-  "/admin/users": UserCog,
-  "/admin/staff-permissions": ShieldCheck,
-  "/admin/rewards": Gift,
-  "/admin/audit-log": ScrollText,
-  "/admin/settings": Settings,
-  "/admin/email-settings": Mail,
-  "/admin/email-log": MailCheck,
-  "/admin/messenger-settings": MessageSquare,
-  "/admin/messenger-log": MessagesSquare,
-  "/admin/auth-settings": KeyRound,
-  "/account/rewards": Gift,
-  "/account/profile": UserCircle,
+/**
+ * Icon KEYS only here — not the actual Lucide component. Server Components
+ * (this file is imported by the async Shell component) can't pass function
+ * values as props into "use client" components (SidebarNav/MobileNav), so
+ * the string key crosses that boundary instead and the client-side
+ * ICON_COMPONENTS map in sidebar-nav.tsx resolves it to the real icon.
+ */
+const ICON_KEYS: Record<string, string> = {
+  "/admin/dashboard": "dashboard",
+  "/dashboard": "dashboard",
+  "/inquiries": "inbox",
+  "/quotations": "fileText",
+  "/orders": "package",
+  "/production": "factory",
+  "/inventory": "boxes",
+  "/admin/services": "wrench",
+  "/admin/workflow-templates": "gitBranch",
+  "/payments": "wallet",
+  "/soa": "receipt",
+  "/reports/summary": "barChart",
+  "/customers": "users",
+  "/admin/users": "userCog",
+  "/admin/staff-permissions": "shieldCheck",
+  "/admin/rewards": "gift",
+  "/admin/audit-log": "scrollText",
+  "/admin/settings": "settings",
+  "/admin/email-settings": "mail",
+  "/admin/email-log": "mailCheck",
+  "/admin/messenger-settings": "messageSquare",
+  "/admin/messenger-log": "messagesSquare",
+  "/admin/auth-settings": "keyRound",
+  "/account/rewards": "gift",
+  "/account/profile": "userCircle",
 };
 
 function withIcons(items: { label: string; href: string }[]): NavItem[] {
-  return items.map((i) => ({ ...i, icon: ICONS[i.href] }));
+  return items.map((i) => ({ ...i, iconKey: ICON_KEYS[i.href] }));
 }
 
 const STAFF_NAV_RULES: { section: string; label: string; href: string; permission?: Permission }[] = [

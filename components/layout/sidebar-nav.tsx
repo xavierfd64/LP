@@ -2,8 +2,61 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Inbox,
+  FileText,
+  Package,
+  Factory,
+  Boxes,
+  Wrench,
+  GitBranch,
+  Wallet,
+  Receipt,
+  BarChart3,
+  Users,
+  UserCog,
+  ShieldCheck,
+  Gift,
+  ScrollText,
+  Settings,
+  Mail,
+  MailCheck,
+  MessageSquare,
+  MessagesSquare,
+  KeyRound,
+  UserCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavSection } from "./nav-config";
+
+/** Resolves nav-config.ts's icon KEYS (plain strings, safe to receive as a prop from the Server Component Shell) to the actual Lucide components — this lookup has to live client-side since a component reference itself can't cross the server/client boundary as a prop. */
+const ICON_COMPONENTS: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  inbox: Inbox,
+  fileText: FileText,
+  package: Package,
+  factory: Factory,
+  boxes: Boxes,
+  wrench: Wrench,
+  gitBranch: GitBranch,
+  wallet: Wallet,
+  receipt: Receipt,
+  barChart: BarChart3,
+  users: Users,
+  userCog: UserCog,
+  shieldCheck: ShieldCheck,
+  gift: Gift,
+  scrollText: ScrollText,
+  settings: Settings,
+  mail: Mail,
+  mailCheck: MailCheck,
+  messageSquare: MessageSquare,
+  messagesSquare: MessagesSquare,
+  keyRound: KeyRound,
+  userCircle: UserCircle,
+};
 
 /** Grouped, optionally-collapsible sidebar nav (spec items 6/7) — used by both the desktop sidebar and the mobile drawer. */
 export function SidebarNav({ sections, collapsed = false }: { sections: NavSection[]; collapsed?: boolean }) {
@@ -18,7 +71,7 @@ export function SidebarNav({ sections, collapsed = false }: { sections: NavSecti
           )}
           {section.items.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
-            const Icon = item.icon;
+            const Icon = item.iconKey ? ICON_COMPONENTS[item.iconKey] : undefined;
             return (
               <Link
                 key={item.href}
