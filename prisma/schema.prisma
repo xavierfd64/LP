@@ -948,6 +948,18 @@ model BusinessSettings {
   messengerAppSecretEnc      String?
   messengerEventSettings     Json    @default("{}")
 
+  // Customer Google/Facebook sign-in credentials (lib/auth.ts) — an
+  // in-app alternative to setting GOOGLE_CLIENT_ID/SECRET and
+  // FACEBOOK_CLIENT_ID/SECRET as environment variables. When set here,
+  // these take precedence over the env vars; the env vars remain a valid
+  // fallback for deployments that prefer not to store OAuth secrets in
+  // the database at all. Secrets encrypted at rest exactly like the SMTP
+  // password / Messenger Page token above.
+  googleClientId             String?
+  googleClientSecretEnc      String?
+  facebookClientId           String?
+  facebookClientSecretEnc    String?
+
   updatedAt DateTime @updatedAt
 }
 

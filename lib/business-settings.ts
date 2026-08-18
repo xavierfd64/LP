@@ -39,6 +39,10 @@ export type BusinessSettings = {
   messengerVerifyToken: string | null;
   messengerAppSecretEnc: string | null;
   messengerEventSettings: unknown;
+  googleClientId: string | null;
+  googleClientSecretEnc: string | null;
+  facebookClientId: string | null;
+  facebookClientSecretEnc: string | null;
 };
 
 const FALLBACK: BusinessSettings = {
@@ -76,6 +80,10 @@ const FALLBACK: BusinessSettings = {
   messengerVerifyToken: null,
   messengerAppSecretEnc: null,
   messengerEventSettings: {},
+  googleClientId: null,
+  googleClientSecretEnc: null,
+  facebookClientId: null,
+  facebookClientSecretEnc: null,
 };
 
 /**

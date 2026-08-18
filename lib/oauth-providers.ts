@@ -1,14 +1,23 @@
+import { getBusinessSettings } from "@/lib/business-settings";
+
 /**
- * Server-only: which OAuth sign-in buttons should render. Google/Facebook
- * only show up once real API credentials are configured — until then the
- * login/register pages fall back to plain email/password only, with the
- * architecture already wired so flipping on the env vars is all it takes
- * (spec: "build the system architecture/settings cleanly so it can be
- * connected without redesigning [it]").
+ * Which OAuth sign-in buttons should render. Google/Facebook only show up
+ * once real credentials are configured — via the Admin "Authentication
+ * Settings" page (BusinessSettings) or the GOOGLE_CLIENT_ID/SECRET and
+ * FACEBOOK_CLIENT_ID/SECRET env vars — mirroring exactly the precedence
+ * lib/auth.ts itself uses to register the providers, so this never shows
+ * a button that would actually fail. Server-only (reads BusinessSettings).
  */
-export function availableOAuthProviders() {
+export async function availableOAuthProviders() {
+  const settings = await getBusinessSettings();
   return {
-    google: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-    facebook: Boolean(process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET),
+    google: Boolean(
+      (settings.googleClientId && settings.googleClientSecretEnc) ||
+        (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
+    ),
+    facebook: Boolean(
+      (settings.facebookClientId && settings.facebookClientSecretEnc) ||
+        (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET)
+    ),
   };
 }

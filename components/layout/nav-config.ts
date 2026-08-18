@@ -48,6 +48,7 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { label: "Email Log", href: "/admin/email-log" },
         { label: "Messenger Settings", href: "/admin/messenger-settings" },
         { label: "Messenger Log", href: "/admin/messenger-log" },
+        { label: "Authentication Settings", href: "/admin/auth-settings" },
       ];
     case "STAFF":
       return STAFF_NAV_RULES.filter((item) => !item.permission || staffPermissions?.has(item.permission)).map(

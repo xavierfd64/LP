@@ -5,7 +5,7 @@ import { availableOAuthProviders } from "@/lib/oauth-providers";
 
 export default async function RegisterPage({ searchParams }: PageProps<"/register">) {
   const sp = await searchParams;
-  const providers = availableOAuthProviders();
+  const providers = await availableOAuthProviders();
   const hasOAuth = providers.google || providers.facebook;
   const callbackUrl = typeof sp.callbackUrl === "string" ? sp.callbackUrl : undefined;
   const loginHref = callbackUrl ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/login";

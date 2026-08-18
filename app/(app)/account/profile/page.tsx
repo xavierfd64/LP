@@ -16,7 +16,7 @@ export default async function CustomerProfilePage({ searchParams }: PageProps<"/
   const authUser = await requireRole(["CUSTOMER"]);
   const sp = await searchParams;
   const errorMsg = friendlyAuthError(typeof sp.error === "string" ? sp.error : undefined);
-  const providers = availableOAuthProviders();
+  const providers = await availableOAuthProviders();
   const [customer, user] = await Promise.all([
     getCurrentCustomer(authUser.id),
     prisma.user.findUniqueOrThrow({ where: { id: authUser.id } }),
