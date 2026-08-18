@@ -2,11 +2,14 @@
 
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/session";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
+import { signIn } from "@/lib/auth";
+import { OAUTH_CONNECT_INTENT_COOKIE } from "@/lib/oauth-connect-intent";
 
 const profileSchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -78,4 +81,25 @@ export async function setPasswordAction(_prevState: string | undefined, formData
   await logAudit(user.id, "PASSWORD_SET", "User", user.id, {});
   revalidatePath("/account/profile");
   return "Password set — you can now sign in with your email and password too.";
+}
+
+/**
+ * "Connect Google/Facebook from your account" (spec item: existing
+ * customer can connect a provider from an already-logged-in session).
+ * Marks intent via a short-lived cookie before starting the normal OAuth
+ * redirect — lib/auth.ts's signIn callback reads it and refuses to
+ * proceed unless the provider's returned email matches this exact user,
+ * so a mismatched account can never silently create a duplicate or swap
+ * the session to someone else's.
+ */
+export async function initiateConnectAction(provider: "google" | "facebook") {
+  const user = await requireRole(["CUSTOMER"]);
+  const cookieStore = await cookies();
+  cookieStore.set(OAUTH_CONNECT_INTENT_COOKIE, user.id, {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 300,
+    path: "/",
+  });
+  await signIn(provider, { redirectTo: "/account/profile" });
 }

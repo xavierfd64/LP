@@ -8,6 +8,8 @@ const MESSAGES: Record<string, string> = {
   AccountRestricted: "This account cannot sign in with Google or Facebook. Please use your email and password.",
   EmailNotVerified: "Please use a verified email address to sign in with Google.",
   OAuthAccountInactive: "This account is inactive. Please contact support.",
+  EmailMismatch: "That account's email doesn't match your account. Nothing was connected — please try again with an account that uses the same email address.",
+  NoEmailFromProvider: "We couldn't get an email address from that provider. Please try again or use a different sign-in method.",
   OAuthSignin: "Google or Facebook sign-in is currently unavailable. Please use email/password or try again later.",
   OAuthCallback: "Google or Facebook sign-in is currently unavailable. Please use email/password or try again later.",
   OAuthCreateAccount: "We couldn't create your account with that provider. Please try again or use email/password.",

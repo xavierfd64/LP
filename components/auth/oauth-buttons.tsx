@@ -53,7 +53,7 @@ function ProviderButton({ icon, label, connectingLabel }: { icon: React.ReactNod
   );
 }
 
-function GoogleIcon() {
+export function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
       <path
@@ -73,7 +73,7 @@ function GoogleIcon() {
   );
 }
 
-function FacebookIcon() {
+export function FacebookIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
       <circle cx="9" cy="9" r="9" fill="#1877F2" />
