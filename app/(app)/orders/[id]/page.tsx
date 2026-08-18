@@ -98,6 +98,25 @@ export default async function OrderDetailPage({
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
 
+  // Transaction history — this Order's own audit trail plus its Quotation's
+  // and Job Orders', merged and sorted, reusing the existing AuditLog
+  // rather than a second history/timeline system. Staff-only: audit
+  // entries can reference internal actors/reasons not meant for customers.
+  const transactionHistory = isStaffLike
+    ? await prisma.auditLog.findMany({
+        where: {
+          OR: [
+            { entityType: "Order", entityId: order.id },
+            ...(order.quotationId ? [{ entityType: "Quotation", entityId: order.quotationId }] : []),
+            { entityType: "JobOrder", entityId: { in: order.jobOrders.map((jo) => jo.id) } },
+            { entityType: "Payment", entityId: { in: order.payments.map((p) => p.id) } },
+          ],
+        },
+        include: { actor: true },
+        orderBy: { createdAt: "asc" },
+      })
+    : [];
+
   return (
     <div className="max-w-4xl space-y-6">
       <TransactionBrandHeader />
@@ -117,6 +136,23 @@ export default async function OrderDetailPage({
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
+
+      {order.quotation && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quotation</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <div>
+              <Link href={`/quotations/${order.quotation.id}`} className="font-medium text-slate-900 underline">
+                {order.quotation.quoteNumber}
+              </Link>
+              <span className="ml-2 text-slate-400">Order No.: {order.orderNumber}</span>
+            </div>
+            <StatusBadge status={order.quotation.status} />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card>
@@ -381,6 +417,30 @@ export default async function OrderDetailPage({
                   : null
               }
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {isStaffLike && transactionHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Transaction History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ol className="space-y-3">
+              {transactionHistory.map((entry) => (
+                <li key={entry.id} className="flex gap-3 text-sm">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600" />
+                  <div>
+                    <p className="font-medium text-slate-900">{entry.action.replace(/_/g, " ")}</p>
+                    <p className="text-xs text-slate-400">
+                      {formatDateTime(entry.createdAt)}
+                      {entry.actor ? ` · ${entry.actor.name}` : entry.changes ? " · System" : ""}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
           </CardContent>
         </Card>
       )}
