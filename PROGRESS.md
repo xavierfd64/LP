@@ -887,3 +887,29 @@ Live Playwright caught 3 console errors ("Encountered two children with the same
 - Live Playwright pass: homepage tracking entry point, Login (branding, OAuth, Forgot Password, Track Order, mobile — zero horizontal overflow), Sign Up (Track Order link), Customer Dashboard desktop and mobile (all sections present with real seeded data, bottom nav, "More" sheet, Chat tile opening the widget), My Profile (Customer ID, Active badge, Login & Security), public tracking lookup by reference number (continuous single-element connector confirmed directly via the DOM), and Business Settings branding (Image URL source switch, save, and a genuinely-unreachable URL correctly falling back to the initial-letter tile instead of a broken image — then reset to default, confirmed cleared in the database).
 - Full regression sweep: Admin dashboard (7th update) and its sidebar groups still intact after the shared `nav-config.ts`/`sidebar-nav.tsx` changes, Staff dashboard, Production board, and eleven core transaction/admin pages all still load correctly, plus a full Order detail page load confirming "View Invoice" still works.
 - Redeploy-safety: clean git status, zero Prisma migration drift, `next build` succeeding with Postgres stopped.
+
+## August 18 — 9th update: Receivables View modal, Today's Activity spacing, SOA overflow fix
+
+A focused correction pass on three specific issues from the 7th/8th updates — explicitly not a redesign of anything else. No schema or calculation changes.
+
+### Receivables Requiring Attention — "View" now shows the actual receivable
+
+"View" previously linked straight to the general Customer Profile, which doesn't answer the question a Staff member actually has when scanning this list: *why* is this customer flagged? Replaced it with a self-contained `ReceivableDetailsModal` (same "fetch on open, own its own state" shape as the Production Kanban's `MessengerDispatchDialog` from an earlier update) showing: customer name/ID/contact/email, a Total Outstanding / Current / Due / Overdue summary, the actual open Order(s) responsible for the balance in a Reference/Date/Due Date/Total/Paid/Outstanding/Status table, and a Recent Payments list — with View SOA / Message / Record Payment / Close actions, all pointing at existing routes and actions (no new SOA, payment, or messaging system).
+
+The new `getReceivableDetails()` in `lib/dashboard-data.ts` deliberately does not recompute the balance from scratch: it reads `totalOutstanding`, `overdue`, and `status` directly off the same `findCustomersWithOutstandingBalance()` entry that already decided this customer belongs on the Receivables list in the first place, so the modal's numbers can never diverge from the card's. `current`/`due` are derived by subtracting `overdue` from the per-order due-date buckets, so the three figures always sum to exactly the total shown, even when a manual account adjustment (which has no due date of its own) is part of the balance. The server action is gated with the same `PAYMENT_VIEW` check that decides whether Staff sees the Receivables card at all, so it can't be reached out-of-band by an account the dashboard wouldn't show it to — confirmed live (Staff without the permission still correctly can't see the section, let alone the modal).
+
+### Today's Activity — spacing
+
+Cell padding and column min-widths were increased so text no longer sits flush against cell borders (confirmed directly: first cell's computed padding went from the shared default to `20px`/`14px`). This was scoped to `TodaysActivity`'s own cell classNames rather than the shared `Table`/`TH`/`TD` primitives those defaults live in — changing the primitives would have re-spaced every other table in the app, which wasn't asked for and wasn't touched. The Amount column is now right-aligned; horizontal scroll (when the table is wider than its card) was already contained to the component's own wrapper, not the page, and still is.
+
+### Statement of Account — customer info card overflow
+
+The Facebook value was overflowing outside the customer information card. Root cause: CSS grid items default to `min-width: auto`, so an unbroken URL string (no spaces to wrap at) forced its column wider than the card. Fixed with `min-w-0` on each grid cell plus `break-words` on the value — generalized to all four fields (Address/Email/Contact Number/Facebook), not a Facebook-only patch, since a long email or address would hit the exact same bug. Facebook now also renders as a real clickable link (normalized to a full `https://` URL if the stored value is a bare `facebook.com/...` string) rather than plain text. Verified against an intentionally extreme test URL — confirmed the value's bounding box stayed fully inside the card's on both desktop and mobile, with zero page-wide horizontal overflow — then reverted the test data.
+
+### Verification
+
+- Live Playwright: Receivables "View" opens the modal without navigating away, shows the correct customer/amounts/transactions, and Close returns cleanly to the dashboard with no residual state.
+- Cross-role check: Staff with `PAYMENT_VIEW` sees Receivables and can open the modal; Staff without it still correctly never sees the section at all.
+- SOA overflow fix stress-tested against a deliberately oversized Facebook URL (well beyond anything realistic) — contained on both desktop and mobile, zero page overflow — then the test value was reverted.
+- Full regression sweep: Admin dashboard, Staff dashboard, Production board, and 9 core pages (Quotations/Orders/Production/Payments/Customers/SOA/SOA Monthly/Inventory/Transaction Summary) all still load with zero console or page errors.
+- Redeploy-safety: clean git status, zero Prisma migration drift, `next build` succeeding with Postgres stopped.
