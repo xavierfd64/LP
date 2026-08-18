@@ -6,7 +6,7 @@ import { CheckCircle2, Circle, Loader2, Copy, Check, Home } from "lucide-react";
 import type { PublicOrderTracking } from "@/app/actions/public-tracking";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime, cn } from "@/lib/utils";
 
 /**
  * The customer-safe order summary + progress timeline — shared by the
@@ -63,51 +63,68 @@ export function TrackingSnapshotCard({ data }: { data: PublicOrderTracking }) {
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-700">Order Progress</p>
-        <ol className="space-y-0">
-          {data.timeline.map((step, i) => (
-            <li
-              key={step.label}
-              className={
-                step.state === "current"
-                  ? "relative flex items-start gap-3 rounded-md border-l-4 border-brand-600 bg-brand-50 py-3 pl-2 pr-2"
-                  : "relative flex items-start gap-3 py-2 pl-2 pr-2"
-              }
-            >
-              {i < data.timeline.length - 1 && (
-                <span
-                  className="absolute left-[19px] top-9 h-full w-0.5"
-                  style={{ backgroundColor: step.state === "done" ? "#dc2626" : "#e2e8f0" }}
-                />
-              )}
-              <span className="z-10 shrink-0">
-                {step.state === "done" ? (
-                  <CheckCircle2 className="h-5 w-5 text-brand-600" />
-                ) : step.state === "current" ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-brand-600" />
-                ) : (
-                  <Circle className="h-5 w-5 text-slate-300" />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className={step.state === "upcoming" ? "text-sm text-slate-400" : "text-sm font-medium text-slate-900"}>
-                    {step.label}
-                  </p>
-                  {step.state === "done" && (
-                    <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
-                      Done
-                    </span>
-                  )}
-                  {step.state === "current" && (
-                    <span className="shrink-0 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                      Current
-                    </span>
+        {/* Icon and connector live in their own flex column, stretched by
+            the flex row to the same height as the content column on their
+            right — the browser computes each segment's length from actual
+            layout, so it always reaches exactly to the next icon no matter
+            how tall a given step's content is. This avoids the previous
+            absolute-positioned line (anchored with a fixed top + height:100%
+            of each <li>'s own auto height), which broke visibly wherever a
+            step's box was taller or shifted than its neighbors — most
+            visibly at the "current" step, whose left border was also
+            widening that one row and throwing off alignment further. The
+            border/background emphasis for the current step now lives only
+            on the content column, so it can never shift the icon/line
+            column's position. */}
+        <ol>
+          {data.timeline.map((step, i) => {
+            const isLast = i === data.timeline.length - 1;
+            return (
+              <li key={step.label} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <span className="shrink-0 bg-white">
+                    {step.state === "done" ? (
+                      <CheckCircle2 className="h-5 w-5 text-brand-600" />
+                    ) : step.state === "current" ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-brand-600" />
+                    ) : (
+                      <Circle className="h-5 w-5 text-slate-300" />
+                    )}
+                  </span>
+                  {!isLast && (
+                    <span
+                      className="mt-1 w-0.5 flex-1"
+                      style={{ backgroundColor: step.state === "done" ? "#dc2626" : "#e2e8f0", minHeight: "1.5rem" }}
+                    />
                   )}
                 </div>
-                {step.date && <p className="text-xs text-slate-400">{formatDate(step.date)}</p>}
-              </div>
-            </li>
-          ))}
+                <div
+                  className={cn(
+                    "min-w-0 flex-1 rounded-md px-2 py-1.5",
+                    isLast ? "pb-1.5" : "pb-4",
+                    step.state === "current" && "-ml-2 border-l-4 border-brand-600 bg-brand-50 pl-3"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={step.state === "upcoming" ? "text-sm text-slate-400" : "text-sm font-medium text-slate-900"}>
+                      {step.label}
+                    </p>
+                    {step.state === "done" && (
+                      <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                        Done
+                      </span>
+                    )}
+                    {step.state === "current" && (
+                      <span className="shrink-0 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  {step.date && <p className="text-xs text-slate-400">{formatDate(step.date)}</p>}
+                </div>
+              </li>
+            );
+          })}
         </ol>
       </div>
 
