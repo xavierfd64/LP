@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { LoginForm } from "./login-form";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { availableOAuthProviders } from "@/lib/oauth-providers";
@@ -20,6 +22,16 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       <OAuthButtons google={providers.google} facebook={providers.facebook} />
 
       <LoginForm />
+
+      <div className="rounded-md border border-slate-200 bg-white p-3 text-center">
+        <p className="text-sm text-slate-500">Don&apos;t want to log in?</p>
+        <Link href="/">
+          <Button type="button" variant="outline" className="mt-2 w-full">
+            Track Your Order
+          </Button>
+        </Link>
+        <p className="mt-1 text-xs text-slate-400">No account needed — enter your order, quotation, job order, or invoice number.</p>
+      </div>
 
       <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-500">
         <p className="mb-1 font-medium">Demo accounts (password: password123)</p>
