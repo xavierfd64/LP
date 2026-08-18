@@ -10,6 +10,7 @@ import { nextQuoteNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
 import { ACTIVE_QUOTATION_STATUSES } from "@/lib/quotation-status";
+import { convertApprovedQuotation } from "@/lib/quotation-conversion";
 
 const lineItemsSchema = z.array(
   z.object({
@@ -151,6 +152,13 @@ export async function approveQuotationAction(quotationId: string) {
   await prisma.quotation.update({ where: { id: quotationId }, data: { status: "APPROVED" } });
   await logAudit(user.id, "QUOTATION_APPROVED", "Quotation", quotationId);
   await notifyStaff("QUOTATION_APPROVED", `Quotation ${quotation.quoteNumber} was approved by the customer.`, `/quotations/${quotationId}`);
+
+  // The Order (Master Transaction) — and, if no payment is required first,
+  // its Job Order — are created automatically here, right on approval, so
+  // Staff never has to manually re-encode this quotation into a separate
+  // Order/Job Order form.
+  await convertApprovedQuotation(quotationId, user.id);
+
   redirect(`/quotations/${quotationId}`);
 }
 
@@ -328,6 +336,8 @@ export async function forceApproveQuotationAction(quotationId: string, _prevStat
     `Quotation ${quotation.quoteNumber} was approved on your behalf for rush processing.`,
     `/quotations/${quotationId}`
   );
+
+  await convertApprovedQuotation(quotationId, user.id);
 
   redirect(`/quotations/${quotationId}`);
 }

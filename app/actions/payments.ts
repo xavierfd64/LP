@@ -10,6 +10,23 @@ import { logAudit } from "@/lib/audit";
 import { saveUploadedFile } from "@/lib/upload";
 import { assertCanRelease, paymentSummary, RuleViolation } from "@/lib/workflow";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
+import { autoCreateJobOrderForOrder } from "@/lib/quotation-conversion";
+
+/**
+ * Reuses the exact same payment/business rule this app has always used to
+ * decide "can production start" (lib/workflow.ts's paymentSummary) as the
+ * trigger for auto-creating an order's first Job Order once a payment
+ * clears — never a second, parallel payment-requirement calculation.
+ * Self-guarding: a no-op if a Job Order already exists, if the order isn't
+ * tied to a quotation with a carry-over-able line item, or if payment
+ * still isn't satisfied.
+ */
+async function autoCreateJobOrderIfPaymentSatisfied(orderId: string, actorId: string) {
+  const summary = await paymentSummary(orderId);
+  if (summary.hasApprovedTerms || summary.partialMet) {
+    await autoCreateJobOrderForOrder(orderId, "Payment Confirmed", actorId);
+  }
+}
 
 const recordPaymentSchema = z.object({
   orderId: z.string().min(1),
@@ -58,6 +75,7 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
     amount,
     status: "CONFIRMED",
   });
+  await autoCreateJobOrderIfPaymentSatisfied(orderId, user.id);
 
   redirect(`/orders/${orderId}`);
 }
@@ -117,6 +135,7 @@ export async function confirmPaymentAction(paymentId: string) {
     `Your payment of ${Number(payment.amount).toFixed(2)} for order ${payment.order.orderNumber} was confirmed.`,
     `/orders/${payment.orderId}`
   );
+  await autoCreateJobOrderIfPaymentSatisfied(payment.orderId, user.id);
   redirect(`/payments`);
 }
 
@@ -280,6 +299,7 @@ export async function applyVoucherAction(_prevState: string | undefined, formDat
     `Voucher ${voucher.code} was applied to order ${order.orderNumber} (${appliedAmount.toFixed(2)} credited).`,
     `/orders/${order.id}`
   );
+  await autoCreateJobOrderIfPaymentSatisfied(order.id, user.id);
 
   redirect(`/orders/${order.id}`);
 }
