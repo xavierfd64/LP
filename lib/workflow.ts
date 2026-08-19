@@ -108,12 +108,32 @@ export async function startProduction(jobOrderId: string, actorId: string | null
  * next stage. If the next stage is the QC stage, JO status becomes QC. If
  * the current stage was the last stage, JO status becomes READY (for
  * fulfillment). Enforces Rule #4 (strict order — always +1, never skips).
+ *
+ * `expectedTargetStageOrder` is set by the Kanban's drag-and-drop and
+ * "Next" actions (Aug 19 1st update) — the client always computes what it
+ * believes the next stage is from the job's own real workflow before
+ * calling this, and the server independently recomputes the true `next`
+ * stage the exact same way; if they disagree, the move is rejected. This
+ * is the actual enforcement point for "invalid stage movement must be
+ * blocked" (a stage from a *different* service's workflow, or any
+ * non-adjacent stage, can never match `next.order`), on the same one rule
+ * engine both the button and the drag path share — never a second,
+ * looser check on the client alone.
+ *
+ * Returns enough state to support "Undo" (spec item 5): the caller can
+ * pass this straight back into `revertStageChange` to restore exactly
+ * what came before, as long as nothing has moved on since.
  */
 export async function completeCurrentStage(
   jobOrderId: string,
   stageLogId: string,
   actorId: string | null,
-  notes?: string
+  notes?: string,
+  /** A real stage's `order`, or `null` to assert "this should complete the
+   * workflow's last stage" (moving the job order to Ready for
+   * Fulfillment), or `undefined` to skip the check entirely (existing
+   * non-Kanban callers). */
+  expectedTargetStageOrder?: number | null
 ) {
   const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
   const log = await prisma.jobOrderStageLog.findUniqueOrThrow({ where: { id: stageLogId } });
@@ -130,6 +150,20 @@ export async function completeCurrentStage(
   const next = stages[currentIdx + 1];
 
   const isReworkCompletion = jo.status === "REWORK";
+
+  // The rework-re-enters-QC path doesn't move to `next` at all (it always
+  // routes back to the template's QC stage), so the expected-target check
+  // only applies to the normal forward-advance path below.
+  if (!isReworkCompletion && expectedTargetStageOrder !== undefined) {
+    const actualTargetOrder = next ? next.order : null;
+    if (actualTargetOrder !== expectedTargetStageOrder) {
+      throw new RuleViolation("That stage isn't the next step in this job order's workflow.");
+    }
+  }
+
+  const previousStatus = jo.status;
+  const previousStageOrder = jo.currentStageOrder;
+  let newLogId: string | null = null;
 
   await prisma.$transaction(async (tx) => {
     await tx.jobOrderStageLog.update({
@@ -154,9 +188,10 @@ export async function completeCurrentStage(
         where: { id: jobOrderId },
         data: { status: "QC", currentStageOrder: qcStage.order },
       });
-      await tx.jobOrderStageLog.create({
+      const created = await tx.jobOrderStageLog.create({
         data: { jobOrderId, stageName: qcStage.name, stageOrder: qcStage.order, status: "READY" },
       });
+      newLogId = created.id;
       await tx.reworkRecord.updateMany({
         where: { jobOrderId, status: { in: ["OPEN", "IN_PROGRESS"] } },
         data: { status: "DONE" },
@@ -178,9 +213,10 @@ export async function completeCurrentStage(
         where: { id: jobOrderId },
         data: { status: "QC", currentStageOrder: next.order },
       });
-      await tx.jobOrderStageLog.create({
+      const created = await tx.jobOrderStageLog.create({
         data: { jobOrderId, stageName: next.name, stageOrder: next.order, status: "READY" },
       });
+      newLogId = created.id;
       return;
     }
 
@@ -188,9 +224,10 @@ export async function completeCurrentStage(
       where: { id: jobOrderId },
       data: { currentStageOrder: next.order },
     });
-    await tx.jobOrderStageLog.create({
+    const created = await tx.jobOrderStageLog.create({
       data: { jobOrderId, stageName: next.name, stageOrder: next.order, status: "READY" },
     });
+    newLogId = created.id;
   });
 
   const { logAudit } = await import("@/lib/audit");
@@ -209,6 +246,64 @@ export async function completeCurrentStage(
       ? `Job order ${jo.joNumber} completed ${log.stageName} and is now in quality control.`
       : `Job order ${jo.joNumber} completed ${log.stageName} and moved to ${next.name}.`;
   await notifyCustomer(order.customerId, "PRODUCTION_STAGE_UPDATE", progressMessage, `/job-orders/${jobOrderId}`);
+
+  return {
+    completedLogId: stageLogId,
+    newLogId,
+    previousStatus,
+    previousStageOrder,
+    fromStageName: log.stageName,
+    toStageName: next ? next.name : "Ready for Fulfillment",
+    wasReworkCompletion: isReworkCompletion,
+  };
+}
+
+export type StageChangeUndo = Awaited<ReturnType<typeof completeCurrentStage>>;
+
+/**
+ * Reverts exactly one "Undo"-eligible stage change (spec item 5) — never a
+ * general free-form backward move. Deliberately narrow: it only restores
+ * the precise before/after state `completeCurrentStage` itself just
+ * returned, and only while nothing has happened to the job order since
+ * (the new stage log must still be untouched — not started, not
+ * completed, no QC result recorded against it). A rework-completion isn't
+ * offered Undo at all (its ReworkRecord side-effects make "undo" ambiguous
+ * enough that it's out of scope here) — callers should check
+ * `wasReworkCompletion` before offering the Undo button in the first place.
+ */
+export async function revertStageChange(undo: StageChangeUndo, actorId: string | null) {
+  if (undo.wasReworkCompletion || !undo.newLogId) {
+    throw new RuleViolation("This change can't be undone.");
+  }
+
+  const newLog = await prisma.jobOrderStageLog.findUniqueOrThrow({ where: { id: undo.newLogId } });
+  if (newLog.status !== "READY") {
+    throw new RuleViolation("This stage has already progressed and can no longer be undone.");
+  }
+
+  const jobOrderId = newLog.jobOrderId;
+  const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
+  if (jo.currentStageOrder !== newLog.stageOrder) {
+    throw new RuleViolation("This job order has already moved on and can no longer be undone.");
+  }
+
+  await prisma.$transaction([
+    prisma.jobOrderStageLog.delete({ where: { id: undo.newLogId } }),
+    prisma.jobOrderStageLog.update({
+      where: { id: undo.completedLogId },
+      data: { status: "IN_PROGRESS", completedAt: null },
+    }),
+    prisma.jobOrder.update({
+      where: { id: jobOrderId },
+      data: { status: undo.previousStatus, currentStageOrder: undo.previousStageOrder },
+    }),
+  ]);
+
+  const { logAudit } = await import("@/lib/audit");
+  await logAudit(actorId, "STAGE_CHANGE_REVERTED", "JobOrder", jobOrderId, {
+    from: undo.toStageName,
+    to: undo.fromStageName,
+  });
 }
 
 export async function setStageLogStatus(

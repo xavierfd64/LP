@@ -1,16 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, MessageCircle, FileText, AlertTriangle, ChevronRight, Package } from "lucide-react";
+import { Search, MessageCircle, FileText, AlertTriangle, ChevronRight, Package, Undo2, X } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
-import { markStageInProgressAction } from "@/app/actions/production";
+import { markStageInProgressAction, moveStageAction, revertStageAction, type MoveStageResult } from "@/app/actions/production";
+import type { StageChangeUndo } from "@/lib/workflow";
 import { openTransactionInChatAction } from "@/app/actions/messages";
-import { CompleteStageForm } from "./complete-stage-form";
 import { MessengerDispatchDialog } from "@/components/production/messenger-dispatch-dialog";
+
+/** Synthetic trailing column every board gets — a Job Order lands here once its workflow's last real stage is completed. Not a WorkflowStage row, so its `order` is always `stages.length + 1` and it's never a valid `expectedTargetStageOrder` target (that uses `null` instead — see completeCurrentStage's doc comment). */
+export const READY_COLUMN = "Ready for Fulfillment";
 
 export type KanbanJobOrder = {
   id: string;
@@ -31,48 +35,99 @@ export type KanbanJobOrder = {
   assignedStaffName: string | null;
 };
 
+export type ServiceBoard = {
+  key: string;
+  label: string;
+  columns: { name: string; order: number }[];
+  jobOrders: KanbanJobOrder[];
+};
+
+type UndoState = { jobOrderId: string; joNumber: string; fromStage: string; toStage: string; undo: StageChangeUndo };
+
 /**
- * Production Kanban — columns are the actual configured WorkflowStage
- * sequence (reusing the existing WorkflowTemplate/WorkflowStage
- * architecture, not a new stage system), plus a trailing "Ready for
- * Fulfillment" column for job orders that finished their last stage.
- * Desktop/tablet: horizontal-scrolling stage columns. Mobile: a stage
- * selector narrows the board to one column at a time, avoiding sideways
- * scrolling through a whole row of narrow columns on a small screen.
+ * Production Kanban (Aug 19 1st update). One `ServiceBoard` per active
+ * Service, each with its own real workflow's columns — "All Services"
+ * stacks every board rather than merging them into one fake universal
+ * column set (spec item 12). Desktop/tablet (≥640px, matching this app's
+ * existing sm: breakpoint) supports drag-and-drop between a job's current
+ * stage and the one immediately after it in its own workflow; phones keep
+ * the existing button controls. The ≥640px gate is a viewport-capability
+ * check (matchMedia), not user-agent sniffing, mirroring how every other
+ * responsive decision in this app is already made.
  */
 export function KanbanBoard({
-  columns,
-  jobOrders,
+  boards,
   canUpdateStage,
   canMarkStageComplete,
   canDispatchMessenger,
 }: {
-  columns: string[];
-  jobOrders: KanbanJobOrder[];
+  boards: ServiceBoard[];
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
   canDispatchMessenger: boolean;
 }) {
-  const services = useMemo(() => Array.from(new Set(jobOrders.map((j) => j.productType))).sort(), [jobOrders]);
-  const [service, setService] = useState("");
+  const router = useRouter();
+  const [serviceKey, setServiceKey] = useState("");
   const [query, setQuery] = useState("");
-  const [mobileStage, setMobileStage] = useState(columns[0] ?? "");
+  const [canDrag, setCanDrag] = useState(false);
+  const [undoState, setUndoState] = useState<UndoState | null>(null);
+  const [dragError, setDragError] = useState<string | null>(null);
 
-  const filtered = jobOrders.filter((j) => {
-    if (service && j.productType !== service) return false;
-    if (query.trim()) {
-      const q = query.trim().toLowerCase();
-      if (
-        !j.joNumber.toLowerCase().includes(q) &&
-        !j.customerName.toLowerCase().includes(q) &&
-        !j.productType.toLowerCase().includes(q) &&
-        !j.orderNumber.toLowerCase().includes(q)
-      ) {
-        return false;
-      }
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const update = () => setCanDrag(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!undoState) return;
+    const id = setTimeout(() => setUndoState(null), 10000);
+    return () => clearTimeout(id);
+  }, [undoState]);
+
+  const q = query.trim().toLowerCase();
+  function matches(j: KanbanJobOrder) {
+    if (!q) return true;
+    return (
+      j.joNumber.toLowerCase().includes(q) ||
+      j.customerName.toLowerCase().includes(q) ||
+      j.productType.toLowerCase().includes(q) ||
+      j.orderNumber.toLowerCase().includes(q)
+    );
+  }
+
+  const visibleBoards = useMemo(() => {
+    const selected = serviceKey ? boards.filter((b) => b.key === serviceKey) : boards.filter((b) => b.jobOrders.length > 0);
+    return selected.map((b) => ({ ...b, jobOrders: b.jobOrders.filter(matches) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boards, serviceKey, q]);
+
+  async function handleMove(jo: KanbanJobOrder, board: ServiceBoard, targetOrder: number | null) {
+    if (!jo.currentLogId) return;
+    setDragError(null);
+    const result: MoveStageResult = await moveStageAction(jo.id, jo.currentLogId, targetOrder);
+    if (!result.ok) {
+      setDragError(result.error);
+      return;
     }
-    return true;
-  });
+    if (!result.undo.wasReworkCompletion) {
+      setUndoState({ jobOrderId: jo.id, joNumber: jo.joNumber, fromStage: result.undo.fromStageName, toStage: result.undo.toStageName, undo: result.undo });
+    }
+    router.refresh();
+  }
+
+  async function handleUndo() {
+    if (!undoState) return;
+    const result = await revertStageAction(undoState.undo);
+    setUndoState(null);
+    if (!result.ok) {
+      setDragError(result.error);
+      return;
+    }
+    router.refresh();
+  }
 
   return (
     <div className="space-y-4">
@@ -86,72 +141,226 @@ export function KanbanBoard({
             className="pl-8"
           />
         </div>
-        <Select value={service} onChange={(e) => setService(e.target.value)} className="sm:w-56">
+        <Select value={serviceKey} onChange={(e) => setServiceKey(e.target.value)} className="sm:w-56">
           <option value="">All Services</option>
-          {services.map((s) => (
-            <option key={s} value={s}>
-              {s}
+          {boards.map((b) => (
+            <option key={b.key} value={b.key}>
+              {b.label}
             </option>
           ))}
         </Select>
       </div>
 
-      {/* Mobile: one stage at a time via a selector, avoiding sideways
-          scrolling through a whole row of narrow columns. */}
+      {dragError && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <span>{dragError}</span>
+          <button type="button" onClick={() => setDragError(null)} aria-label="Dismiss">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {visibleBoards.length === 0 && (
+        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-slate-200 py-10 text-center">
+          <Package className="h-6 w-6 text-slate-300" />
+          <p className="text-sm text-slate-400">No production jobs match this view.</p>
+        </div>
+      )}
+
+      {visibleBoards.map((board) => (
+        <div key={board.key} className="space-y-2">
+          {!serviceKey && visibleBoards.length > 1 && (
+            <h2 className="text-sm font-semibold text-slate-900">{board.label}</h2>
+          )}
+          <SingleBoard
+            board={board}
+            canUpdateStage={canUpdateStage}
+            canMarkStageComplete={canMarkStageComplete}
+            canDispatchMessenger={canDispatchMessenger}
+            canDrag={canDrag}
+            onMove={handleMove}
+          />
+        </div>
+      ))}
+
+      {undoState && (
+        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+          <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-900 px-4 py-2.5 text-sm text-white shadow-xl">
+            <span>
+              {undoState.joNumber}: {undoState.fromStage} → {undoState.toStage}
+            </span>
+            <button
+              type="button"
+              onClick={handleUndo}
+              className="flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 font-medium hover:bg-white/20"
+            >
+              <Undo2 className="h-3.5 w-3.5" /> Undo
+            </button>
+            <button type="button" onClick={() => setUndoState(null)} aria-label="Dismiss" className="text-white/60 hover:text-white">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SingleBoard({
+  board,
+  canUpdateStage,
+  canMarkStageComplete,
+  canDispatchMessenger,
+  canDrag,
+  onMove,
+}: {
+  board: ServiceBoard;
+  canUpdateStage: boolean;
+  canMarkStageComplete: boolean;
+  canDispatchMessenger: boolean;
+  canDrag: boolean;
+  onMove: (jo: KanbanJobOrder, board: ServiceBoard, targetOrder: number | null) => void;
+}) {
+  const [mobileStage, setMobileStage] = useState(board.columns[0]?.name ?? "");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  const draggingJo = board.jobOrders.find((j) => j.id === draggingId) ?? null;
+  const validTargetName = draggingJo ? nextColumnName(board, draggingJo.column) : null;
+
+  if (board.columns.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+        No production workflow is assigned to this service yet.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Mobile: one stage at a time via a selector, existing button controls — no drag. */}
       <div className="sm:hidden">
         <Select value={mobileStage} onChange={(e) => setMobileStage(e.target.value)}>
-          {columns.map((col) => (
-            <option key={col} value={col}>
-              {col} ({filtered.filter((j) => j.column === col).length})
+          {board.columns.map((col) => (
+            <option key={col.name} value={col.name}>
+              {col.name} ({board.jobOrders.filter((j) => j.column === col.name).length})
             </option>
           ))}
         </Select>
         <StageColumn
-          col={mobileStage}
-          items={filtered.filter((j) => j.column === mobileStage)}
+          board={board}
+          colName={mobileStage}
+          items={board.jobOrders.filter((j) => j.column === mobileStage)}
           canUpdateStage={canUpdateStage}
           canMarkStageComplete={canMarkStageComplete}
           canDispatchMessenger={canDispatchMessenger}
+          canDrag={false}
+          isValidDropTarget={false}
+          isDragActive={false}
+          onDragStartCard={() => {}}
+          onDragEndCard={() => {}}
+          onDropCard={() => {}}
+          onMove={onMove}
           className="mt-3"
         />
       </div>
 
       <div className="hidden gap-4 sm:flex sm:overflow-x-auto sm:pb-2">
-        {columns.map((col) => (
+        {board.columns.map((col) => (
           <StageColumn
-            key={col}
-            col={col}
-            items={filtered.filter((j) => j.column === col)}
+            key={col.name}
+            board={board}
+            colName={col.name}
+            items={board.jobOrders.filter((j) => j.column === col.name)}
             canUpdateStage={canUpdateStage}
             canMarkStageComplete={canMarkStageComplete}
             canDispatchMessenger={canDispatchMessenger}
+            canDrag={canDrag}
+            isValidDropTarget={canDrag && validTargetName === col.name}
+            isDragActive={!!draggingJo}
+            onDragStartCard={(id) => setDraggingId(id)}
+            onDragEndCard={() => setDraggingId(null)}
+            onDropCard={(jo) => {
+              if (validTargetName === col.name) {
+                const targetCol = board.columns.find((c) => c.name === col.name)!;
+                onMove(jo, board, targetCol.name === READY_COLUMN ? null : targetCol.order);
+              }
+              setDraggingId(null);
+            }}
+            onMove={onMove}
             className="w-72 shrink-0"
           />
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
+/** The one column immediately after `fromColumn` in this board's own workflow — the only valid drag target, enforcing Rule #4 (no skipping) visually before the server enforces it again authoritatively. */
+function nextColumnName(board: ServiceBoard, fromColumn: string): string | null {
+  const idx = board.columns.findIndex((c) => c.name === fromColumn);
+  if (idx === -1) return null;
+  return board.columns[idx + 1]?.name ?? null;
+}
+
 function StageColumn({
-  col,
+  board,
+  colName,
   items,
   canUpdateStage,
   canMarkStageComplete,
   canDispatchMessenger,
+  canDrag,
+  isValidDropTarget,
+  isDragActive,
+  onDragStartCard,
+  onDragEndCard,
+  onDropCard,
+  onMove,
   className,
 }: {
-  col: string;
+  board: ServiceBoard;
+  colName: string;
   items: KanbanJobOrder[];
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
   canDispatchMessenger: boolean;
+  canDrag: boolean;
+  isValidDropTarget: boolean;
+  isDragActive: boolean;
+  onDragStartCard: (id: string) => void;
+  onDragEndCard: () => void;
+  onDropCard: (jo: KanbanJobOrder) => void;
+  onMove: (jo: KanbanJobOrder, board: ServiceBoard, targetOrder: number | null) => void;
   className?: string;
 }) {
+  const [dragOver, setDragOver] = useState(false);
+
   return (
-    <div className={cn("rounded-lg border border-slate-200 bg-slate-50", className)}>
+    <div
+      className={cn(
+        "rounded-lg border bg-slate-50 transition-colors",
+        isDragActive && isValidDropTarget && (dragOver ? "border-brand-500 bg-brand-50 ring-2 ring-brand-300" : "border-brand-300"),
+        isDragActive && !isValidDropTarget && "opacity-50",
+        !isDragActive && "border-slate-200",
+        className
+      )}
+      onDragOver={(e) => {
+        if (isValidDropTarget) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const id = e.dataTransfer.getData("text/plain");
+        const dropped = board.jobOrders.find((j) => j.id === id);
+        if (dropped) onDropCard(dropped);
+      }}
+    >
       <div className="flex items-center justify-between border-b border-slate-200 bg-white p-3 rounded-t-lg">
-        <h3 className="text-sm font-semibold text-slate-900">{col}</h3>
+        <h3 className="text-sm font-semibold text-slate-900">{colName}</h3>
         <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700">{items.length}</span>
       </div>
       <div className="max-h-[70vh] space-y-2 overflow-y-auto p-2">
@@ -159,9 +368,14 @@ function StageColumn({
           <JobOrderCard
             key={jo.id}
             jo={jo}
+            board={board}
             canUpdateStage={canUpdateStage}
             canMarkStageComplete={canMarkStageComplete}
             canDispatchMessenger={canDispatchMessenger}
+            canDrag={canDrag}
+            onDragStart={onDragStartCard}
+            onDragEnd={onDragEndCard}
+            onMove={onMove}
           />
         ))}
         {items.length === 0 && (
@@ -177,16 +391,32 @@ function StageColumn({
 
 function JobOrderCard({
   jo,
+  board,
   canUpdateStage,
   canMarkStageComplete,
   canDispatchMessenger,
+  canDrag,
+  onDragStart,
+  onDragEnd,
+  onMove,
 }: {
   jo: KanbanJobOrder;
+  board: ServiceBoard;
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
   canDispatchMessenger: boolean;
+  canDrag: boolean;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  onMove: (jo: KanbanJobOrder, board: ServiceBoard, targetOrder: number | null) => void;
 }) {
   const markIP = jo.currentLogId ? markStageInProgressAction.bind(null, jo.currentLogId) : undefined;
+  // Same precondition the "Next" button already required — a card only
+  // becomes draggable once its current stage is actually in progress.
+  // READY (not started yet) and QC cards keep their existing dedicated
+  // controls instead (Start Stage / Go to QC) rather than a plain drag.
+  const isDraggable = canDrag && jo.currentLogStatus === "IN_PROGRESS" && canMarkStageComplete;
+  const nextCol = board.columns[board.columns.findIndex((c) => c.name === jo.column) + 1];
 
   async function handleChat() {
     const { conversationId } = await openTransactionInChatAction("JOB_ORDER", jo.id);
@@ -198,7 +428,21 @@ function JobOrderCard({
   }
 
   return (
-    <div className={cn("space-y-2 rounded-md border bg-white p-3 shadow-sm", jo.overdue ? "border-red-300" : "border-slate-200")}>
+    <div
+      draggable={isDraggable}
+      onDragStart={(e) => {
+        if (!isDraggable) return;
+        e.dataTransfer.setData("text/plain", jo.id);
+        e.dataTransfer.effectAllowed = "move";
+        onDragStart(jo.id);
+      }}
+      onDragEnd={onDragEnd}
+      className={cn(
+        "space-y-2 rounded-md border bg-white p-3 shadow-sm",
+        jo.overdue ? "border-red-300" : "border-slate-200",
+        isDraggable && "cursor-grab active:cursor-grabbing"
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <Link href={`/job-orders/${jo.id}`} className="text-sm font-bold text-slate-900 underline decoration-slate-300 hover:decoration-slate-900">
@@ -270,18 +514,15 @@ function JobOrderCard({
               </form>
             )
           ) : jo.currentLogStatus === "IN_PROGRESS" ? (
-            canMarkStageComplete &&
-            jo.currentLogId && (
-              <CompleteStageForm
-                jobOrderId={jo.id}
-                stageLogId={jo.currentLogId}
-                compact
-                label={
-                  <>
-                    Next <ChevronRight className="h-3.5 w-3.5" />
-                  </>
-                }
-              />
+            canMarkStageComplete && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => onMove(jo, board, nextCol && nextCol.name !== READY_COLUMN ? nextCol.order : null)}
+              >
+                Next <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
             )
           ) : null}
         </div>

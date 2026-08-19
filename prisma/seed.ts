@@ -222,37 +222,50 @@ async function main() {
   // ---------- Service/Product Master ----------
   // Each Service names an existing WorkflowTemplate as its default
   // production flow, so a Job Order created for that Service automatically
-  // uses the right stages — no separate "production flow" system.
+  // uses the right stages — no separate "production flow" system. Named
+  // individually (not createMany) so the demo Job Orders below can
+  // reference their real serviceId, matching what a Job Order created
+  // through the actual app always sets (app/actions/orders.ts) — service-
+  // aware Kanban grouping (Aug 19 1st update) depends on this being real,
+  // not inferred from productType free text.
+  const jerseyService = await prisma.service.create({
+    data: {
+      name: "Jersey / Uniforms",
+      description: "Custom sublimated or DTF-printed team jerseys and uniforms.",
+      category: "Apparel",
+      workflowTemplateId: jerseyTemplate.id,
+      specFields: ["Sizes", "Fabric", "Printing Method", "Color"],
+    },
+  });
+  const tarpService = await prisma.service.create({
+    data: {
+      name: "Tarpaulin",
+      description: "Large-format tarpaulin printing for events and signage.",
+      category: "Signage & Printing",
+      workflowTemplateId: tarpTemplate.id,
+      specFields: ["Width", "Height", "Material", "Finishing"],
+    },
+  });
+  const dtfService = await prisma.service.create({
+    data: {
+      name: "DTF Shirt Printing",
+      description: "Direct-to-film transfer printing on shirts.",
+      category: "Apparel",
+      workflowTemplateId: dtfTemplate.id,
+      specFields: ["Sizes", "Print Placement", "Quantity"],
+    },
+  });
+  const signageService = await prisma.service.create({
+    data: {
+      name: "Signage",
+      description: "Fabricated and mounted signage, including installation.",
+      category: "Signage & Printing",
+      workflowTemplateId: signageTemplate.id,
+      specFields: ["Dimensions", "Material", "Mounting Location"],
+    },
+  });
   await prisma.service.createMany({
     data: [
-      {
-        name: "Jersey / Uniforms",
-        description: "Custom sublimated or DTF-printed team jerseys and uniforms.",
-        category: "Apparel",
-        workflowTemplateId: jerseyTemplate.id,
-        specFields: ["Sizes", "Fabric", "Printing Method", "Color"],
-      },
-      {
-        name: "Tarpaulin",
-        description: "Large-format tarpaulin printing for events and signage.",
-        category: "Signage & Printing",
-        workflowTemplateId: tarpTemplate.id,
-        specFields: ["Width", "Height", "Material", "Finishing"],
-      },
-      {
-        name: "DTF Shirt Printing",
-        description: "Direct-to-film transfer printing on shirts.",
-        category: "Apparel",
-        workflowTemplateId: dtfTemplate.id,
-        specFields: ["Sizes", "Print Placement", "Quantity"],
-      },
-      {
-        name: "Signage",
-        description: "Fabricated and mounted signage, including installation.",
-        category: "Signage & Printing",
-        workflowTemplateId: signageTemplate.id,
-        specFields: ["Dimensions", "Material", "Mounting Location"],
-      },
       {
         name: "Stickers",
         description: "Cut or sheet stickers and labels.",
@@ -531,6 +544,7 @@ async function main() {
       orderId: order1.id,
       joNumber: "JO-001",
       productType: "Jersey",
+      serviceId: jerseyService.id,
       description: "25x sublimation basketball jersey",
       quantity: 25,
       workflowTemplateId: jerseyTemplate.id,
@@ -572,6 +586,7 @@ async function main() {
       orderId: order2.id,
       joNumber: "JO-001",
       productType: "DTF Shirt",
+      serviceId: dtfService.id,
       description: "30x DTF shirt, dept. A design",
       quantity: 30,
       workflowTemplateId: dtfTemplate.id,
@@ -594,6 +609,7 @@ async function main() {
       orderId: order2.id,
       joNumber: "JO-002",
       productType: "DTF Shirt",
+      serviceId: dtfService.id,
       description: "20x DTF shirt, dept. B design",
       quantity: 20,
       workflowTemplateId: dtfTemplate.id,
@@ -681,6 +697,7 @@ async function main() {
       orderId: order3.id,
       joNumber: "JO-001",
       productType: "Signage",
+      serviceId: signageService.id,
       description: "Municipal fiesta welcome arch signage with installation",
       quantity: 1,
       workflowTemplateId: signageTemplate.id,
@@ -728,6 +745,7 @@ async function main() {
       orderId: order3.id,
       joNumber: "JO-002",
       productType: "Tarp",
+      serviceId: tarpService.id,
       description: "10x streamer tarpaulin 3x8ft",
       quantity: 10,
       workflowTemplateId: tarpTemplate.id,

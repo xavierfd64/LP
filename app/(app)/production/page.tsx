@@ -3,60 +3,93 @@ import { requireRole } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Alert } from "@/components/ui/alert";
-import { KanbanBoard, type KanbanJobOrder } from "./kanban-board";
+import { KanbanBoard, type KanbanJobOrder, type ServiceBoard } from "./kanban-board";
 
+const READY_COLUMN = "Ready for Fulfillment";
+
+/**
+ * Production Kanban (Aug 19 1st update — service-aware rework). Each
+ * active Service's own real WorkflowTemplate (Services module, not the
+ * job order's free-text productType) becomes its own board with its own
+ * column set — never one merged "fake universal workflow" column list
+ * across every service (spec items 8-16). Job Orders group by their real
+ * `serviceId` relation; the rare Job Order predating the Service Master
+ * feature (serviceId null) falls back to its own WorkflowTemplate's name
+ * as a labeled group, still using that template's real stages — never
+ * inferred from productType text.
+ */
 export default async function ProductionQueuePage({ searchParams }: PageProps<"/production">) {
   const user = await requireRole(["PRODUCTION", "ADMIN", "STAFF"]);
   if (user.role === "STAFF" && !(await can(user, "PRODUCTION_VIEW"))) redirect("/dashboard");
   const canUpdateStage = user.role !== "STAFF" || (await can(user, "PRODUCTION_UPDATE_STAGE"));
   const canMarkStageComplete = user.role !== "STAFF" || (await can(user, "PRODUCTION_MARK_STAGE_COMPLETE"));
-  // Messenger dispatch is a customer-communication action, not a production-
-  // floor one — PRODUCTION never sees it (mirrors canSeeAmount below), ADMIN
-  // always does, STAFF needs the explicit grant.
   const canDispatchMessenger = user.role === "ADMIN" || (user.role === "STAFF" && (await can(user, "MESSENGER_DISPATCH")));
-  // Production-floor staff don't need to see order values — amounts are a
-  // Staff/Admin-facing detail (spec: "Amount, where appropriate for
-  // Staff/Admin").
   const canSeeAmount = user.role !== "PRODUCTION";
   const sp = await searchParams;
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
 
-  const [jobOrders, templates] = await Promise.all([
+  const [services, jobOrders] = await Promise.all([
+    // Spec item 9: only active, saved services — nothing hard-coded, no
+    // draft/deleted/demo entries. New services (and workflow reassignments)
+    // appear automatically since this is the exact same query the Services
+    // module itself is the source of truth for.
+    prisma.service.findMany({
+      where: { active: true },
+      include: { workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } } },
+      orderBy: { name: "asc" },
+    }),
     prisma.jobOrder.findMany({
       where: { status: { in: ["IN_PROGRESS", "REWORK", "QC", "READY"] } },
       include: {
         order: { include: { customer: true, fulfillments: { orderBy: { createdAt: "desc" }, take: 1 } } },
+        service: { include: { workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } } } },
+        workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } },
         stageLogs: { orderBy: { createdAt: "desc" }, include: { assignedTo: true } },
       },
       orderBy: { deadline: "asc" },
     }),
-    prisma.workflowTemplate.findMany({
-      where: { active: true },
-      include: { stages: { orderBy: { order: "asc" } } },
-    }),
   ]);
 
-  // Columns = the union of configured stage names across active workflow
-  // templates, in first-seen order — reuses the existing WorkflowTemplate/
-  // WorkflowStage architecture instead of inventing a separate stage list.
-  // A given Job Order only ever lands in the column matching its own
-  // Service's configured flow, so Tarpaulin and Uniforms job orders show up
-  // under their own respective stages, never a one-size-fits-all sequence.
-  const READY_COLUMN = "Ready for Fulfillment";
-  const columnNames: string[] = [];
-  for (const t of templates) {
-    for (const s of t.stages) {
-      if (!columnNames.includes(s.name)) columnNames.push(s.name);
-    }
-  }
-  columnNames.push(READY_COLUMN);
-
   const now = Date.now();
-  const items: KanbanJobOrder[] = jobOrders.map((jo) => {
+  const boardsByKey = new Map<string, ServiceBoard>();
+
+  function boardFor(key: string, label: string, stages: { name: string; order: number }[]): ServiceBoard {
+    let board = boardsByKey.get(key);
+    if (!board) {
+      const columns =
+        stages.length > 0
+          ? [...stages.map((s) => ({ name: s.name, order: s.order })), { name: READY_COLUMN, order: stages.length + 1 }]
+          : [];
+      board = { key, label, columns, jobOrders: [] };
+      boardsByKey.set(key, board);
+    }
+    return board;
+  }
+
+  // Pre-create a board for every active service — even one with zero job
+  // orders right now, or no production workflow assigned yet — so the
+  // dropdown always reflects the full, real Services module (spec item 9:
+  // "once a service is successfully saved, it should automatically become
+  // available in the Kanban," not just once it happens to have work).
+  for (const s of services) {
+    boardFor(s.id, s.name, s.workflowTemplate?.stages ?? []);
+  }
+
+  for (const jo of jobOrders) {
+    const key = jo.serviceId && jo.service ? jo.serviceId : `wf:${jo.workflowTemplateId}`;
+    const label = jo.service?.name ?? `${jo.workflowTemplate.name} (unlinked service)`;
+    // A job order's own workflowTemplate is always the real source for its
+    // stage list, even when it's grouped under a Service board — the two
+    // agree by construction for normal (service-linked) job orders, and
+    // the fallback path uses the job order's own template directly.
+    const stages = jo.serviceId && jo.service?.workflowTemplate ? jo.service.workflowTemplate.stages : jo.workflowTemplate.stages;
+    const board = boardFor(key, label, stages);
+
     const currentLog = jo.stageLogs.find((l) => l.stageOrder === jo.currentStageOrder && l.status !== "COMPLETED");
     const column = jo.status === "READY" ? READY_COLUMN : currentLog?.stageName ?? READY_COLUMN;
     const specs = (jo.specs as Record<string, string> | null) ?? null;
-    return {
+
+    const item: KanbanJobOrder = {
       id: jo.id,
       joNumber: jo.joNumber,
       productType: jo.productType,
@@ -74,13 +107,16 @@ export default async function ProductionQueuePage({ searchParams }: PageProps<"/
       currentLogStatus: currentLog?.status ?? null,
       assignedStaffName: currentLog?.assignedTo?.name ?? null,
     };
-  });
+    board.jobOrders.push(item);
+  }
 
+  const boards = Array.from(boardsByKey.values());
+  const allItems = boards.flatMap((b) => b.jobOrders);
   const stageCounts = {
-    active: items.length,
-    inProduction: items.filter((i) => i.status === "IN_PROGRESS" || i.status === "REWORK").length,
-    inQc: items.filter((i) => i.status === "QC").length,
-    ready: items.filter((i) => i.status === "READY").length,
+    active: allItems.length,
+    inProduction: allItems.filter((i) => i.status === "IN_PROGRESS" || i.status === "REWORK").length,
+    inQc: allItems.filter((i) => i.status === "QC").length,
+    ready: allItems.filter((i) => i.status === "READY").length,
   };
 
   return (
@@ -101,8 +137,7 @@ export default async function ProductionQueuePage({ searchParams }: PageProps<"/
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
       <KanbanBoard
-        columns={columnNames}
-        jobOrders={items}
+        boards={boards}
         canUpdateStage={canUpdateStage}
         canMarkStageComplete={canMarkStageComplete}
         canDispatchMessenger={canDispatchMessenger}
