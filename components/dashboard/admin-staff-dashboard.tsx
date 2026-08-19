@@ -1,4 +1,6 @@
+import { Wallet, Package, CreditCard, Inbox, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { getBusinessSettings } from "@/lib/business-settings";
 import { SectionHeader } from "./section-header";
 import { KpiCard } from "./kpi-card";
 import { NeedsAttention } from "./needs-attention";
@@ -51,7 +53,7 @@ export async function AdminStaffDashboard({
   canMessageCustomers: boolean;
   quickActions: QuickAction[];
 }) {
-  const [kpis, needsAttention, financial, receivables, production, activity, upcoming, insights, charts, revenueTrend] = await Promise.all([
+  const [kpis, needsAttention, financial, receivables, production, activity, upcoming, insights, charts, revenueTrend, settings] = await Promise.all([
     getPrimaryKpis(),
     getNeedsAttention(),
     getFinancialOverview("month"),
@@ -62,7 +64,12 @@ export async function AdminStaffDashboard({
     getBusinessInsights(),
     getStatusCharts(),
     canSeeFinancials ? getRevenueTrend6Months() : Promise.resolve([]),
+    getBusinessSettings(),
   ]);
+  // Nextgen-only visual differences (colored KPI icon tiles, a donut
+  // instead of a bar for Orders by Status) — same data either way, see
+  // kpi-card.tsx's and admin-charts.tsx's own doc comments.
+  const isNextgen = settings.activeTheme === "nextgen";
 
   const firstName = name.split(" ")[0];
   const todayLabel = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -82,16 +89,32 @@ export async function AdminStaffDashboard({
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-        <KpiCard label="Today's Sales" value={formatCurrency(kpis.todaySales)} sub={salesTrend} href={canSeeFinancials ? "/reports/summary" : undefined} />
+        <KpiCard
+          label="Today's Sales"
+          value={formatCurrency(kpis.todaySales)}
+          sub={salesTrend}
+          href={canSeeFinancials ? "/reports/summary" : undefined}
+          icon={isNextgen ? TrendingUp : undefined}
+          iconTone="green"
+        />
         {canSeeFinancials && (
           <KpiCard
             label="Outstanding Balance"
             value={formatCurrency(kpis.outstandingBalance)}
             sub={`${kpis.outstandingCustomerCount} customer${kpis.outstandingCustomerCount === 1 ? "" : "s"}`}
             href="/payments"
+            icon={isNextgen ? Wallet : undefined}
+            iconTone="red"
           />
         )}
-        <KpiCard label="Open Orders" value={kpis.openOrders} sub={`${kpis.inProductionCount} in production`} href="/orders" />
+        <KpiCard
+          label="Open Orders"
+          value={kpis.openOrders}
+          sub={`${kpis.inProductionCount} in production`}
+          href="/orders"
+          icon={isNextgen ? Package : undefined}
+          iconTone="blue"
+        />
         {canSeeFinancials && (
           <KpiCard
             label="Pending Payments"
@@ -99,9 +122,19 @@ export async function AdminStaffDashboard({
             sub={formatCurrency(kpis.pendingPaymentsAmount)}
             href="/payments"
             tone={kpis.pendingPaymentsCount > 0 ? "attention" : undefined}
+            icon={isNextgen ? CreditCard : undefined}
+            iconTone="orange"
           />
         )}
-        <KpiCard label="New Inquiries" value={kpis.newInquiries} sub="Today" href="/inquiries" tone={kpis.newInquiries > 0 ? "attention" : undefined} />
+        <KpiCard
+          label="New Inquiries"
+          value={kpis.newInquiries}
+          sub="Today"
+          href="/inquiries"
+          tone={kpis.newInquiries > 0 ? "attention" : undefined}
+          icon={isNextgen ? Inbox : undefined}
+          iconTone="purple"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -121,7 +154,7 @@ export async function AdminStaffDashboard({
             <SectionHeader title="Orders by Status" />
           </CardHeader>
           <CardContent>
-            <OrdersByStatusChart data={charts.ordersByStatus} />
+            <OrdersByStatusChart data={charts.ordersByStatus} variant={isNextgen ? "donut" : "bar"} />
           </CardContent>
         </Card>
         {canSeeFinancials && (

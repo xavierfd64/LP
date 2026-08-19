@@ -12,6 +12,8 @@ import {
   ComposedChart,
   Line,
   Cell,
+  PieChart,
+  Pie,
 } from "recharts";
 
 /** Mirrors components/ui/badge.tsx's STATUS_TONE mapping so chart colors match the status badges used everywhere else. */
@@ -45,10 +47,38 @@ const axisTick = { fontSize: 11, fill: "#64748b" };
 const tooltipStyle = { fontSize: 12, borderRadius: 8, borderColor: "#e2e8f0" };
 const label = (v: string) => v.replace(/_/g, " ");
 
-export function OrdersByStatusChart({ data }: { data: { status: string; count: number }[] }) {
+/** `variant="donut"` is the Nextgen theme's presentation of the exact same data (spec item 21: "keep existing functionality, improve presentation") — never a second query or a different dataset, just a different chart shape. */
+export function OrdersByStatusChart({ data, variant = "bar" }: { data: { status: string; count: number }[]; variant?: "bar" | "donut" }) {
   if (data.length === 0) {
     return <p className="text-sm text-slate-400">No orders yet.</p>;
   }
+
+  if (variant === "donut") {
+    const total = data.reduce((sum, d) => sum + d.count, 0);
+    return (
+      <div>
+        <ResponsiveContainer width="100%" height={220}>
+          <PieChart>
+            <Pie data={data} dataKey="count" nameKey="status" innerRadius={55} outerRadius={85} paddingAngle={2}>
+              {data.map((d) => (
+                <Cell key={d.status} fill={STATUS_COLORS[d.status] ?? DEFAULT_COLOR} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(value) => [value, "Orders"]} labelFormatter={(v) => label(String(v))} contentStyle={tooltipStyle} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="mt-1 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-slate-500">
+          {data.map((d) => (
+            <span key={d.status} className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: STATUS_COLORS[d.status] ?? DEFAULT_COLOR }} />
+              {label(d.status)} ({total > 0 ? Math.round((d.count / total) * 100) : 0}%)
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
