@@ -26,6 +26,9 @@ import {
   MessagesSquare,
   KeyRound,
   UserCircle,
+  Palette,
+  Puzzle,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -56,6 +59,9 @@ const ICON_COMPONENTS: Record<string, LucideIcon> = {
   messagesSquare: MessagesSquare,
   keyRound: KeyRound,
   userCircle: UserCircle,
+  palette: Palette,
+  puzzle: Puzzle,
+  refreshCw: RefreshCw,
 };
 
 /** Grouped, optionally-collapsible sidebar nav (spec items 6/7) — used by both the desktop sidebar and the mobile drawer. */

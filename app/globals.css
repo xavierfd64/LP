@@ -4,9 +4,15 @@
   --background: #f8fafc;
   --foreground: #0f172a;
 
-  /* Brand: red (primary/accent) + white/gray (everything else) — named
-     "brand" rather than literal "red" so components read as intent
-     ("bg-brand-600") not a hardcoded color choice. */
+  /* Which loaded font family is "active" (spec item 33) — defaults to
+     Montserrat; the Admin Theme Customization page overrides this to one
+     of the other next/font variables registered in app/layout.tsx via a
+     server-rendered <style> block, never a raw unvalidated font string. */
+  --font-active: var(--font-montserrat);
+
+  /* Brand: red (primary/accent) + white/gray (everything else). Also the
+     theme system's "Primary" token, overridden server-side per Business
+     Settings (app/layout.tsx). */
   --color-brand-50: #fef2f2;
   --color-brand-100: #fee2e2;
   --color-brand-200: #fecaca;
@@ -17,12 +23,53 @@
   --color-brand-700: #b91c1c;
   --color-brand-800: #991b1b;
   --color-brand-900: #7f1d1d;
+
+  /* Remaining design tokens (spec item 31/32) — Secondary/Accent are
+     admin-customizable like Primary above; Success/Warning/Error/Info
+     back the shared StatusBadge tone system (components/ui/badge.tsx),
+     so customizing any of them recolors every status badge in the app
+     from one place, not per-page. Each only defines its own solid "-600"
+     as a real color; the light "-100" background and dark "-800" text
+     shades used for badges are computed from it via color-mix() so a
+     single admin-picked hex always produces a coherent light/solid/dark
+     trio — never mismatched 9-step Tailwind ramps to hand-maintain. */
+  --color-secondary-600: #475569;
+  --color-secondary-100: color-mix(in srgb, var(--color-secondary-600) 15%, white);
+  --color-secondary-800: color-mix(in srgb, var(--color-secondary-600) 75%, black);
+
+  --color-accent-600: #7c3aed;
+  --color-accent-100: color-mix(in srgb, var(--color-accent-600) 15%, white);
+  --color-accent-800: color-mix(in srgb, var(--color-accent-600) 75%, black);
+
+  --color-success-600: #16a34a;
+  --color-success-100: color-mix(in srgb, var(--color-success-600) 15%, white);
+  --color-success-800: color-mix(in srgb, var(--color-success-600) 75%, black);
+
+  --color-warning-600: #f59e0b;
+  --color-warning-100: color-mix(in srgb, var(--color-warning-600) 18%, white);
+  --color-warning-800: color-mix(in srgb, var(--color-warning-600) 65%, black);
+
+  --color-error-600: #dc2626;
+  --color-error-100: color-mix(in srgb, var(--color-error-600) 15%, white);
+  --color-error-800: color-mix(in srgb, var(--color-error-600) 75%, black);
+
+  --color-info-600: #2563eb;
+  --color-info-100: color-mix(in srgb, var(--color-info-600) 15%, white);
+  --color-info-800: color-mix(in srgb, var(--color-info-600) 75%, black);
+
+  /* Surface/text tokens (item 31) — centralized but not admin-editable in
+     this update's Customization panel, since the built-in themes' own
+     card/typography defaults already come from these and the spec's
+     minimum customizable set (item 32) is Colors + Typography only. */
+  --color-surface: #ffffff;
+  --color-text-muted: #64748b;
+  --color-border-default: #e2e8f0;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-montserrat);
+  --font-sans: var(--font-active);
   --font-mono: var(--font-geist-mono);
 
   --color-brand-50: var(--color-brand-50);
@@ -35,6 +82,28 @@
   --color-brand-700: var(--color-brand-700);
   --color-brand-800: var(--color-brand-800);
   --color-brand-900: var(--color-brand-900);
+
+  --color-secondary-100: var(--color-secondary-100);
+  --color-secondary-600: var(--color-secondary-600);
+  --color-secondary-800: var(--color-secondary-800);
+  --color-accent-100: var(--color-accent-100);
+  --color-accent-600: var(--color-accent-600);
+  --color-accent-800: var(--color-accent-800);
+  --color-success-100: var(--color-success-100);
+  --color-success-600: var(--color-success-600);
+  --color-success-800: var(--color-success-800);
+  --color-warning-100: var(--color-warning-100);
+  --color-warning-600: var(--color-warning-600);
+  --color-warning-800: var(--color-warning-800);
+  --color-error-100: var(--color-error-100);
+  --color-error-600: var(--color-error-600);
+  --color-error-800: var(--color-error-800);
+  --color-info-100: var(--color-info-100);
+  --color-info-600: var(--color-info-600);
+  --color-info-800: var(--color-info-800);
+  --color-surface: var(--color-surface);
+  --color-text-muted: var(--color-text-muted);
+  --color-border-default: var(--color-border-default);
 }
 
 body {

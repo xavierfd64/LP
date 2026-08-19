@@ -34,6 +34,9 @@ const ICON_KEYS: Record<string, string> = {
   "/admin/messenger-settings": "messageSquare",
   "/admin/messenger-log": "messagesSquare",
   "/admin/auth-settings": "keyRound",
+  "/admin/themes": "palette",
+  "/admin/plugins": "puzzle",
+  "/admin/system-updates": "refreshCw",
   "/account/rewards": "gift",
   "/account/profile": "userCircle",
 };
@@ -102,6 +105,9 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
           { label: "Messenger Settings", href: "/admin/messenger-settings" },
           { label: "Messenger Log", href: "/admin/messenger-log" },
           { label: "Authentication Settings", href: "/admin/auth-settings" },
+          { label: "Themes", href: "/admin/themes" },
+          { label: "Plugins", href: "/admin/plugins" },
+          { label: "System Updates", href: "/admin/system-updates" },
         ]) },
       ];
     case "STAFF": {

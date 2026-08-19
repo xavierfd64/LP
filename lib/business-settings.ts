@@ -43,6 +43,9 @@ export type BusinessSettings = {
   googleClientSecretEnc: string | null;
   facebookClientId: string | null;
   facebookClientSecretEnc: string | null;
+  activeTheme: string;
+  themeColorOverrides: unknown;
+  themeFontFamily: string;
 };
 
 const FALLBACK: BusinessSettings = {
@@ -84,6 +87,9 @@ const FALLBACK: BusinessSettings = {
   googleClientSecretEnc: null,
   facebookClientId: null,
   facebookClientSecretEnc: null,
+  activeTheme: "2026",
+  themeColorOverrides: {},
+  themeFontFamily: "montserrat",
 };
 
 /**

@@ -274,6 +274,8 @@ model User {
   statementsGenerated     StatementOfAccount[]
   adjustmentsCreated      AccountAdjustment[]
   statementSchedulesCreated StatementSchedule[]
+  themesInstalled         InstalledTheme[]
+  pluginsInstalled        InstalledPlugin[]
 }
 
 // Existence of a row = granted. Only meaningful for role=STAFF users — ADMIN
@@ -960,6 +962,19 @@ model BusinessSettings {
   facebookClientId           String?
   facebookClientSecretEnc    String?
 
+  // ---------- Theme system (Aug 19 1st update) ----------
+  // Themes control presentation only — colors/fonts/layout chrome — never
+  // business data (spec item 19/48). `activeTheme` is one of the slugs
+  // registered in lib/themes.ts ("2026" | "nextgen" today, more once real
+  // ZIP-installed themes exist). `themeColorOverrides` is a flat
+  // {tokenName: hexValue} map the Admin's Theme Customization page writes
+  // to — empty means "use the active theme's own defaults." Applied
+  // server-side as CSS custom properties in the root layout, so switching
+  // is instant and never touches any other table.
+  activeTheme          String  @default("2026")
+  themeColorOverrides  Json    @default("{}")
+  themeFontFamily      String  @default("montserrat")
+
   updatedAt DateTime @updatedAt
 }
 
@@ -1194,4 +1209,51 @@ model MessengerLog {
   failureReason String?
   createdAt     DateTime        @default(now())
   sentAt        DateTime?
+}
+
+/**
+ * A theme installed from a ZIP upload (Aug 19 1st update, Part D) —
+ * distinct from the two built-in themes ("2026"/"nextgen" registered in
+ * lib/themes.ts), which ship compiled into the app and need no DB row.
+ * This table is the persistent record of what was uploaded; the actual
+ * extracted files live under /themes/<slug> on disk, which — like every
+ * other upload in this app (Business Settings logo, chat attachments) —
+ * does not survive a redeploy on this host's ephemeral filesystem. A
+ * newly-uploaded theme is validated and listed here, but activating it
+ * only flips `BusinessSettings.activeTheme`; rendering an arbitrary
+ * uploaded theme's own components is out of scope for this update (see
+ * PROGRESS.md) — only the two compiled-in themes can actually be activated
+ * today, matching spec item 43's instruction not to pretend more exists
+ * than actually does.
+ */
+model InstalledTheme {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  version     String
+  author      String?
+  description String?
+  installedAt DateTime @default(now())
+  installedById String?
+  installedBy   User?  @relation(fields: [installedById], references: [id])
+}
+
+/**
+ * A plugin installed from a ZIP upload (Part F). Same persistence/ephemeral-
+ * filesystem caveat as InstalledTheme above. `active` is a real, persisted
+ * toggle Admin controls from /admin/plugins — deliberately just state, since
+ * this update prepares the plugin *architecture* (spec item 38 explicitly:
+ * do not build an actual payment gateway or other real functionality here).
+ */
+model InstalledPlugin {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  version     String
+  author      String?
+  description String?
+  active      Boolean  @default(false)
+  installedAt DateTime @default(now())
+  installedById String?
+  installedBy   User?  @relation(fields: [installedById], references: [id])
 }

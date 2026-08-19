@@ -43,6 +43,14 @@ next-env.d.ts
 
 /app/generated/prisma
 
+# Runtime-extracted ZIP theme/plugin installs (Aug 19 1st update) — like
+# /public/uploads, these are written at request time and are not meant to
+# be committed; they also don't persist across a redeploy on this host.
+/themes/*
+!/themes/.gitkeep
+/plugins/*
+!/plugins/.gitkeep
+
 # Prisma CLI agent-skill doc bundles (not app code)
 /.agents
 /.claude

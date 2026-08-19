@@ -3,14 +3,25 @@ import { cn } from "@/lib/utils";
 
 type Tone = "default" | "green" | "red" | "yellow" | "blue" | "slate" | "purple";
 
+/**
+ * Maps onto this app's established status-color language (Green=Completed/
+ * Paid, Orange=Pending, Red=Overdue/Attention, Blue=Information/Production,
+ * Purple=Special/System, Gray=Neutral/Cancelled) — and, as of the Aug 19
+ * theme system, onto the customizable Success/Warning/Error/Info/Accent
+ * design tokens (app/globals.css). Every status badge across the whole app
+ * goes through this one mapping, so an Admin's color customization
+ * recolors every badge everywhere from a single place, never per-page.
+ * "slate"/"default" stay literal neutral gray — Neutral is deliberately
+ * not one of the customizable tokens.
+ */
 const toneClasses: Record<Tone, string> = {
   default: "bg-slate-100 text-slate-700",
-  green: "bg-green-100 text-green-800",
-  red: "bg-red-100 text-red-800",
-  yellow: "bg-yellow-100 text-yellow-800",
-  blue: "bg-blue-100 text-blue-800",
+  green: "bg-success-100 text-success-800",
+  red: "bg-error-100 text-error-800",
+  yellow: "bg-warning-100 text-warning-800",
+  blue: "bg-info-100 text-info-800",
   slate: "bg-slate-200 text-slate-800",
-  purple: "bg-purple-100 text-purple-800",
+  purple: "bg-accent-100 text-accent-800",
 };
 
 export function Badge({
