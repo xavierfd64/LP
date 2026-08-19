@@ -13,6 +13,7 @@ import { closeInquiryAction, cancelInquiryAction } from "@/app/actions/inquiries
 import { InquiryEditForm } from "./inquiry-edit-form";
 import { isActiveQuotationStatus } from "@/lib/quotation-status";
 import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
+import { EditorShell, EditorHeader, EditorGrid, EditorPanel, InfoField } from "@/components/documents/editor-shell";
 
 export default async function InquiryDetailPage({ params, searchParams }: PageProps<"/inquiries/[id]">) {
   const { id } = await params;
@@ -44,40 +45,72 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
   const canConvert = inquiry.status !== "CLOSED" && inquiry.status !== "CANCELLED" && !activeQuotation;
   const canCustomerEdit = user.role === "CUSTOMER" && inquiry.status === "NEW";
 
+  const specs = (inquiry.specs as Record<string, string> | null) ?? null;
+  const instantQuotation = inquiry.quotations.find((q) => "isInstant" in q && q.isInstant);
+
   return (
-    <div className="max-w-2xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold text-slate-900">{inquiry.desiredProduct}</h1>
-        <StatusBadge status={inquiry.status} />
-      </div>
+    <EditorShell>
+      <EditorHeader
+        eyebrow="Inquiry"
+        title={inquiry.desiredProduct}
+        subtitle={isStaffLike ? inquiry.customer.name : undefined}
+        status={<StatusBadge status={inquiry.status} />}
+      />
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {isStaffLike && (
-            <div>
-              <span className="text-slate-500">Customer: </span>
-              <span className="font-medium text-slate-900">{inquiry.customer.name}</span>
+      {!isStaffLike && inquiry.status === "NEW" && !instantQuotation && (
+        <Alert tone="info">
+          <span className="font-medium">Quotation Required.</span> Our team will review your requirements and
+          prepare a quotation for you shortly.
+        </Alert>
+      )}
+      {instantQuotation && (
+        <Alert tone="success">
+          An instant quotation was generated automatically —{" "}
+          <Link href={`/quotations/${instantQuotation.id}`} className="font-medium underline">
+            {instantQuotation.quoteNumber}
+          </Link>
+          .
+        </Alert>
+      )}
+
+      <EditorGrid>
+        {isStaffLike && (
+          <EditorPanel title="Customer Information">
+            <div className="grid grid-cols-2 gap-3">
+              <InfoField label="Customer" value={inquiry.customer.name} />
+              <InfoField label="Company" value={inquiry.customer.companyName} />
+              <InfoField label="Email" value={inquiry.customer.email} />
+              <InfoField label="Contact" value={inquiry.customer.contactNumber} />
+            </div>
+          </EditorPanel>
+        )}
+        <EditorPanel title="Inquiry Information">
+          <div className="grid grid-cols-2 gap-3">
+            <InfoField label="Date" value={formatDateTime(inquiry.createdAt)} />
+            <InfoField label="Status" value={<StatusBadge status={inquiry.status} />} />
+            <InfoField label="Service" value={inquiry.desiredProduct} />
+            <InfoField label="Rough Quantity" value={inquiry.roughQty ?? "—"} />
+          </div>
+        </EditorPanel>
+      </EditorGrid>
+
+      <EditorPanel title="Requirements">
+        <div className="space-y-3">
+          <div>
+            <p className="mb-1 text-xs text-slate-400">Description</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-800">{inquiry.description}</p>
+          </div>
+          {specs && Object.keys(specs).length > 0 && (
+            <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 sm:grid-cols-3">
+              {Object.entries(specs).map(([k, v]) => (
+                <InfoField key={k} label={k} value={v} />
+              ))}
             </div>
           )}
-          <div>
-            <span className="text-slate-500">Rough quantity: </span>
-            <span className="font-medium text-slate-900">{inquiry.roughQty ?? "—"}</span>
-          </div>
-          <div>
-            <span className="text-slate-500">Submitted: </span>
-            <span className="font-medium text-slate-900">{formatDateTime(inquiry.createdAt)}</span>
-          </div>
-          <div>
-            <p className="text-slate-500 mb-1">Description</p>
-            <p className="whitespace-pre-wrap text-slate-800">{inquiry.description}</p>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </EditorPanel>
 
       {inquiry.quotations.length > 0 && (
         <Card>
@@ -154,6 +187,6 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
       {(!isStaffLike || canViewComms) && (
         <DiscussInChatboxButton refType="INQUIRY" refId={inquiry.id} label={inquiry.desiredProduct} />
       )}
-    </div>
+    </EditorShell>
   );
 }

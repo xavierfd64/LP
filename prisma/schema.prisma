@@ -39,6 +39,24 @@ enum PaymentTermType {
   APPROVED_TERMS
 }
 
+/**
+ * Pricing methods a Service can be configured with (spec Part F item 20).
+ * NONE means "no automatic pricing" — the honest default for every
+ * existing/new Service until Admin explicitly configures one, per item 26
+ * ("not every service needs instant quotation") and item 27 ("no price
+ * should mean staff review", never an invented price). Architected as an
+ * enum specifically so a future pricing method can be added without a
+ * schema rewrite (spec: "build the architecture so additional pricing
+ * models can be added later").
+ */
+enum PricingMethod {
+  NONE
+  PER_PIECE
+  FIXED
+  PER_SET
+  PER_AREA
+}
+
 enum OrderStatus {
   OPEN
   IN_PRODUCTION
@@ -377,6 +395,14 @@ model Quotation {
   status      QuotationStatus @default(DRAFT)
   validUntil  DateTime?
   total       Decimal         @default(0) @db.Decimal(12, 2)
+  // Discount breakdown, populated when the pricing engine produced this
+  // total (instant quotations, spec item 22: "do not silently alter the
+  // price" — show the math). Null/0 for ordinary staff-built quotations,
+  // where `total` alone (the pre-existing behavior) is still authoritative.
+  subtotal      Decimal? @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  discountLabel  String?
+  isInstant      Boolean @default(false)
   notes       String?
   createdById String?
   createdBy   User?    @relation("QuotationCreatedBy", fields: [createdById], references: [id])
@@ -490,10 +516,69 @@ model Service {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
+  // Pricing configuration (spec Part F/G/I) — all optional/defaulted so
+  // every pre-existing Service keeps working exactly as before (no price,
+  // no instant quote) until Admin explicitly opts it in. See lib/pricing.ts
+  // for how these are actually evaluated.
+  pricingMethod       PricingMethod @default(NONE)
+  basePrice           Decimal?      @db.Decimal(12, 2)
+  minQuantity         Int?
+  instantQuoteEnabled Boolean       @default(false)
+
   inquiries  Inquiry[]
   lineItems  QuotationLineItem[]
   jobOrders  JobOrder[]
+  pricingTiers Pricelist[]
+  promotions   Promotion[]
 
+  @@index([active])
+}
+
+/**
+ * Bulk/quantity-based pricing (spec Part G item 21) — a per-service list of
+ * quantity ranges, each carrying EITHER a flat per-unit override price
+ * (the "1-99 = ₱5/pc, 100-499 = ₱4.50/pc" style) OR a percent discount off
+ * the base-price subtotal (the "500+ = 5% off" style), never both on the
+ * same tier. Named Pricelist rather than PricingTier only to avoid a name
+ * collision with the PricingTier TS type exported from lib/pricing.ts.
+ */
+model Pricelist {
+  id              String   @id @default(cuid())
+  serviceId       String
+  service         Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  minQty          Int
+  maxQty          Int?
+  pricePerUnit    Decimal? @db.Decimal(12, 2)
+  discountPercent Decimal? @db.Decimal(5, 2)
+  createdAt       DateTime @default(now())
+
+  @@index([serviceId])
+}
+
+/**
+ * Configurable promotional discounts (spec Part H) — deliberately simple
+ * (percent OR fixed amount, one applicable Service or all services, an
+ * active window, an optional qty range) rather than a rules engine, since
+ * that's what the spec actually asks for. lib/pricing.ts picks at most one
+ * matching, currently-active promotion per calculation (spec item 25:
+ * "never accidentally apply the same discount twice").
+ */
+model Promotion {
+  id              String    @id @default(cuid())
+  name            String
+  serviceId       String?
+  service         Service?  @relation(fields: [serviceId], references: [id])
+  startDate       DateTime?
+  endDate         DateTime?
+  minQty          Int?
+  maxQty          Int?
+  percentDiscount Decimal?  @db.Decimal(5, 2)
+  fixedDiscount   Decimal?  @db.Decimal(12, 2)
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([serviceId])
   @@index([active])
 }
 

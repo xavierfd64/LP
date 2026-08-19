@@ -29,6 +29,7 @@ import {
   Palette,
   Puzzle,
   RefreshCw,
+  Percent,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -62,6 +63,7 @@ const ICON_COMPONENTS: Record<string, LucideIcon> = {
   palette: Palette,
   puzzle: Puzzle,
   refreshCw: RefreshCw,
+  percent: Percent,
 };
 
 /** Grouped, optionally-collapsible sidebar nav (spec items 6/7) — used by both the desktop sidebar and the mobile drawer. */

@@ -2,9 +2,9 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { BusinessInfoBanner } from "@/components/documents/business-info-banner";
+import { EditorShell, EditorHeader } from "@/components/documents/editor-shell";
 import { QuotationForm } from "./quotation-form";
 import type { LineItem } from "../line-items-editor";
 
@@ -58,8 +58,12 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
       : undefined;
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">New Quotation</h1>
+    <EditorShell>
+      <EditorHeader
+        eyebrow="Quotation"
+        title="New Quotation"
+        subtitle={inquiry ? `From inquiry: ${inquiry.desiredProduct}` : "Create a new quotation"}
+      />
       <BusinessInfoBanner />
 
       {priorQuotation?.revisionRequests[0] && (
@@ -68,31 +72,24 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{inquiry ? `From inquiry: ${inquiry.desiredProduct}` : "Create quotation"}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <QuotationForm
-            inquiryId={inquiry?.id}
-            defaultCustomer={
-              inquiry
-                ? {
-                    id: inquiry.customer.id,
-                    displayId: inquiry.customer.displayId,
-                    name: inquiry.customer.name,
-                    companyName: inquiry.customer.companyName,
-                    email: inquiry.customer.email,
-                    contactNumber: inquiry.customer.contactNumber,
-                    hasLogin: !!inquiry.customer.userId,
-                    isQualifiedForTerms: inquiry.customer.isQualifiedForTerms,
-                  }
-                : null
-            }
-            defaultLineItems={defaultLineItems}
-          />
-        </CardContent>
-      </Card>
-    </div>
+      <QuotationForm
+        inquiryId={inquiry?.id}
+        defaultCustomer={
+          inquiry
+            ? {
+                id: inquiry.customer.id,
+                displayId: inquiry.customer.displayId,
+                name: inquiry.customer.name,
+                companyName: inquiry.customer.companyName,
+                email: inquiry.customer.email,
+                contactNumber: inquiry.customer.contactNumber,
+                hasLogin: !!inquiry.customer.userId,
+                isQualifiedForTerms: inquiry.customer.isQualifiedForTerms,
+              }
+            : null
+        }
+        defaultLineItems={defaultLineItems}
+      />
+    </EditorShell>
   );
 }

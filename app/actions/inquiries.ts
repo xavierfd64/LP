@@ -8,6 +8,7 @@ import { requirePermission } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
 import { notifyStaff } from "@/lib/notifications";
+import { tryCreateInstantQuotation } from "@/lib/instant-quotation";
 
 const inquirySchema = z.object({
   customerId: z.string().optional(),
@@ -67,6 +68,12 @@ export async function createInquiryAction(_prevState: string | undefined, formDa
     `New inquiry: ${inquiry.desiredProduct}`,
     `/inquiries/${inquiry.id}`
   );
+
+  // Instant quotation (spec Part F/J): only fires for services Admin has
+  // explicitly enabled with a valid pricing configuration; otherwise this
+  // is a no-op and the Inquiry proceeds through the unmodified Staff
+  // review flow exactly as before.
+  await tryCreateInstantQuotation(inquiry);
 
   redirect(`/inquiries/${inquiry.id}`);
 }

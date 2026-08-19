@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { ServicePicker } from "@/components/services/service-picker";
 import { SpecFieldsEditor } from "@/components/services/spec-fields-editor";
 import type { ServiceSearchResult } from "@/app/actions/services";
+import { EditorPanel } from "@/components/documents/editor-shell";
 
 type Template = { id: string; name: string };
 
@@ -43,7 +44,8 @@ export function AddJobOrderForm({
   }
 
   return (
-    <form action={formAction} className="space-y-3 rounded-md border border-slate-200 p-4">
+    <EditorPanel title="Add Job Order">
+      <form action={formAction} className="space-y-3">
       <input type="hidden" name="orderId" value={orderId} />
       {error && <Alert tone="error">{error}</Alert>}
       <ServicePicker
@@ -105,6 +107,7 @@ export function AddJobOrderForm({
           Cancel
         </Button>
       </div>
-    </form>
+      </form>
+    </EditorPanel>
   );
 }

@@ -27,6 +27,7 @@ import { DocumentShareManager } from "@/components/documents/document-share-mana
 import { findActiveShareLink } from "@/lib/document-sharing";
 import { TrackingLinkManager } from "@/app/(app)/orders/[id]/tracking-link-manager";
 import { findActiveTrackingLink } from "@/lib/order-tracking";
+import { EditorShell, EditorHeader, EditorGrid, EditorPanel, InfoField } from "@/components/documents/editor-shell";
 
 export default async function JobOrderDetailPage({
   params,
@@ -103,32 +104,33 @@ export default async function JobOrderDetailPage({
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {jo.joNumber} — {jo.productType}
-          </h1>
-          <Link href={`/orders/${jo.orderId}`} className="text-sm text-slate-500 underline">
+    <EditorShell>
+      <EditorHeader
+        eyebrow="Job Order"
+        title={`${jo.joNumber} — ${jo.productType}`}
+        subtitle={
+          <Link href={`/orders/${jo.orderId}`} className="underline">
             {jo.order.orderNumber}
           </Link>
-        </div>
-        <div className="flex items-center gap-3">
-          <StatusBadge status={jo.status} />
-          <Link href={`/job-orders/${jo.id}/print`} target="_blank">
-            <Button type="button" variant="outline" size="sm">
-              View Document
-            </Button>
-          </Link>
-          {isStaffLike && canModifyOrder && jo.status === "READY" && (
-            <form action={release}>
-              <Button type="submit" size="sm">
-                Release
+        }
+        status={<StatusBadge status={jo.status} />}
+        actions={
+          <>
+            <Link href={`/job-orders/${jo.id}/print`} target="_blank">
+              <Button type="button" variant="outline" size="sm">
+                View Document
               </Button>
-            </form>
-          )}
-        </div>
-      </div>
+            </Link>
+            {isStaffLike && canModifyOrder && jo.status === "READY" && (
+              <form action={release}>
+                <Button type="submit" size="sm">
+                  Release
+                </Button>
+              </form>
+            )}
+          </>
+        }
+      />
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
@@ -150,29 +152,40 @@ export default async function JobOrderDetailPage({
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1 text-sm">
-          <p>
-            <span className="text-slate-500">Quantity: </span>
-            {jo.quantity}
-          </p>
-          <p>
-            <span className="text-slate-500">Workflow: </span>
-            {jo.workflowTemplate.name}
-          </p>
-          <p>
-            <span className="text-slate-500">Deadline: </span>
-            {formatDate(jo.deadline)}
-          </p>
-          <p>
-            <span className="text-slate-500">Description: </span>
-            {jo.description}
-          </p>
-        </CardContent>
-      </Card>
+      <EditorGrid>
+        {isStaffLike && (
+          <EditorPanel title="Customer Information">
+            <div className="grid grid-cols-2 gap-3">
+              <InfoField label="Customer" value={jo.order.customer.name} />
+              <InfoField label="Company" value={jo.order.customer.companyName} />
+              <InfoField label="Email" value={jo.order.customer.email} />
+              <InfoField label="Contact" value={jo.order.customer.contactNumber} />
+            </div>
+          </EditorPanel>
+        )}
+        <EditorPanel title="Job Order Information">
+          <div className="grid grid-cols-2 gap-3">
+            <InfoField label="JO Number" value={jo.joNumber} />
+            <InfoField label="Service" value={jo.productType} />
+            <InfoField label="Quantity" value={jo.quantity} />
+            <InfoField label="Production Flow" value={jo.workflowTemplate.name} />
+            <InfoField label="Deadline" value={formatDate(jo.deadline)} />
+            <InfoField label="Status" value={<StatusBadge status={jo.status} />} />
+          </div>
+        </EditorPanel>
+      </EditorGrid>
+
+      <EditorPanel title="Order Details">
+        <div className="space-y-3">
+          <p className="whitespace-pre-wrap text-sm text-slate-800">{jo.description}</p>
+          {jo.productionInstructions && (
+            <div className="border-t border-slate-100 pt-3">
+              <p className="mb-1 text-xs text-slate-400">Production Instructions</p>
+              <p className="whitespace-pre-wrap text-sm text-slate-700">{jo.productionInstructions}</p>
+            </div>
+          )}
+        </div>
+      </EditorPanel>
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
@@ -438,6 +451,6 @@ export default async function JobOrderDetailPage({
           </CardContent>
         </Card>
       )}
-    </div>
+    </EditorShell>
   );
 }

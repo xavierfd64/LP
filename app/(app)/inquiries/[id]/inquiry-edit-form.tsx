@@ -32,7 +32,7 @@ export function InquiryEditForm({ inquiry }: { inquiry: Inquiry }) {
   }
 
   return (
-    <form action={formAction} className="space-y-3 rounded-md border border-slate-200 p-4">
+    <form action={formAction} className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       {error && <Alert tone="error">{error}</Alert>}
       <ServicePicker name="serviceId" initialService={inquiry.service} onSelect={setService} />
       {service && <SpecFieldsEditor name="specs" fields={service.specFields} initialSpecs={inquiry.specs} />}

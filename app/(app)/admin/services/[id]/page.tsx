@@ -4,6 +4,7 @@ import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ServiceForm } from "../service-form";
+import { PricingForm } from "./pricing-form";
 
 export default async function EditServicePage({ params }: PageProps<"/admin/services/[id]">) {
   const user = await requireUser();
@@ -13,7 +14,7 @@ export default async function EditServicePage({ params }: PageProps<"/admin/serv
 
   const { id } = await params;
   const [service, templates] = await Promise.all([
-    prisma.service.findUnique({ where: { id } }),
+    prisma.service.findUnique({ where: { id }, include: { pricingTiers: { orderBy: { minQty: "asc" } } } }),
     prisma.workflowTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
   ]);
   if (!service) notFound();
@@ -36,6 +37,27 @@ export default async function EditServicePage({ params }: PageProps<"/admin/serv
               workflowTemplateId: service.workflowTemplateId,
               specFields: (service.specFields as string[]) ?? [],
             }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pricing &amp; Discounts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PricingForm
+            serviceId={service.id}
+            pricingMethod={service.pricingMethod}
+            basePrice={service.basePrice != null ? Number(service.basePrice) : null}
+            minQuantity={service.minQuantity}
+            instantQuoteEnabled={service.instantQuoteEnabled}
+            tiers={service.pricingTiers.map((t) => ({
+              minQty: t.minQty,
+              maxQty: t.maxQty,
+              pricePerUnit: t.pricePerUnit != null ? Number(t.pricePerUnit) : null,
+              discountPercent: t.discountPercent != null ? Number(t.discountPercent) : null,
+            }))}
           />
         </CardContent>
       </Card>

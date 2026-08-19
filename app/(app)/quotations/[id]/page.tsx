@@ -6,10 +6,11 @@ import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/badge";
+import { StatusBadge, Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { EditorShell, EditorHeader, EditorGrid, EditorPanel, InfoField, TotalsPanel } from "@/components/documents/editor-shell";
+import { LineItemsView } from "@/components/documents/line-items-view";
 import { sendQuotationAction, approveQuotationAction, rejectQuotationAction } from "@/app/actions/quotations";
 import { RevisionRequestForm } from "./revision-request-form";
 import { EditQuotationForm } from "./edit-quotation-form";
@@ -69,26 +70,41 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
   const activeTrackingLink = canManageTracking && hasOrder ? await findActiveTrackingLink(quotation.orders[0].id) : null;
   const editable = ["DRAFT", "SENT", "REVISION_REQUESTED"].includes(quotation.status);
 
+  const totalsRows = quotation.subtotal != null
+    ? [
+        { label: "Subtotal", value: formatCurrency(quotation.subtotal.toString()) },
+        ...(Number(quotation.discountAmount) > 0
+          ? [{ label: quotation.discountLabel ?? "Discount", value: formatCurrency(quotation.discountAmount.toString()), negative: true }]
+          : []),
+      ]
+    : [];
+
   return (
-    <div className="max-w-3xl space-y-6">
+    <EditorShell>
       <TransactionBrandHeader />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{quotation.quoteNumber}</h1>
-          {isStaffLike && <p className="text-sm text-slate-500">{quotation.customer.name}</p>}
-          <p className="text-xs text-slate-400">
+      <EditorHeader
+        eyebrow="Quotation"
+        title={quotation.quoteNumber}
+        subtitle={
+          <>
+            {isStaffLike && <span>{quotation.customer.name} · </span>}
             Prepared by {quotation.createdBy?.name ?? "—"} on {formatDateTime(quotation.createdAt)}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={quotation.status} />
+          </>
+        }
+        status={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={quotation.status} />
+            {quotation.isInstant && <Badge tone="blue">Instant Quotation</Badge>}
+          </div>
+        }
+        actions={
           <Link href={`/quotations/${quotation.id}/print`} target="_blank">
             <Button type="button" variant="outline" size="sm">
               View Document
             </Button>
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
@@ -103,49 +119,36 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Line items</CardTitle>
-        </CardHeader>
-        <Table>
-          <THead>
-            <TR>
-              <TH>Product</TH>
-              <TH>Description</TH>
-              <TH>Qty</TH>
-              <TH>Unit price</TH>
-              <TH>Subtotal</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {quotation.lineItems.map((li) => (
-              <TR key={li.id}>
-                <TD>{li.productType}</TD>
-                <TD>{li.description}</TD>
-                <TD>{li.qty}</TD>
-                <TD>{formatCurrency(li.unitPrice.toString())}</TD>
-                <TD>{formatCurrency(Number(li.unitPrice) * li.qty)}</TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-        <CardContent className="flex justify-between border-t border-slate-100 text-sm">
-          <span className="text-slate-500">
-            {quotation.validUntil ? `Valid until ${formatDate(quotation.validUntil)}` : ""}
-          </span>
-          <span className="text-base font-semibold text-slate-900">
-            Total: {formatCurrency(quotation.total.toString())}
-          </span>
-        </CardContent>
-      </Card>
+      <EditorGrid>
+        <EditorPanel title="Customer Information">
+          <div className="grid grid-cols-2 gap-3">
+            <InfoField label="Customer" value={quotation.customer.name} />
+            <InfoField label="Company" value={quotation.customer.companyName} />
+            <InfoField label="Email" value={quotation.customer.email} />
+            <InfoField label="Contact" value={quotation.customer.contactNumber} />
+          </div>
+        </EditorPanel>
+        <EditorPanel title="Document Information">
+          <div className="grid grid-cols-2 gap-3">
+            <InfoField label="Quotation No." value={quotation.quoteNumber} />
+            <InfoField label="Date" value={formatDate(quotation.createdAt)} />
+            <InfoField label="Valid Until" value={quotation.validUntil ? formatDate(quotation.validUntil) : "—"} />
+            <InfoField label="Status" value={<StatusBadge status={quotation.status} />} />
+          </div>
+        </EditorPanel>
+      </EditorGrid>
+
+      <EditorPanel title="Line Items">
+        <LineItemsView
+          items={quotation.lineItems.map((li) => ({ id: li.id, productType: li.productType, description: li.description, qty: li.qty, unitPrice: li.unitPrice.toString() }))}
+        />
+        <TotalsPanel rows={totalsRows} total={{ label: "Total", value: formatCurrency(quotation.total.toString()) }} />
+      </EditorPanel>
 
       {quotation.notes && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Notes</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-slate-700 whitespace-pre-wrap">{quotation.notes}</CardContent>
-        </Card>
+        <EditorPanel title="Notes">
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">{quotation.notes}</p>
+        </EditorPanel>
       )}
 
       {quotation.revisionRequests.length > 0 && (
@@ -279,6 +282,6 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
           </CardContent>
         </Card>
       )}
-    </div>
+    </EditorShell>
   );
 }

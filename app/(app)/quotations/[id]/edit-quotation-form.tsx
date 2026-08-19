@@ -22,14 +22,14 @@ export function EditQuotationForm({
 
   if (!open) {
     return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" onClick={() => setOpen(true)}>
         Edit Quotation
       </Button>
     );
   }
 
   return (
-    <form action={formAction} className="space-y-4 rounded-md border border-slate-200 p-4">
+    <form action={formAction} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       {error && <Alert tone="error">{error}</Alert>}
       <div>
         <Label htmlFor="validUntil">Valid until</Label>

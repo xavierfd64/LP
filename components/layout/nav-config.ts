@@ -19,6 +19,7 @@ const ICON_KEYS: Record<string, string> = {
   "/production": "factory",
   "/inventory": "boxes",
   "/admin/services": "wrench",
+  "/admin/promotions": "percent",
   "/admin/workflow-templates": "gitBranch",
   "/payments": "wallet",
   "/soa": "receipt",
@@ -53,6 +54,7 @@ const STAFF_NAV_RULES: { section: string; label: string; href: string; permissio
   { section: "OPERATIONS", label: "Production", href: "/production", permission: "PRODUCTION_VIEW" },
   { section: "OPERATIONS", label: "Inventory", href: "/inventory" },
   { section: "OPERATIONS", label: "Services", href: "/admin/services", permission: "SERVICE_VIEW" },
+  { section: "OPERATIONS", label: "Promotions", href: "/admin/promotions", permission: "SERVICE_MANAGE" },
   { section: "FINANCE", label: "Payments", href: "/payments", permission: "PAYMENT_VIEW" },
   { section: "FINANCE", label: "Statement of Account", href: "/soa", permission: "SOA_VIEW" },
   { section: "CUSTOMERS", label: "Customers", href: "/customers", permission: "CUSTOMER_VIEW" },
@@ -84,6 +86,7 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
           { label: "Production", href: "/production" },
           { label: "Inventory", href: "/inventory" },
           { label: "Services", href: "/admin/services" },
+          { label: "Promotions", href: "/admin/promotions" },
           { label: "Workflow Templates", href: "/admin/workflow-templates" },
         ]) },
         { section: "FINANCE", items: withIcons([
