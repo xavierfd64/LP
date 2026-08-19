@@ -187,6 +187,30 @@ export default async function JobOrderDetailPage({
         </div>
       </EditorPanel>
 
+      {jo.workflowTemplate.stages.length > 0 && (
+        <EditorPanel title="Production Information">
+          {(() => {
+            const totalStages = jo.workflowTemplate.stages.length;
+            const doneStages = Math.max(0, Math.min(jo.currentStageOrder - 1, totalStages));
+            const pct = Math.round((doneStages / totalStages) * 100);
+            const currentStage = jo.workflowTemplate.stages.find((s) => s.order === jo.currentStageOrder);
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">
+                    Current stage: <span className="font-medium text-slate-900">{currentStage?.name ?? "Ready for Fulfillment"}</span>
+                  </span>
+                  <span className="font-medium text-slate-900">{pct}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })()}
+        </EditorPanel>
+      )}
+
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Files</CardTitle>

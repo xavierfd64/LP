@@ -11,6 +11,7 @@ import { logAudit } from "@/lib/audit";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
 import { ACTIVE_QUOTATION_STATUSES } from "@/lib/quotation-status";
 import { convertApprovedQuotation } from "@/lib/quotation-conversion";
+import { calculatePricing } from "@/lib/pricing";
 
 const lineItemsSchema = z.array(
   z.object({
@@ -162,9 +163,12 @@ export async function approveQuotationAction(quotationId: string) {
   redirect(`/quotations/${quotationId}`);
 }
 
-export async function rejectQuotationAction(quotationId: string) {
+export async function rejectQuotationAction(quotationId: string, _prevState: string | undefined, formData: FormData) {
   const user = await requireUser();
   if (user.role !== "CUSTOMER") throw new Error("Only the customer can reject their own quotation.");
+
+  const reason = ((formData.get("reason") as string) || "").trim();
+  if (!reason) return "Please tell us why you're rejecting this quotation.";
 
   const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } });
   const customer = await getCurrentCustomer(user.id);
@@ -173,9 +177,9 @@ export async function rejectQuotationAction(quotationId: string) {
     redirect(`/quotations/${quotationId}?error=${encodeURIComponent("Only a sent quotation can be rejected.")}`);
   }
 
-  await prisma.quotation.update({ where: { id: quotationId }, data: { status: "REJECTED" } });
-  await logAudit(user.id, "QUOTATION_REJECTED", "Quotation", quotationId);
-  await notifyStaff("QUOTATION_REJECTED", `Quotation ${quotation.quoteNumber} was rejected by the customer.`, `/quotations/${quotationId}`);
+  await prisma.quotation.update({ where: { id: quotationId }, data: { status: "REJECTED", rejectReason: reason } });
+  await logAudit(user.id, "QUOTATION_REJECTED", "Quotation", quotationId, { reason });
+  await notifyStaff("QUOTATION_REJECTED", `Quotation ${quotation.quoteNumber} was rejected by the customer: ${reason}`, `/quotations/${quotationId}`);
   redirect(`/quotations/${quotationId}`);
 }
 
@@ -272,6 +276,100 @@ export async function editQuotationAction(quotationId: string, _prevState: strin
   ]);
 
   await logAudit(user.id, "QUOTATION_EDITED", "Quotation", quotationId, { total });
+
+  redirect(`/quotations/${quotationId}`);
+}
+
+const customerLineEditSchema = z.array(
+  z.object({
+    lineItemId: z.string().min(1),
+    description: z.string().min(1),
+    qty: z.coerce.number().int().positive(),
+  })
+);
+
+/**
+ * Customer self-edit of a quotation still awaiting their decision (spec
+ * Aug 19 corrective update, items 16/17) — deliberately narrow: only
+ * quantity and description are customer-editable, never price/service
+ * (spec: "do NOT allow the customer to arbitrarily change system-
+ * controlled pricing"). When a line's Service still has a valid instant-
+ * pricing configuration, the new quantity is re-run through the exact
+ * same pricing engine an Inquiry uses (base price -> tier -> bulk
+ * discount -> promotion), so bulk tiers/promotions apply or fall away
+ * correctly at the new quantity. For an ordinary staff-priced line (no
+ * pricing engine behind it), the unit price is kept as-is and only the
+ * arithmetic (unit price x new qty) is recomputed — never a fabricated
+ * discount recalculation for a line nothing configured. Locked exactly
+ * like every other quotation mutation: only while status is SENT, before
+ * approval/rejection/conversion (spec item 16's explicit rule).
+ */
+export async function updateQuotationForCustomerAction(quotationId: string, _prevState: string | undefined, formData: FormData) {
+  const user = await requireUser();
+  if (user.role !== "CUSTOMER") throw new Error("Only the customer can edit their own quotation.");
+
+  const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId }, include: { lineItems: true } });
+  const customer = await getCurrentCustomer(user.id);
+  if (quotation.customerId !== customer.id) throw new Error("Not allowed.");
+  if (quotation.status !== "SENT") return "This quotation can no longer be edited.";
+
+  const lineItemIds = formData.getAll("lineItemId") as string[];
+  const descriptions = formData.getAll("description") as string[];
+  const qtys = formData.getAll("qty") as string[];
+  const notes = (formData.get("notes") as string) || undefined;
+
+  const rawRows = lineItemIds.map((_, i) => ({ lineItemId: lineItemIds[i], description: descriptions[i], qty: qtys[i] }));
+  const parsed = customerLineEditSchema.safeParse(rawRows);
+  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+
+  const ownLineItemIds = new Set(quotation.lineItems.map((li) => li.id));
+  if (!parsed.data.every((r) => ownLineItemIds.has(r.lineItemId))) return "Invalid line item.";
+
+  let subtotal = 0;
+  let discountAmount = 0;
+  const discountLabels: string[] = [];
+  const updates: { id: string; description: string; qty: number; unitPrice: number }[] = [];
+
+  for (const row of parsed.data) {
+    const original = quotation.lineItems.find((li) => li.id === row.lineItemId)!;
+    let unitPrice = Number(original.unitPrice);
+
+    if (original.serviceId) {
+      const pricing = await calculatePricing(original.serviceId, row.qty);
+      if (pricing.available) {
+        unitPrice = pricing.unitPrice;
+        subtotal += pricing.subtotal;
+        discountAmount += pricing.totalDiscountAmount;
+        if (pricing.bulkDiscountLabel) discountLabels.push(pricing.bulkDiscountLabel);
+        if (pricing.promoDiscountLabel) discountLabels.push(pricing.promoDiscountLabel);
+        updates.push({ id: row.lineItemId, description: row.description, qty: row.qty, unitPrice: pricing.unitPrice });
+        continue;
+      }
+    }
+    subtotal += unitPrice * row.qty;
+    updates.push({ id: row.lineItemId, description: row.description, qty: row.qty, unitPrice });
+  }
+
+  const total = Math.max(0, subtotal - discountAmount);
+
+  await prisma.$transaction([
+    ...updates.map((u) =>
+      prisma.quotationLineItem.update({ where: { id: u.id }, data: { description: u.description, qty: u.qty, unitPrice: u.unitPrice } })
+    ),
+    prisma.quotation.update({
+      where: { id: quotationId },
+      data: {
+        subtotal: quotation.subtotal != null || discountLabels.length > 0 ? subtotal : undefined,
+        discountAmount,
+        discountLabel: discountLabels.length > 0 ? [...new Set(discountLabels)].join(" + ") : null,
+        total,
+        notes: notes !== undefined ? notes : quotation.notes,
+      },
+    }),
+  ]);
+
+  await logAudit(user.id, "QUOTATION_EDITED_BY_CUSTOMER", "Quotation", quotationId, { total });
+  await notifyStaff("QUOTATION_EDITED_BY_CUSTOMER", `Customer updated quotation ${quotation.quoteNumber}.`, `/quotations/${quotationId}`);
 
   redirect(`/quotations/${quotationId}`);
 }

@@ -2,7 +2,9 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { updateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_SETTINGS_TAG } from "@/lib/business-settings";
 import { requireRole } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/email-crypto";
@@ -17,6 +19,7 @@ export async function toggleMessengerMasterSwitchAction(enabled: boolean) {
     create: { id: "default", messengerEnabled: enabled },
     update: { messengerEnabled: enabled },
   });
+  updateTag(BUSINESS_SETTINGS_TAG);
   await logAudit(user.id, "MESSENGER_MASTER_SWITCH_CHANGED", "BusinessSettings", "default", { enabled });
   redirect("/admin/messenger-settings");
 }
@@ -57,6 +60,7 @@ export async function updateMessengerProviderAction(_prevState: string | undefin
     create: { id: "default", ...data },
     update: data,
   });
+  updateTag(BUSINESS_SETTINGS_TAG);
 
   await logAudit(user.id, "MESSENGER_PROVIDER_UPDATED", "BusinessSettings", "default", { messengerPageId: parsed.data.messengerPageId });
   redirect("/admin/messenger-settings");
@@ -75,6 +79,7 @@ export async function updateMessengerEventSettingAction(category: MessengerCateg
     create: { id: "default", messengerEventSettings: next },
     update: { messengerEventSettings: next },
   });
+  updateTag(BUSINESS_SETTINGS_TAG);
 
   await logAudit(user.id, "MESSENGER_EVENT_SETTING_CHANGED", "BusinessSettings", "default", { category, enabled });
   redirect("/admin/messenger-settings");

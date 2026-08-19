@@ -2,7 +2,9 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { updateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_SETTINGS_TAG } from "@/lib/business-settings";
 import { requireRole } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/email-crypto";
@@ -28,6 +30,7 @@ export async function toggleEmailMasterSwitchAction(enabled: boolean) {
     create: { id: "default", emailEnabled: enabled },
     update: { emailEnabled: enabled },
   });
+  updateTag(BUSINESS_SETTINGS_TAG);
   await logAudit(user.id, "EMAIL_MASTER_SWITCH_CHANGED", "BusinessSettings", "default", { enabled });
   redirect("/admin/email-settings");
 }
@@ -73,6 +76,7 @@ export async function updateEmailProviderAction(_prevState: string | undefined, 
     create: { id: "default", ...data },
     update: data,
   });
+  updateTag(BUSINESS_SETTINGS_TAG);
 
   await logAudit(user.id, "EMAIL_PROVIDER_UPDATED", "BusinessSettings", "default", {
     emailProvider: parsed.data.emailProvider,
@@ -94,6 +98,7 @@ export async function updateEmailEventSettingAction(key: string, enabled: boolea
     create: { id: "default", emailEventSettings: next },
     update: { emailEventSettings: next },
   });
+  updateTag(BUSINESS_SETTINGS_TAG);
 
   await logAudit(user.id, "EMAIL_EVENT_SETTING_CHANGED", "BusinessSettings", "default", { key, enabled });
   redirect("/admin/email-settings");

@@ -88,6 +88,14 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
   const amountRaw = formData.get("amount");
   const methodRaw = formData.get("method");
   const file = formData.get("proofFile") as File | null;
+  const referenceNumber = ((formData.get("referenceNumber") as string) || "").trim() || undefined;
+  const paymentDateRaw = (formData.get("paymentDate") as string) || undefined;
+  const customerNotes = ((formData.get("notes") as string) || "").trim() || undefined;
+  // Both the standalone Payment page and the order detail page's inline
+  // "Pay via E-Wallet / Bank Transfer" form share this one action — the
+  // page that rendered the form says where to land afterward, defaulting
+  // to the order it came from (the pre-existing behavior) if unset.
+  const redirectTo = ((formData.get("redirectTo") as string) || "").trim();
 
   const amount = Number(amountRaw);
   if (!orderId || !amount || amount <= 0) return "Please enter a valid amount.";
@@ -108,17 +116,19 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
       orderId,
       amount,
       method,
+      referenceNumber,
+      paymentDate: paymentDateRaw ? new Date(paymentDateRaw) : undefined,
       status: "PENDING",
       proofFilePath: saved.path,
       recordedById: user.id,
-      notes: `Uploaded by customer: ${saved.filename}`,
+      notes: customerNotes ? `${customerNotes} (proof: ${saved.filename})` : `Uploaded by customer: ${saved.filename}`,
     },
   });
 
   await logAudit(user.id, "PAYMENT_PROOF_UPLOADED", "Payment", payment.id, { orderId, amount, method });
   await notifyStaff("PAYMENT_PROOF_UPLOADED", `Customer uploaded a payment proof for order ${order.orderNumber}.`, `/orders/${orderId}`);
 
-  redirect(`/orders/${orderId}`);
+  redirect(redirectTo || `/orders/${orderId}`);
 }
 
 export async function confirmPaymentAction(paymentId: string) {

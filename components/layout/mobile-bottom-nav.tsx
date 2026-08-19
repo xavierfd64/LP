@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { LayoutDashboard, Package, Receipt, FileBarChart, MoreHorizontal, X, FileText, Wallet, Gift, MessageCircle, UserCircle, KeyRound, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/app/actions/auth";
+import { isNavItemActive } from "./is-nav-item-active";
 
 const PRIMARY = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Orders", href: "/orders", icon: Package },
-  { label: "Invoices", href: "/orders", icon: Receipt },
-  { label: "SOA", href: "/payments", icon: FileBarChart },
+  { label: "Invoices", href: "/orders?view=invoices", icon: Receipt },
+  { label: "SOA", href: "/payments?view=soa", icon: FileBarChart },
 ];
 
 const MORE_LINKS = [
@@ -32,6 +33,7 @@ const MORE_LINKS = [
  */
 export function MobileBottomNav() {
   const pathname = usePathname();
+  const currentView = useSearchParams().get("view");
   const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
@@ -89,7 +91,7 @@ export function MobileBottomNav() {
 
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200 bg-white md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {PRIMARY.map((item) => {
-          const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const active = isNavItemActive(pathname, currentView, item.href);
           return (
             <Link
               key={item.label}

@@ -9,7 +9,12 @@ import { notifyCustomer } from "@/lib/notifications";
  * narrow: it only fires when the Service has a real, valid pricing
  * configuration AND the customer supplied a quantity — otherwise the
  * Inquiry proceeds to the existing, unmodified Staff-review flow (spec
- * item 27). When it does fire, it creates an ordinary DRAFT Quotation
+ * item 27). When it does fire, it creates the quotation already SENT
+ * (Aug 19 corrective update, item 12) — a computed, complete quotation has
+ * nothing left for Staff to review before sending, and the customer's
+ * Approve/Reject/Edit actions only render for a SENT quotation, so leaving
+ * it at DRAFT silently stranded every auto-generated quotation with no
+ * customer-facing action at all. It's otherwise an ordinary quotation
  * through the same path Staff would use by hand (spec item 28: instant
  * pricing never creates a Job Order, never skips Approval/Payment) —
  * `isInstant` just flags how it originated for display purposes.
@@ -37,7 +42,7 @@ export async function tryCreateInstantQuotation(inquiry: {
       quoteNumber,
       customerId: inquiry.customerId,
       inquiryId: inquiry.id,
-      status: "DRAFT",
+      status: "SENT",
       isInstant: true,
       subtotal: pricing.subtotal,
       discountAmount: pricing.totalDiscountAmount,
@@ -67,8 +72,8 @@ export async function tryCreateInstantQuotation(inquiry: {
   });
   await notifyCustomer(
     inquiry.customerId,
-    "QUOTATION_READY",
-    `Your instant quotation ${quoteNumber} is ready for ${service.name}.`,
+    "QUOTATION_SENT",
+    `Your instant quotation ${quoteNumber} for ${service.name} is ready for review.`,
     `/quotations/${quotation.id}`
   );
 

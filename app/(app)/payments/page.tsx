@@ -21,6 +21,12 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
   if (user.role === "STAFF" && !(await can(user, "PAYMENT_VIEW"))) redirect("/dashboard");
 
   if (!isStaffLike) {
+    // Distinct nav identity for the Customer sidebar's "Statement of
+    // Account" item (spec Aug 19 corrective update, item 2) — same hub
+    // page (there's no separate customer SOA route), but the heading and
+    // section order reflect the SOA framing rather than the payments one.
+    const sp = await searchParams;
+    const isSoaView = sp.view === "soa";
     const customer = await getCurrentCustomer(user.id);
     const [orders, statements] = await Promise.all([
       prisma.order.findMany({
@@ -51,9 +57,18 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
     return (
       <div className="space-y-6">
         <TransactionBrandHeader />
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">My Payments</h1>
-          <p className="text-sm text-slate-500">Your payment history and balances across every order.</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">{isSoaView ? "Statement of Account" : "My Payments"}</h1>
+            <p className="text-sm text-slate-500">
+              {isSoaView ? "Your consolidated statements and balances." : "Your payment history and balances across every order."}
+            </p>
+          </div>
+          {totalOutstanding > 0 && (
+            <Link href="/payments/pay">
+              <Button>Make a Payment</Button>
+            </Link>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

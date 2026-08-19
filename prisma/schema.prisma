@@ -403,6 +403,7 @@ model Quotation {
   discountAmount Decimal @default(0) @db.Decimal(12, 2)
   discountLabel  String?
   isInstant      Boolean @default(false)
+  rejectReason   String?
   notes       String?
   createdById String?
   createdBy   User?    @relation("QuotationCreatedBy", fields: [createdById], references: [id])

@@ -11,11 +11,18 @@ import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/tab
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 
-export default async function OrdersPage() {
+export default async function OrdersPage({ searchParams }: PageProps<"/orders">) {
   const user = await requireUser();
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
   if (user.role === "STAFF" && !(await can(user, "ORDER_VIEW"))) redirect("/dashboard");
   const canCreate = user.role === "ADMIN" || (await can(user, "ORDER_CREATE"));
+
+  // Distinct nav identity for the Customer sidebar's "Invoices" item (spec
+  // Aug 19 corrective update, item 2) — same underlying Order records (this
+  // app has no separate Invoice entity), but the heading and each row's
+  // link reflect the invoice framing rather than the order-tracking one.
+  const sp = await searchParams;
+  const isInvoicesView = !isStaffLike && sp.view === "invoices";
 
   const where = isStaffLike ? {} : { customerId: (await getCurrentCustomer(user.id)).id };
 
@@ -30,8 +37,12 @@ export default async function OrdersPage() {
       <TransactionBrandHeader />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{isStaffLike ? "Orders" : "My Orders"}</h1>
-          <p className="text-sm text-slate-500">Track job orders, payments, and fulfillment.</p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isStaffLike ? "Orders" : isInvoicesView ? "Invoices" : "My Orders"}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {isInvoicesView ? "Printable invoices for each of your orders." : "Track job orders, payments, and fulfillment."}
+          </p>
         </div>
         {isStaffLike && canCreate && (
           <Link href="/orders/new">
@@ -64,16 +75,21 @@ export default async function OrdersPage() {
                   <StatusBadge status={o.status} />
                 </TD>
                 <TD>{formatDate(o.createdAt)}</TD>
-                <TD>
+                <TD className="flex items-center gap-3">
                   <Link href={`/orders/${o.id}`} className="text-sm font-medium text-slate-900 underline">
                     View
                   </Link>
+                  {isInvoicesView && (
+                    <Link href={`/orders/${o.id}/invoice`} target="_blank" className="text-sm font-medium text-brand-600 underline">
+                      Invoice
+                    </Link>
+                  )}
                 </TD>
               </TR>
             ))}
           </TBody>
         </Table>
-        {orders.length === 0 && <EmptyState label="No orders yet." />}
+        {orders.length === 0 && <EmptyState label={isInvoicesView ? "No invoices yet." : "No orders yet."} />}
       </Card>
     </div>
   );

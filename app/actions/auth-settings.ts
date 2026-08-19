@@ -2,10 +2,12 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { updateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/email-crypto";
+import { BUSINESS_SETTINGS_TAG } from "@/lib/business-settings";
 
 const providerSchema = z.object({
   googleClientId: z.string().optional(),
@@ -56,6 +58,7 @@ export async function updateAuthProviderSettingsAction(_prevState: string | unde
     create: { id: "default", ...data },
     update: data,
   });
+  updateTag(BUSINESS_SETTINGS_TAG);
 
   await logAudit(user.id, "AUTH_PROVIDER_SETTINGS_UPDATED", "BusinessSettings", "default", {
     googleConfigured: !!parsed.data.googleClientId,

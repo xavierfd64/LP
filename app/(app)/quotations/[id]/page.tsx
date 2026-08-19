@@ -11,11 +11,12 @@ import { Alert } from "@/components/ui/alert";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { EditorShell, EditorHeader, EditorGrid, EditorPanel, InfoField, TotalsPanel } from "@/components/documents/editor-shell";
 import { LineItemsView } from "@/components/documents/line-items-view";
-import { sendQuotationAction, approveQuotationAction, rejectQuotationAction } from "@/app/actions/quotations";
+import { sendQuotationAction } from "@/app/actions/quotations";
 import { RevisionRequestForm } from "./revision-request-form";
 import { EditQuotationForm } from "./edit-quotation-form";
 import { CancelQuotationForm } from "./cancel-quotation-form";
 import { ForceApproveForm } from "./force-approve-form";
+import { CustomerQuotationActions } from "./customer-quotation-actions";
 import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 import { DocumentShareManager } from "@/components/documents/document-share-manager";
@@ -63,8 +64,6 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const send = sendQuotationAction.bind(null, quotation.id);
-  const approve = approveQuotationAction.bind(null, quotation.id);
-  const reject = rejectQuotationAction.bind(null, quotation.id);
   const hasOrder = quotation.orders.length > 0;
   const canManageTracking = isStaffLike && (isAdmin || (await can(user, "ORDER_TRACKING_MANAGE")));
   const activeTrackingLink = canManageTracking && hasOrder ? await findActiveTrackingLink(quotation.orders[0].id) : null;
@@ -112,6 +111,12 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
         <Alert tone="error">
           Cancelled by {quotation.cancelledBy?.name ?? "staff"}: {quotation.cancelReason}
         </Alert>
+      )}
+      {quotation.status === "REJECTED" && quotation.rejectReason && (
+        <Alert tone="error">Reason: {quotation.rejectReason}</Alert>
+      )}
+      {quotation.status === "SENT" && quotation.validUntil && quotation.validUntil < new Date() && (
+        <Alert tone="warning">This quotation&apos;s validity period has passed — please contact us for an updated quote.</Alert>
       )}
       {quotation.approvedByStaff && (
         <Alert tone="warning">
@@ -175,14 +180,18 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
         )}
         {!isStaffLike && quotation.status === "SENT" && (
           <>
-            <form action={approve}>
-              <Button type="submit">Approve</Button>
-            </form>
-            <form action={reject}>
-              <Button type="submit" variant="destructive">
-                Reject
-              </Button>
-            </form>
+            <CustomerQuotationActions
+              quotationId={quotation.id}
+              quoteNumber={quotation.quoteNumber}
+              lineItems={quotation.lineItems.map((li) => ({
+                id: li.id,
+                productType: li.productType,
+                description: li.description,
+                qty: li.qty,
+                unitPrice: Number(li.unitPrice),
+              }))}
+              notes={quotation.notes}
+            />
             <RevisionRequestForm quotationId={quotation.id} />
           </>
         )}

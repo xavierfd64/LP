@@ -2,10 +2,12 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { updateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { saveUploadedFile } from "@/lib/upload";
+import { BUSINESS_SETTINGS_TAG } from "@/lib/business-settings";
 
 /**
  * Only http(s) URLs are accepted for a pasted logo/favicon URL — rejects
@@ -124,6 +126,7 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
     create: { id: "default", ...data },
     update: data,
   });
+  updateTag(BUSINESS_SETTINGS_TAG);
 
   await logAudit(user.id, "BUSINESS_SETTINGS_UPDATED", "BusinessSettings", "default", data);
 

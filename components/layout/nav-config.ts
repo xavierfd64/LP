@@ -144,14 +144,14 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
             { label: "Inquiries", href: "/inquiries", iconKey: "inbox" },
             { label: "Quotations", href: "/quotations", iconKey: "fileText" },
             { label: "Orders", href: "/orders", iconKey: "package" },
-            { label: "Invoices", href: "/orders", iconKey: "receipt" },
+            { label: "Invoices", href: "/orders?view=invoices", iconKey: "receipt" },
           ],
         },
         {
           section: "FINANCE",
           items: [
             { label: "Payments", href: "/payments", iconKey: "wallet" },
-            { label: "Statement of Account", href: "/payments", iconKey: "barChart" },
+            { label: "Statement of Account", href: "/payments?view=soa", iconKey: "barChart" },
           ],
         },
         {

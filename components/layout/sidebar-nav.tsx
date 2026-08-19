@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { isNavItemActive } from "./is-nav-item-active";
 import {
   LayoutDashboard,
   Inbox,
@@ -69,6 +70,7 @@ const ICON_COMPONENTS: Record<string, LucideIcon> = {
 /** Grouped, optionally-collapsible sidebar nav (spec items 6/7) — used by both the desktop sidebar and the mobile drawer. */
 export function SidebarNav({ sections, collapsed = false }: { sections: NavSection[]; collapsed?: boolean }) {
   const pathname = usePathname();
+  const currentView = useSearchParams().get("view");
 
   return (
     <nav className="flex flex-col gap-4">
@@ -78,7 +80,7 @@ export function SidebarNav({ sections, collapsed = false }: { sections: NavSecti
             <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{section.section}</p>
           )}
           {section.items.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
+            const active = isNavItemActive(pathname, currentView, item.href);
             const Icon = item.iconKey ? ICON_COMPONENTS[item.iconKey] : undefined;
             return (
               <Link
