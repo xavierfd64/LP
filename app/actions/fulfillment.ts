@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions-guard";
 import { logAudit } from "@/lib/audit";
-import { saveUploadedFile } from "@/lib/upload";
+import { saveUploadedFile, UploadRejectedError } from "@/lib/upload";
 import { notifyCustomer } from "@/lib/notifications";
 
 async function maybeCompleteOrder(orderId: string) {
@@ -118,7 +118,15 @@ export async function uploadDeliveryProofAction(fulfillmentId: string, jobOrderI
   const file = formData.get("proofFile") as File | null;
   if (!file || file.size === 0) redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent("Choose a file first.")}`);
 
-  const saved = await saveUploadedFile(file!);
+  let saved: { filename: string; path: string };
+  try {
+    saved = await saveUploadedFile(file!, "document");
+  } catch (e) {
+    if (e instanceof UploadRejectedError) {
+      redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent(e.message)}`);
+    }
+    throw e;
+  }
   await prisma.fulfillment.update({ where: { id: fulfillmentId }, data: { proofFilePath: saved.path } });
   await logAudit(user.id, "DELIVERY_PROOF_UPLOADED", "Fulfillment", fulfillmentId, {});
 

@@ -21,6 +21,9 @@ services:
       NEXTAUTH_URL: http://localhost:3000
       NEXTAUTH_SECRET: dev-secret-change-in-production-please
       AUTH_SECRET: dev-secret-change-in-production-please
+      # This compose file is local-dev-only (never what Render's production
+      # deployment uses) — RUN_SEED must stay unset in any real environment.
+      RUN_SEED: "true"
     ports:
       - "3000:3000"
     volumes:

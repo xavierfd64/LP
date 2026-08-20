@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/session";
 import { requirePermission } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
-import { saveUploadedFile } from "@/lib/upload";
+import { saveUploadedFile, UploadRejectedError } from "@/lib/upload";
 import { assertCanRelease, paymentSummary, RuleViolation } from "@/lib/workflow";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
 import { autoCreateJobOrderForOrder } from "@/lib/quotation-conversion";
@@ -109,7 +109,13 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
   const customer = await getCurrentCustomer(user.id);
   if (order.customerId !== customer.id) throw new Error("Not allowed.");
 
-  const saved = await saveUploadedFile(file);
+  let saved: { filename: string; path: string };
+  try {
+    saved = await saveUploadedFile(file, "document");
+  } catch (e) {
+    if (e instanceof UploadRejectedError) return e.message;
+    throw e;
+  }
 
   const payment = await prisma.payment.create({
     data: {

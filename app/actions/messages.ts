@@ -14,13 +14,12 @@ import {
   conversationSourceLink,
 } from "@/lib/conversations";
 import { publishToUsers } from "@/lib/realtime";
-import { saveUploadedFile } from "@/lib/upload";
+import { saveUploadedFile, UploadRejectedError } from "@/lib/upload";
 import { presenceStatus, type PresenceStatus } from "@/lib/staff-presence";
 import { autoAssignOnNewCustomerMessage } from "@/lib/auto-assignment";
 
 const messageSchema = z.object({ body: z.string().max(4000).optional() });
 
-const ATTACHMENT_ALLOWED_EXT = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt"];
 const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 type ConversationForAccess = {
@@ -134,10 +133,13 @@ export async function sendMessageAction(conversationId: string, _prevState: stri
     if (isStaffLike && !(await can(user, "COMMUNICATION_ATTACHMENT"))) {
       return "You do not have permission to send attachments.";
     }
-    if (file.size > ATTACHMENT_MAX_BYTES) return "That file is too large (10MB max).";
-    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-    if (!ATTACHMENT_ALLOWED_EXT.includes(ext)) return "That file type isn't supported.";
-    const saved = await saveUploadedFile(file);
+    let saved: { filename: string; path: string };
+    try {
+      saved = await saveUploadedFile(file, "chat-attachment", { maxBytes: ATTACHMENT_MAX_BYTES });
+    } catch (e) {
+      if (e instanceof UploadRejectedError) return e.message;
+      throw e;
+    }
     attachmentPath = saved.path;
     attachmentName = saved.filename;
     attachmentMime = file.type || undefined;

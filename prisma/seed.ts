@@ -21,7 +21,35 @@ async function writeSampleFile(name: string, content: string) {
   return `/uploads/${fname}`;
 }
 
+/**
+ * Two independent, fail-closed gates — neither is optional, and both must
+ * pass before this script writes a single row. This creates a known set of
+ * demo credentials (see the printed block at the end of `main()`), which
+ * must never exist in a real deployment:
+ *   1. `NODE_ENV !== "production"` — a hard block that cannot be overridden
+ *      by any flag, in case this script is ever invoked from a genuinely
+ *      production process.
+ *   2. `RUN_SEED === "true"` — an explicit opt-in required even outside
+ *      production, so a fresh/staging environment doesn't get seeded just
+ *      because nothing happened to set NODE_ENV. Never set this in the
+ *      Render production service's environment variables.
+ * This is deliberately not "gated by developer discipline" — a normal
+ * `npx prisma db seed` (or the Dockerfile's startup chain) is a no-op
+ * unless RUN_SEED=true is explicitly present in the environment.
+ */
+function assertSeedingAllowed() {
+  if (process.env.NODE_ENV === "production") {
+    console.log("Seeding skipped: NODE_ENV=production. This script never runs in production, regardless of other flags.");
+    process.exit(0);
+  }
+  if (process.env.RUN_SEED !== "true") {
+    console.log('Seeding skipped: set RUN_SEED="true" in your environment (e.g. .env) to seed this database. This is required even outside production.');
+    process.exit(0);
+  }
+}
+
 async function main() {
+  assertSeedingAllowed();
   console.log("Seeding database...");
 
   const existing = await prisma.user.findUnique({ where: { email: "admin@lp.test" } });

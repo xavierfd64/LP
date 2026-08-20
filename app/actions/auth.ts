@@ -7,11 +7,36 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { linkOrCreateCustomerForUser } from "@/lib/customer-linking";
 import { safeRedirectPath } from "@/lib/safe-redirect";
+import { isRateLimited, clientIp } from "@/lib/rate-limit";
+
+// IP-keyed: the primary brake on a single credential-stuffing source —
+// generous enough that a normal user mistyping their password a few times,
+// or a shared office/NAT IP with several real users, never trips it.
+const LOGIN_IP_LIMIT = 20;
+const LOGIN_IP_WINDOW_MS = 15 * 60 * 1000;
+// Email-keyed: deliberately much looser than the IP limit, and never the
+// sole gate on whether an account can sign in — its only job is capping
+// genuinely abnormal volume spread across many IPs. A tight per-account
+// limit here would let an attacker lock a real user out of their own
+// account just by submitting a handful of wrong passwords for their email
+// from anywhere; this threshold is high enough that never happens.
+const LOGIN_EMAIL_LIMIT = 30;
+const LOGIN_EMAIL_WINDOW_MS = 15 * 60 * 1000;
 
 export async function loginAction(_prevState: string | undefined, formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
   const redirectTo = safeRedirectPath(formData.get("callbackUrl") as string | null) ?? "/";
+
+  const ip = await clientIp();
+  const ipLimited = isRateLimited("login-ip", ip, LOGIN_IP_LIMIT, LOGIN_IP_WINDOW_MS);
+  const emailLimited = email ? isRateLimited("login-email", email.toLowerCase(), LOGIN_EMAIL_LIMIT, LOGIN_EMAIL_WINDOW_MS) : false;
+  if (ipLimited || emailLimited) {
+    // Same generic message as a wrong password — rate-limit state is never
+    // exposed to the client, and this can't be used to probe whether an
+    // email is registered.
+    return "Invalid email or password.";
+  }
 
   try {
     await signIn("credentials", { email, password, redirectTo });
@@ -42,7 +67,20 @@ const registerSchema = z
     path: ["confirmPassword"],
   });
 
+// IP-keyed only — registration has no existing account to key by, and
+// keying on the submitted email would let an attacker "reserve" a lockout
+// against a target's email by repeatedly submitting it, blocking that
+// person from ever registering. This just caps automated mass-account
+// creation from one source.
+const REGISTER_IP_LIMIT = 10;
+const REGISTER_IP_WINDOW_MS = 60 * 60 * 1000;
+
 export async function registerAction(_prevState: string | undefined, formData: FormData) {
+  const ip = await clientIp();
+  if (isRateLimited("register-ip", ip, REGISTER_IP_LIMIT, REGISTER_IP_WINDOW_MS)) {
+    return "Too many signup attempts. Please try again later.";
+  }
+
   const parsed = registerSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),

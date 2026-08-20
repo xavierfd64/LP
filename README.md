@@ -23,6 +23,7 @@ Next.js 16 (App Router, TypeScript) · PostgreSQL + Prisma 7 · NextAuth v5 (Cre
    NEXTAUTH_SECRET="some-random-string"
    NEXTAUTH_URL="http://localhost:3000"
    AUTH_SECRET="some-random-string"
+   RUN_SEED="true"
    ```
 3. Install deps, generate the Prisma client, run migrations, and seed:
    ```bash
@@ -31,6 +32,7 @@ Next.js 16 (App Router, TypeScript) · PostgreSQL + Prisma 7 · NextAuth v5 (Cre
    npx prisma migrate deploy   # or: npx prisma migrate dev
    npx prisma db seed
    ```
+   `db seed` is a no-op unless `RUN_SEED="true"` is set in your environment (and always a no-op when `NODE_ENV=production`) — this is intentional, so the demo accounts below can never be created outside a deliberately-configured dev/test environment. See "Demo logins" below.
 4. Run the app:
    ```bash
    npm run dev
@@ -46,7 +48,7 @@ This starts Postgres + the app, runs migrations, and seeds the database automati
 
 ## Demo logins
 
-All seeded passwords are `password123`.
+All seeded passwords are `password123`. These accounts only exist if `RUN_SEED="true"` was set when `db seed` ran — never set that variable in a production deployment's environment.
 
 | Role | Email |
 |---|---|

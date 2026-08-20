@@ -6,7 +6,7 @@ import { updateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
-import { saveUploadedFile } from "@/lib/upload";
+import { saveUploadedFile, UploadRejectedError } from "@/lib/upload";
 import { BUSINESS_SETTINGS_TAG } from "@/lib/business-settings";
 
 /**
@@ -99,8 +99,13 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
   } else if (logoSource === "upload") {
     const logoFile = formData.get("logo") as File | null;
     if (logoFile && logoFile.size > 0) {
-      const saved = await saveUploadedFile(logoFile);
-      data.logoPath = saved.path;
+      try {
+        const saved = await saveUploadedFile(logoFile, "image");
+        data.logoPath = saved.path;
+      } catch (e) {
+        if (e instanceof UploadRejectedError) return e.message;
+        throw e;
+      }
     }
   }
 
@@ -116,8 +121,13 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
   } else if (faviconSource === "upload") {
     const faviconFile = formData.get("favicon") as File | null;
     if (faviconFile && faviconFile.size > 0) {
-      const saved = await saveUploadedFile(faviconFile);
-      data.faviconPath = saved.path;
+      try {
+        const saved = await saveUploadedFile(faviconFile, "image");
+        data.faviconPath = saved.path;
+      } catch (e) {
+        if (e instanceof UploadRejectedError) return e.message;
+        throw e;
+      }
     }
   }
 

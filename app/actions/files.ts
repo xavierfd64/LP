@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { getCurrentCustomer } from "@/lib/current-customer";
-import { saveUploadedFile } from "@/lib/upload";
+import { saveUploadedFile, UploadRejectedError } from "@/lib/upload";
 import { logAudit } from "@/lib/audit";
 import { notifyCustomer } from "@/lib/notifications";
 
@@ -39,7 +39,15 @@ export async function uploadJobOrderFileAction(jobOrderId: string, formData: For
     }
   }
 
-  const saved = await saveUploadedFile(file);
+  let saved: { filename: string; path: string };
+  try {
+    saved = await saveUploadedFile(file, "document");
+  } catch (e) {
+    if (e instanceof UploadRejectedError) {
+      redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent(e.message)}`);
+    }
+    throw e;
+  }
   const existingCount = await prisma.file.count({ where: { jobOrderId, category } });
 
   const created = await prisma.file.create({
