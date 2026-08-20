@@ -42,14 +42,23 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/admin/e
     where.expenseDate = range;
   }
 
-  const [expenses, categories] = await Promise.all([
+  const [expenses, activeCategories, selectedCategory] = await Promise.all([
     prisma.operatingExpense.findMany({
       where,
       include: { category: true },
       orderBy: { expenseDate: "desc" },
     }),
     prisma.expenseCategory.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    categoryId ? prisma.expenseCategory.findUnique({ where: { id: categoryId } }) : Promise.resolve(null),
   ]);
+
+  // The filter dropdown must still show a previously-selected category even
+  // if it has since been deactivated — otherwise the URL's ?categoryId=
+  // silently falls back to "All Categories" in the select's rendering.
+  const filterCategories =
+    selectedCategory && !activeCategories.some((c) => c.id === selectedCategory.id)
+      ? [...activeCategories, selectedCategory].sort((a, b) => a.name.localeCompare(b.name))
+      : activeCategories;
 
   const total = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
@@ -75,7 +84,17 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/admin/e
       </div>
 
       <Card className="px-5 py-4">
-        <p className="text-xs uppercase text-slate-500">Total (matching filters)</p>
+        {selectedCategory ? (
+          <>
+            <p className="text-sm font-semibold text-slate-900">{selectedCategory.name}</p>
+            <p className="text-xs text-slate-500">
+              {expenses.length} expense record{expenses.length === 1 ? "" : "s"}
+              {(q || method || from || to) && " matching the other filters"}
+            </p>
+          </>
+        ) : (
+          <p className="text-xs uppercase text-slate-500">Total (matching filters)</p>
+        )}
         <p className="text-2xl font-bold text-slate-900">{formatCurrency(total)}</p>
       </Card>
 
@@ -89,9 +108,10 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/admin/e
             <Label htmlFor="categoryId">Category</Label>
             <Select id="categoryId" name="categoryId" defaultValue={categoryId}>
               <option value="">All Categories</option>
-              {categories.map((c) => (
+              {filterCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                  {!c.active ? " (Inactive)" : ""}
                 </option>
               ))}
             </Select>

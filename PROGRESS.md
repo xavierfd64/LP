@@ -1051,3 +1051,31 @@ The financial-foundation phase from the Gemini audit's own roadmap (Phase 1 — 
 - Test 7 (existing workflow untouched): full regression sweep — 2 viewports × 4 roles across every existing page plus every new one — 0 console errors, 0px horizontal overflow; Order and Job Order detail pages (now carrying the new costing panel) both still 200.
 - Redeploy-safety: zero Prisma migration drift (`prisma migrate diff --exit-code`), `npx tsc --noEmit` clean, `next build` succeeding with Postgres stopped (all new routes — `/admin/expenses`, `/admin/expenses/new`, `/admin/expense-categories`, `/reports/profit-loss` — present in the build output), clean git status before commit.
 - No leftover test data.
+
+## August 20 — 2nd update: Financial Foundation Part B — Expense Category Management
+
+Extends the Operating Expense Categories from the 1st update into a proper, fully manageable system — no rebuild, no duplicate category system. `ExpenseCategory` already used a real relation (`categoryId` FK), so no data migration was needed there; the only schema change is one new nullable `description` column.
+
+**Full CRUD via one shared modal.** `CategoryFormModal` (Name, Description, Status) is used for both Add and Edit — matching the spec's own mockup — replacing the 1st update's plain inline "Add Category" form and its separate quick-toggle button. Both create and update run through the same case-insensitive, whitespace-normalized duplicate check (`findDuplicateCategory`), so "Electricity & Utilities", "electricity & utilities", and "  Electricity & Utilities  " are all treated as the same category; name is trimmed and length-bounded (2–60 chars), description bounded (300 chars).
+
+**History is protected, not just hidden.** A category with any linked `OperatingExpense` rows can only be Deactivated, never deleted — enforced both by only rendering the Delete button when `_count.expenses === 0` and, as a backstop, by `deleteExpenseCategoryAction` re-checking that count server-side before it will delete anything. Deactivating never touches the `categoryId` on existing expenses; they keep displaying their category exactly as before, and simply stop appearing as a choice on the *new* expense form.
+
+**Precise audit trail.** `EXPENSE_CATEGORY_CREATED` / `_UPDATED` / `_ACTIVATED` / `_DEACTIVATED` / `_DELETED` are logged as distinct actions (not one generic "toggled" event) — a save that both renames a category and flips its status logs two separate, accurate entries. All through the existing `AuditLog`, no second logging system. Verified live: all five action types appeared correctly for a full create → rename → deactivate → reactivate → (separate never-used category) delete sequence.
+
+**Reporting integration, using real data only.** New `getOperatingExpensesByCategory()` in `lib/financial-summary.ts` groups actual `OperatingExpense` rows by category for a date range and is rendered as an "Operating Expenses by Category" breakdown on `/reports/profit-loss`, reconciling exactly to the existing Operating Expenses total line (same underlying rows, same range — verified live: a ₱6,200 breakdown summed to the same ₱6,200 shown on the main P&L line). The `/admin/expenses` category filter (already present from the 1st update) now also shows a small "records + total" readout for the selected category, computed from the already-filtered result set — no separate query, no fabricated numbers.
+
+**Two related pre-existing edge cases found and fixed while building this** (both a direct consequence of introducing the Active/Inactive status this update adds meaning to, so in-scope, not deferred): the expense **edit** form and the expenses list's **category filter** each only loaded *active* categories, so an expense (or a saved filter link) referencing a category that was later deactivated would silently lose that selection. Both now include the specific category in question even when inactive, labeled "(Inactive)", so editing an old expense — or revisiting an old filtered URL — never disconnects it from its real category.
+
+**Verification (spec's 8 test scenarios, all confirmed live):**
+- Test 1 (create "Equipment Rental"): appeared in the list, in the new-expense dropdown, with its description shown.
+- Test 2 (rename to "Equipment & Rental"): list and dropdown updated; existing relation preserved (no expenses existed yet, confirmed via Test 6's later linkage).
+- Test 3 (deactivate): disappeared from the new-expense dropdown, "Inactive" badge shown, still resolvable everywhere else.
+- Test 4 (reactivate): reappeared in the dropdown.
+- Test 5 (duplicate "equipment rental  "): blocked with "An expense category with this name already exists."
+- Test 6 (reporting): two expenses recorded in different categories; category filter/totals and the P&L category breakdown both matched the real recorded amounts exactly.
+- Test 7 (permissions): a Customer and a permission-less Staff account were both redirected away from `/admin/expense-categories`.
+- Test 8 (audit): all five category action types (`CREATED`/`UPDATED`/`ACTIVATED`/`DEACTIVATED`/`DELETED`) confirmed in the Audit Log.
+- Delete-protection: a category with expense history showed no Delete button at all; a never-used category could be deleted after confirmation, and the deletion was logged.
+- Full regression sweep (2 viewports × 4 roles, all existing + new pages, including the new mobile card layout for Expense Categories on a 390px viewport): 0 failures, 0 console errors, 0px overflow.
+- Redeploy-safety: `npx tsc --noEmit` clean, zero Prisma migration drift, `next build` succeeding with Postgres stopped, clean git status before commit.
+- No leftover test data or test categories.

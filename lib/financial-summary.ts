@@ -26,6 +26,42 @@ import type { PeriodRange } from "@/lib/transaction-summary";
  * looks more precise than the underlying data actually is.
  */
 
+export type ExpenseCategoryBreakdown = {
+  categoryId: string;
+  categoryName: string;
+  total: number;
+};
+
+/**
+ * Operating Expenses grouped by category for a date range (Aug 20 2nd
+ * update, Part B item 10) — real recorded expenses only, sorted highest
+ * first, with the grand total reconciling exactly to
+ * computeFinancialFoundation's own `operatingExpenses` figure since both
+ * read from the same OperatingExpense rows for the same range.
+ */
+export async function getOperatingExpensesByCategory(range: PeriodRange): Promise<ExpenseCategoryBreakdown[]> {
+  const { start, end } = range;
+  const grouped = await prisma.operatingExpense.groupBy({
+    by: ["categoryId"],
+    where: { expenseDate: { gte: start, lt: end } },
+    _sum: { amount: true },
+  });
+  if (grouped.length === 0) return [];
+
+  const categories = await prisma.expenseCategory.findMany({
+    where: { id: { in: grouped.map((g) => g.categoryId) } },
+  });
+  const nameById = new Map(categories.map((c) => [c.id, c.name]));
+
+  return grouped
+    .map((g) => ({
+      categoryId: g.categoryId,
+      categoryName: nameById.get(g.categoryId) ?? "Unknown",
+      total: Number(g._sum.amount ?? 0),
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
 export type FinancialFoundationSummary = {
   revenue: number;
   cogs: number;

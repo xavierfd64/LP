@@ -7,7 +7,7 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { EditorPanel } from "@/components/documents/editor-shell";
 
-type Category = { id: string; name: string };
+type Category = { id: string; name: string; active?: boolean };
 type Expense = {
   id: string;
   expenseDate: string;
@@ -41,6 +41,7 @@ export function ExpenseForm({ categories, expense }: { categories: Category[]; e
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                  {c.active === false ? " (Inactive)" : ""}
                 </option>
               ))}
             </Select>

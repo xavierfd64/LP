@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { formatCurrency } from "@/lib/utils";
 import { resolvePeriodRange, parsePeriodSearchParams } from "@/lib/transaction-summary";
-import { computeFinancialFoundation } from "@/lib/financial-summary";
+import { computeFinancialFoundation, getOperatingExpensesByCategory } from "@/lib/financial-summary";
 import { PeriodSelector } from "../summary/period-selector";
 
 function Line({
@@ -53,7 +53,10 @@ export default async function ProfitLossPage({ searchParams }: PageProps<"/repor
   const sp = await searchParams;
   const sel = parsePeriodSearchParams(sp);
   const range = resolvePeriodRange(sel);
-  const fin = await computeFinancialFoundation(range);
+  const [fin, expensesByCategory] = await Promise.all([
+    computeFinancialFoundation(range),
+    getOperatingExpensesByCategory(range),
+  ]);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -107,6 +110,26 @@ export default async function ProfitLossPage({ searchParams }: PageProps<"/repor
           <Line label="NET PROFIT" value={fin.netProfit != null ? formatCurrency(fin.netProfit) : "Not available"} emphasis />
         </CardContent>
       </Card>
+
+      {expensesByCategory.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Operating Expenses by Category</p>
+            <div className="space-y-1.5">
+              {expensesByCategory.map((c) => (
+                <div key={c.categoryId} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">{c.categoryName}</span>
+                  <span className="tabular-nums font-medium text-slate-900">{formatCurrency(c.total)}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t border-slate-200 pt-1.5 text-sm font-semibold">
+                <span className="text-slate-900">Total</span>
+                <span className="tabular-nums text-slate-900">{formatCurrency(fin.operatingExpenses)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card>

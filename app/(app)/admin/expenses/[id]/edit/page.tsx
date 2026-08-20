@@ -13,16 +13,24 @@ export default async function EditExpensePage({ params }: PageProps<"/admin/expe
 
   const { id } = await params;
   const [expense, categories] = await Promise.all([
-    prisma.operatingExpense.findUnique({ where: { id } }),
+    prisma.operatingExpense.findUnique({ where: { id }, include: { category: true } }),
     prisma.expenseCategory.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
   ]);
   if (!expense) notFound();
+
+  // The dropdown must offer every active category plus, if this expense's
+  // own category has since been deactivated, that category too — editing
+  // an old expense must never silently disconnect it from its category
+  // (spec Part B item 5).
+  const categoryOptions = categories.some((c) => c.id === expense.categoryId)
+    ? categories
+    : [...categories, expense.category].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <EditorShell className="max-w-3xl">
       <EditorHeader eyebrow="Expense" title={expense.expenseNumber} subtitle="Edit this operating expense." />
       <ExpenseForm
-        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+        categories={categoryOptions.map((c) => ({ id: c.id, name: c.name, active: c.active }))}
         expense={{
           id: expense.id,
           expenseDate: expense.expenseDate.toISOString().slice(0, 10),

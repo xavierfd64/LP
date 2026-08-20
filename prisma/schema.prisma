@@ -1158,11 +1158,20 @@ enum AccountAdjustmentType {
  * list. `active` lets a category be retired without breaking historical
  * expense records that reference it.
  */
+/**
+ * `active` controls whether a category is offered on the *new* expense
+ * form (spec Part B item 8) — it never affects existing OperatingExpense
+ * rows, which keep their categoryId/relation regardless. Deletion is only
+ * permitted for a category with zero linked expenses (see
+ * deleteExpenseCategoryAction); one with history can only be deactivated,
+ * never destroyed (Part B item 6).
+ */
 model ExpenseCategory {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
   expenses OperatingExpense[]
 }

@@ -118,31 +118,119 @@ export async function deleteExpenseAction(expenseId: string) {
   redirect("/admin/expenses");
 }
 
+// Trimmed, non-blank, reasonably bounded (spec Part B item 18).
 const categorySchema = z.object({
-  name: z.string().min(2, "Category name is required."),
+  name: z
+    .string()
+    .trim()
+    .min(2, "Category name is required.")
+    .max(60, "Category name is too long (60 characters max)."),
+  description: z.string().trim().max(300, "Description is too long (300 characters max).").optional(),
+  active: z.enum(["true", "false"]).default("true"),
 });
+
+function parseCategoryForm(formData: FormData) {
+  return categorySchema.safeParse({
+    name: formData.get("name"),
+    description: formData.get("description") || undefined,
+    active: formData.get("active") ?? "true",
+  });
+}
+
+/**
+ * Case-insensitive, whitespace-normalized duplicate check (spec Part B
+ * item 17) — "Electricity & Utilities" and "electricity & utilities  "
+ * are the same category. `excludeId` lets an edit save without tripping
+ * over its own name.
+ */
+async function findDuplicateCategory(name: string, excludeId?: string) {
+  return prisma.expenseCategory.findFirst({
+    where: { name: { equals: name, mode: "insensitive" }, ...(excludeId ? { id: { not: excludeId } } : {}) },
+  });
+}
 
 export async function createExpenseCategoryAction(_prevState: string | undefined, formData: FormData) {
   const user = await requirePermission("EXPENSE_MANAGE");
 
-  const parsed = categorySchema.safeParse({ name: formData.get("name") });
+  const parsed = parseCategoryForm(formData);
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+  const data = parsed.data;
 
-  const existing = await prisma.expenseCategory.findUnique({ where: { name: parsed.data.name } });
-  if (existing) return "A category with that name already exists.";
+  if (await findDuplicateCategory(data.name)) return "An expense category with this name already exists.";
 
-  const category = await prisma.expenseCategory.create({ data: { name: parsed.data.name } });
-  await logAudit(user.id, "EXPENSE_CATEGORY_CREATED", "ExpenseCategory", category.id, { name: category.name });
+  const category = await prisma.expenseCategory.create({
+    data: { name: data.name, description: data.description || null, active: data.active === "true" },
+  });
+  await logAudit(user.id, "EXPENSE_CATEGORY_CREATED", "ExpenseCategory", category.id, {
+    name: category.name,
+    active: category.active,
+  });
 
   redirect("/admin/expense-categories");
 }
 
-export async function toggleExpenseCategoryActiveAction(categoryId: string) {
+/**
+ * One save can change both descriptive fields (name/description) and the
+ * active status. Each is audited under its own action name (spec Part B
+ * item 15 lists them separately: Created/Updated/Activated/Deactivated),
+ * so a rename-and-deactivate produces two precise entries rather than one
+ * ambiguous one. Editing never touches which expenses point at this
+ * category — the categoryId relation on OperatingExpense is untouched.
+ */
+export async function updateExpenseCategoryAction(categoryId: string, _prevState: string | undefined, formData: FormData) {
   const user = await requirePermission("EXPENSE_MANAGE");
-  const category = await prisma.expenseCategory.findUniqueOrThrow({ where: { id: categoryId } });
 
-  await prisma.expenseCategory.update({ where: { id: categoryId }, data: { active: !category.active } });
-  await logAudit(user.id, "EXPENSE_CATEGORY_TOGGLED", "ExpenseCategory", categoryId, { active: !category.active });
+  const parsed = parseCategoryForm(formData);
+  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+  const data = parsed.data;
+
+  const existing = await prisma.expenseCategory.findUniqueOrThrow({ where: { id: categoryId } });
+  if (await findDuplicateCategory(data.name, categoryId)) return "An expense category with this name already exists.";
+
+  const nextActive = data.active === "true";
+  const description = data.description || null;
+  const infoChanged = existing.name !== data.name || existing.description !== description;
+  const statusChanged = existing.active !== nextActive;
+
+  await prisma.expenseCategory.update({
+    where: { id: categoryId },
+    data: { name: data.name, description, active: nextActive },
+  });
+
+  if (infoChanged) {
+    await logAudit(user.id, "EXPENSE_CATEGORY_UPDATED", "ExpenseCategory", categoryId, {
+      name: data.name,
+      previousName: existing.name,
+    });
+  }
+  if (statusChanged) {
+    await logAudit(user.id, nextActive ? "EXPENSE_CATEGORY_ACTIVATED" : "EXPENSE_CATEGORY_DEACTIVATED", "ExpenseCategory", categoryId, {
+      name: data.name,
+    });
+  }
+
+  redirect("/admin/expense-categories");
+}
+
+/**
+ * Permanent delete is only ever allowed for a category with zero linked
+ * expenses (spec Part B item 6 — "Do not delete categories with
+ * history"). A category that has ever been used can only be deactivated.
+ * Enforced here server-side, not just hidden in the UI.
+ */
+export async function deleteExpenseCategoryAction(categoryId: string) {
+  const user = await requirePermission("EXPENSE_MANAGE");
+  const category = await prisma.expenseCategory.findUniqueOrThrow({
+    where: { id: categoryId },
+    include: { _count: { select: { expenses: true } } },
+  });
+
+  if (category._count.expenses > 0) {
+    throw new Error("This category has expense records and cannot be deleted. Deactivate it instead.");
+  }
+
+  await prisma.expenseCategory.delete({ where: { id: categoryId } });
+  await logAudit(user.id, "EXPENSE_CATEGORY_DELETED", "ExpenseCategory", categoryId, { name: category.name });
 
   redirect("/admin/expense-categories");
 }
