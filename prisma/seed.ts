@@ -301,7 +301,7 @@ async function main() {
       lotCode: "TAR-202607-001",
       receivedQty: 100,
       remainingQty: 40,
-      supplier: "ABC Materials Corp",
+      supplierName: "ABC Materials Corp",
       receivedDate: new Date("2026-07-05"),
     },
   });
@@ -311,7 +311,7 @@ async function main() {
       lotCode: "JER-202608-001",
       receivedQty: 200,
       remainingQty: 200,
-      supplier: "Textile Hub PH",
+      supplierName: "Textile Hub PH",
       receivedDate: new Date("2026-08-01"),
     },
   });
@@ -321,7 +321,7 @@ async function main() {
       lotCode: "DTF-202608-001",
       receivedQty: 12,
       remainingQty: 10,
-      supplier: "PrintSupply Co",
+      supplierName: "PrintSupply Co",
       receivedDate: new Date("2026-08-03"),
     },
   });
@@ -331,7 +331,7 @@ async function main() {
       lotCode: "SIN-202608-001",
       receivedQty: 25,
       remainingQty: 25,
-      supplier: "BoardWorks",
+      supplierName: "BoardWorks",
       receivedDate: new Date("2026-08-08"),
     },
   });

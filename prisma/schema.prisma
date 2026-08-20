@@ -130,6 +130,8 @@ enum MovementType {
   REJECT
   WASTE
   ADJUST
+  /// Reverses a purchase's stock increase when cancelled (Aug 20 3rd update) — only ever recorded against a lot with nothing yet consumed from it.
+  CANCEL
 }
 
 enum FulfillmentMethod {
@@ -248,6 +250,11 @@ enum Permission {
 
   SERVICE_VIEW
   SERVICE_MANAGE
+
+  SUPPLIER_VIEW
+  SUPPLIER_MANAGE
+  PURCHASE_MANAGE
+  INVENTORY_COST_VIEW
 }
 
 // ---------- Core ----------
@@ -299,6 +306,7 @@ model User {
   statementSchedulesCreated StatementSchedule[]
   themesInstalled         InstalledTheme[]
   pluginsInstalled        InstalledPlugin[]
+  supplyLotsCancelled     SupplyLot[] @relation("SupplyLotCancelledBy")
 }
 
 // Existence of a row = granted. Only meaningful for role=STAFF users — ADMIN
@@ -733,18 +741,66 @@ model InventoryItem {
   supplyLots SupplyLot[]
 }
 
+/**
+ * A structured vendor a material purchase can be linked to (Aug 20 3rd
+ * update, Part C — replaces free-text supplier names going forward).
+ * Never destructively deleted once it has purchase history — see
+ * deactivateSupplierAction — only deactivated, so historical purchases
+ * always resolve to a real supplier record.
+ */
+model Supplier {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  taxId         String?
+  paymentTerms  String?
+  notes         String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchases SupplyLot[]
+}
+
+/**
+ * A SupplyLot is this system's existing unit of "stock received" — Part C
+ * extends it into the unit of "purchase recorded" rather than building a
+ * separate purchase table, since receiving material *is* recording a
+ * purchase in this business. `unitCost` is nullable (never 0) for a lot
+ * whose cost wasn't entered — see lib/inventory-cost.ts, which excludes
+ * uncosted lots from the average-cost calculation rather than treating
+ * them as free. `supplierName` is the pre-Part-C free-text field, kept
+ * verbatim for lots recorded before Supplier existed; new purchases use
+ * `supplierId` instead. `cancelledAt` marks a reversed purchase without
+ * deleting it — history is never destroyed (spec item 24).
+ */
 model SupplyLot {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   inventoryItemId String
   inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  lotCode         String   @unique
-  receivedDate    DateTime @default(now())
+  lotCode         String    @unique
+  receivedDate    DateTime  @default(now())
   receivedQty     Int
   remainingQty    Int
-  supplier        String?
-  createdAt       DateTime @default(now())
+  supplierName    String?
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  unitCost        Decimal?  @db.Decimal(12, 4)
+  invoiceNumber   String?
+  paymentMethod   PaymentMethod?
+  referenceNumber String?
+  notes           String?
+  cancelledAt     DateTime?
+  cancelledById   String?
+  cancelledBy     User?     @relation("SupplyLotCancelledBy", fields: [cancelledById], references: [id])
+  createdAt       DateTime  @default(now())
 
   movements InventoryMovement[]
+
+  @@index([supplierId])
 }
 
 model InventoryMovement {

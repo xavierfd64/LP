@@ -18,6 +18,7 @@ const ICON_KEYS: Record<string, string> = {
   "/orders": "package",
   "/production": "factory",
   "/inventory": "boxes",
+  "/inventory/suppliers": "truck",
   "/admin/services": "wrench",
   "/admin/promotions": "percent",
   "/admin/workflow-templates": "gitBranch",
@@ -55,6 +56,7 @@ const STAFF_NAV_RULES: { section: string; label: string; href: string; permissio
   { section: "MAIN", label: "Orders", href: "/orders", permission: "ORDER_VIEW" },
   { section: "OPERATIONS", label: "Production", href: "/production", permission: "PRODUCTION_VIEW" },
   { section: "OPERATIONS", label: "Inventory", href: "/inventory" },
+  { section: "OPERATIONS", label: "Suppliers", href: "/inventory/suppliers", permission: "SUPPLIER_VIEW" },
   { section: "OPERATIONS", label: "Services", href: "/admin/services", permission: "SERVICE_VIEW" },
   { section: "OPERATIONS", label: "Promotions", href: "/admin/promotions", permission: "SERVICE_MANAGE" },
   { section: "FINANCE", label: "Payments", href: "/payments", permission: "PAYMENT_VIEW" },
@@ -89,6 +91,7 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { section: "OPERATIONS", items: withIcons([
           { label: "Production", href: "/production" },
           { label: "Inventory", href: "/inventory" },
+          { label: "Suppliers", href: "/inventory/suppliers" },
           { label: "Services", href: "/admin/services" },
           { label: "Promotions", href: "/admin/promotions" },
           { label: "Workflow Templates", href: "/admin/workflow-templates" },

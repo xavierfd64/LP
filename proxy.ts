@@ -34,7 +34,16 @@ const ROLE_RULES: { prefix: string; roles: string[] }[] = [
   // STAFF can be granted production permissions too (e.g. a "Production Staff"
   // preset); the PRODUCTION role itself keeps its existing unrestricted access.
   { prefix: "/production", roles: ["PRODUCTION", "ADMIN", "STAFF"] },
-  { prefix: "/inventory", roles: ["STAFF", "ADMIN"] },
+  // Pre-existing bug found+fixed during the Aug 20 3rd update: PRODUCTION
+  // was missing from this list even though /inventory/page.tsx,
+  // /inventory/[itemId]/page.tsx, and recordMovementAction all explicitly
+  // grant PRODUCTION access — meaning Production has been silently unable
+  // to reach Inventory at all since this rule's introduction (predates
+  // every update this session, see commit c61bac2). The new Supplier
+  // pages under /inventory/suppliers/* still correctly exclude PRODUCTION
+  // at the page level (their own isStaffLike check), so widening this
+  // prefix rule doesn't expose anything new to Production.
+  { prefix: "/inventory", roles: ["STAFF", "ADMIN", "PRODUCTION"] },
   { prefix: "/payments", roles: ["STAFF", "ADMIN", "CUSTOMER"] },
   { prefix: "/users", roles: ["ADMIN"] },
 ];

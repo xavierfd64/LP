@@ -33,6 +33,7 @@ import {
   Percent,
   ReceiptText,
   LineChart,
+  Truck,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -69,6 +70,7 @@ const ICON_COMPONENTS: Record<string, LucideIcon> = {
   percent: Percent,
   receiptText: ReceiptText,
   lineChart: LineChart,
+  truck: Truck,
 };
 
 /** Grouped, optionally-collapsible sidebar nav (spec items 6/7) — used by both the desktop sidebar and the mobile drawer. */

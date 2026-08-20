@@ -1,23 +1,35 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/session";
+import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
+import { formatCurrency } from "@/lib/utils";
+import { computeInventoryValueSummary, computePurchasesTotal } from "@/lib/inventory-cost";
+import { resolvePeriodRange } from "@/lib/transaction-summary";
 import { NewItemForm } from "./new-item-form";
 
 export default async function InventoryPage() {
-  await requireRole(["STAFF", "ADMIN", "PRODUCTION"]);
+  const user = await requireRole(["STAFF", "ADMIN", "PRODUCTION"]);
+  const canViewCost = user.role === "ADMIN" || (user.role === "STAFF" && (await can(user, "INVENTORY_COST_VIEW")));
+  const canViewSuppliers = user.role === "ADMIN" || (user.role === "STAFF" && (await can(user, "SUPPLIER_VIEW")));
 
   const items = await prisma.inventoryItem.findMany({ orderBy: { name: "asc" } });
   const lowStock = items.filter((i) => i.currentQty <= i.reorderThreshold);
 
-  const recentMovements = await prisma.inventoryMovement.findMany({
-    where: { jobOrderId: { not: null } },
-    include: { supplyLot: { include: { inventoryItem: true } }, jobOrder: true, createdBy: true },
-    orderBy: { createdAt: "desc" },
-    take: 15,
-  });
+  const monthRange = resolvePeriodRange({ type: "monthly" });
+  const [recentMovements, inventoryValue, purchasesThisMonth] = await Promise.all([
+    prisma.inventoryMovement.findMany({
+      where: { jobOrderId: { not: null } },
+      include: { supplyLot: { include: { inventoryItem: true } }, jobOrder: true, createdBy: true },
+      orderBy: { createdAt: "desc" },
+      take: 15,
+    }),
+    canViewCost ? computeInventoryValueSummary() : Promise.resolve(null),
+    canViewCost ? computePurchasesTotal(monthRange.start, monthRange.end) : Promise.resolve(null),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -26,7 +38,40 @@ export default async function InventoryPage() {
           <h1 className="text-2xl font-bold text-slate-900">Inventory</h1>
           <p className="text-sm text-slate-500">Stock levels, supply lots, and consumption.</p>
         </div>
-        <NewItemForm />
+        <div className="flex gap-2">
+          {canViewSuppliers && (
+            <Link href="/inventory/suppliers">
+              <Button variant="outline">Suppliers</Button>
+            </Link>
+          )}
+          <NewItemForm />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Card className="px-5 py-4">
+          <p className="text-xs uppercase text-slate-500">Total Inventory Items</p>
+          <p className="text-2xl font-bold text-slate-900">{items.length}</p>
+        </Card>
+        <Card className="px-5 py-4">
+          <p className="text-xs uppercase text-slate-500">Low Stock</p>
+          <p className="text-2xl font-bold text-slate-900">{lowStock.length}</p>
+        </Card>
+        {canViewCost && inventoryValue && (
+          <>
+            <Card className="px-5 py-4">
+              <p className="text-xs uppercase text-slate-500">Inventory Value</p>
+              <p className="text-2xl font-bold text-slate-900">{formatCurrency(inventoryValue.totalValue)}</p>
+              {inventoryValue.itemsWithoutCost > 0 && (
+                <p className="mt-1 text-xs text-amber-600">{inventoryValue.itemsWithoutCost} item{inventoryValue.itemsWithoutCost === 1 ? "" : "s"} without cost, not included.</p>
+              )}
+            </Card>
+            <Card className="px-5 py-4">
+              <p className="text-xs uppercase text-slate-500">Purchases This Month</p>
+              <p className="text-2xl font-bold text-slate-900">{formatCurrency(purchasesThisMonth ?? 0)}</p>
+            </Card>
+          </>
+        )}
       </div>
 
       {lowStock.length > 0 && (

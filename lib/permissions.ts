@@ -170,6 +170,22 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    // Aug 20 3rd update — Inventory Costing + Suppliers (Part C). Inventory
+    // itself has never had a granular permission (STAFF gets it via plain
+    // role check) — this group only covers the *new* financial layer this
+    // update adds on top: supplier records, purchase transactions, and the
+    // cost/inventory-value figures derived from them. A Staff account
+    // without INVENTORY_COST_VIEW still sees quantities/lots/movements
+    // exactly as before, just not cost or supplier financial information.
+    category: "Inventory & Suppliers",
+    permissions: [
+      { key: "SUPPLIER_VIEW", label: "View supplier directory" },
+      { key: "SUPPLIER_MANAGE", label: "Add/edit/deactivate suppliers" },
+      { key: "PURCHASE_MANAGE", label: "Record/cancel material purchases" },
+      { key: "INVENTORY_COST_VIEW", label: "View purchase costs and inventory value" },
+    ],
+  },
+  {
     category: "Email",
     // Also gates the Messenger Log (same "notification delivery log" role, one permission) rather than adding a second near-identical grant.
     permissions: [{ key: "EMAIL_LOG_VIEW", label: "View email/Messenger logs and retry failed sends" }],
