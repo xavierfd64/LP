@@ -6,8 +6,11 @@ import { formatCurrency } from "@/lib/utils";
  * Staff/Admin-only estimated cost/profit panel (Aug 20 1st update, spec
  * items 9/10/18) — every caller must gate this behind COST_VIEW (or Admin)
  * before rendering it; it is never shown to a CUSTOMER role. Labeled
- * "Estimated" throughout per spec item 10, since this update's cost model
- * is a flat per-Service figure, not the full BOM/material costing engine.
+ * "Estimated" throughout per spec item 10. As of the 4th update (Part D),
+ * the underlying figure may come from either a live BOM-aware calculation
+ * or a stored historical snapshot (see the Order page's own `title`,
+ * which distinguishes the two) — this component itself just renders
+ * whatever AggregateCostEstimate it's handed.
  */
 export function InternalCostingPanel({ estimate, title = "Internal Costing" }: { estimate: AggregateCostEstimate; title?: string }) {
   if (estimate.totalCount === 0) return null;

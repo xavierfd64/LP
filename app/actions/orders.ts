@@ -8,6 +8,7 @@ import { nextOrderNumber, nextJoNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
 import { startProduction, RuleViolation } from "@/lib/workflow";
 import { notifyCustomer } from "@/lib/notifications";
+import { estimateCostForLines } from "@/lib/service-cost";
 
 const orderSchema = z.object({
   customerId: z.string().min(1),
@@ -42,6 +43,25 @@ export async function createOrderAction(_prevState: string | undefined, formData
 
   const orderNumber = await nextOrderNumber();
 
+  // Cost snapshot (Aug 20 4th update, Part D item 26/34) — taken once, right
+  // now, from the linked Quotation's line items as they cost out at this
+  // exact moment. A Service's BOM changing tomorrow must never silently
+  // rewrite what this Order's production cost was at creation time, so
+  // this is stored, not recomputed live on every future page view.
+  let costSnapshot: { totalCost: number; fullyConfigured: boolean } | null = null;
+  if (data.quotationId) {
+    const quotation = await prisma.quotation.findUnique({
+      where: { id: data.quotationId },
+      include: { lineItems: true },
+    });
+    if (quotation) {
+      const estimate = await estimateCostForLines(
+        quotation.lineItems.map((li) => ({ serviceId: li.serviceId, qty: li.qty, sellingAmount: Number(li.unitPrice) * li.qty }))
+      );
+      costSnapshot = { totalCost: estimate.totalCost, fullyConfigured: estimate.fullyConfigured };
+    }
+  }
+
   const order = await prisma.order.create({
     data: {
       orderNumber,
@@ -53,6 +73,9 @@ export async function createOrderAction(_prevState: string | undefined, formData
       termsApprovedBy: data.paymentTermType === "APPROVED_TERMS" ? data.termsApprovedBy : undefined,
       termsReason: data.paymentTermType === "APPROVED_TERMS" ? data.termsReason : undefined,
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+      estimatedProductionCostSnapshot: costSnapshot?.fullyConfigured ? costSnapshot.totalCost : null,
+      costSnapshotFullyConfigured: costSnapshot?.fullyConfigured ?? false,
+      costSnapshotTakenAt: costSnapshot ? new Date() : null,
     },
   });
 

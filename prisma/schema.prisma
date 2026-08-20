@@ -484,6 +484,17 @@ model Order {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  // Aug 20 4th update — Part D item 26/34. A cost SNAPSHOT taken once, at
+  // Order-creation time, from the linked Quotation's line items as they
+  // costed out at that exact moment — never recomputed later. A Service's
+  // BOM changing tomorrow must not silently rewrite what this Order's
+  // historical production cost was quoted at. Null for an Order with no
+  // linked Quotation (nothing to snapshot) or one created before this
+  // field existed — those fall back to a live (labeled as such) estimate.
+  estimatedProductionCostSnapshot Decimal?  @db.Decimal(12, 2)
+  costSnapshotFullyConfigured     Boolean   @default(false)
+  costSnapshotTakenAt             DateTime?
+
   jobOrders    JobOrder[]
   payments     Payment[]
   fulfillments Fulfillment[]
@@ -540,20 +551,94 @@ model Service {
   instantQuoteEnabled Boolean       @default(false)
 
   // Cost foundation (Aug 20 1st update — Financial Foundation, spec item 7).
-  // Deliberately a single flat figure, not yet a BOM breakdown (material/
-  // ink/labor/electricity/waste) — that's an explicitly future update (spec
-  // item 15). Null means "not configured", which is a distinct state from
-  // zero everywhere this is read: lib/service-cost.ts never treats an
-  // unconfigured cost as ₱0 (spec item 8's "never invent production costs").
+  // A single flat figure — still the ENTIRE cost model for any Service that
+  // never gets a BOM built out (Aug 20 4th update, Part D): once a Service
+  // has at least one ServiceBOMMaterial or ServiceCostComponent row, the BOM
+  // supersedes this flat figure entirely (see lib/service-costing.ts). Null
+  // means "not configured", a distinct state from zero everywhere this is
+  // read — never invent a production cost (spec item 8/21).
   productionCost Decimal? @db.Decimal(12, 2)
+
+  // Aug 20 4th update — Part D. Optional: Admin's desired minimum margin for
+  // this service, used only to compute a *recommended* selling price
+  // (spec item 25) — never applied automatically to the actual selling
+  // price or any quotation.
+  targetMarginPct Decimal? @db.Decimal(5, 2)
 
   inquiries  Inquiry[]
   lineItems  QuotationLineItem[]
   jobOrders  JobOrder[]
   pricingTiers Pricelist[]
   promotions   Promotion[]
+  bomMaterials   ServiceBOMMaterial[]
+  costComponents ServiceCostComponent[]
 
   @@index([active])
+}
+
+enum ServiceCostCategory {
+  LABOR
+  MACHINE
+  FINISHING
+  OTHER
+}
+
+enum CostComponentBasis {
+  /// rate is already a per-unit peso amount — cost = rate x quantity
+  PER_UNIT
+  /// rate is a peso-per-hour rate, scaled by estimatedHours x quantity (a documented simplification — see lib/service-costing.ts)
+  PER_HOUR
+  /// a fixed peso amount that does not scale with quantity at all
+  FLAT
+}
+
+/**
+ * A BOM line referencing an EXISTING Inventory material (Aug 20 4th update,
+ * Part D item 6/7) — never a second material database. `consumptionPerUnit`
+ * is the quantity of this material consumed per one unit of the service's
+ * own quantity (spec item 9's "1 sq.ft. per 1 sq.ft. printed"); its cost is
+ * always resolved live from Part C's inventory cost basis
+ * (computeItemCostBasis), never hard-coded here. `wastePercent` is optional
+ * per-material waste allowance (spec item 11) — null means no waste applied,
+ * never defaulted to some assumed percentage.
+ */
+model ServiceBOMMaterial {
+  id                 String        @id @default(cuid())
+  serviceId          String
+  service            Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  inventoryItemId    String
+  inventoryItem      InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  consumptionPerUnit Decimal       @db.Decimal(12, 4)
+  wastePercent       Decimal?      @db.Decimal(5, 2)
+  sortOrder          Int           @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([serviceId])
+  @@index([inventoryItemId])
+}
+
+/**
+ * A non-material "Direct Production Cost" line (Labor/Machine/Finishing/
+ * Other — spec items 13-16). `basis` determines how `rate` scales with the
+ * quantity being costed; see CostComponentBasis. Always computed at a
+ * specific quantity by lib/service-costing.ts — there is no meaningful
+ * "per unit" value for a FLAT or PER_HOUR component without one.
+ */
+model ServiceCostComponent {
+  id             String              @id @default(cuid())
+  serviceId      String
+  service        Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  category       ServiceCostCategory
+  label          String
+  basis          CostComponentBasis
+  rate           Decimal             @db.Decimal(12, 4)
+  estimatedHours Decimal?            @db.Decimal(8, 2)
+  sortOrder      Int                 @default(0)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([serviceId])
 }
 
 /**
@@ -739,6 +824,7 @@ model InventoryItem {
   createdAt         DateTime @default(now())
 
   supplyLots SupplyLot[]
+  bomUsages  ServiceBOMMaterial[]
 }
 
 /**

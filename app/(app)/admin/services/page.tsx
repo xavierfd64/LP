@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
 import { ToggleActiveButton } from "./toggle-active-button";
+import { computeServiceCostingCoverage } from "@/lib/service-costing";
 
 export default async function ServicesPage() {
   const user = await requireUser();
@@ -15,11 +16,15 @@ export default async function ServicesPage() {
   if (!isStaffLike) redirect("/dashboard");
   if (user.role === "STAFF" && !(await can(user, "SERVICE_VIEW"))) redirect("/dashboard");
   const canManage = user.role === "ADMIN" || (await can(user, "SERVICE_MANAGE"));
+  const canViewCost = user.role === "ADMIN" || (await can(user, "COST_VIEW"));
 
-  const services = await prisma.service.findMany({
-    include: { workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } }, _count: { select: { jobOrders: true } } },
-    orderBy: [{ active: "desc" }, { name: "asc" }],
-  });
+  const [services, coverage] = await Promise.all([
+    prisma.service.findMany({
+      include: { workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } }, _count: { select: { jobOrders: true } } },
+      orderBy: [{ active: "desc" }, { name: "asc" }],
+    }),
+    canViewCost ? computeServiceCostingCoverage() : Promise.resolve(null),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -37,6 +42,19 @@ export default async function ServicesPage() {
           </Link>
         )}
       </div>
+
+      {canViewCost && coverage && coverage.totalCount > 0 && (
+        <Card className="px-5 py-4">
+          <p className="text-xs uppercase text-slate-500">Services With Costing</p>
+          <p className="text-2xl font-bold text-slate-900">
+            {coverage.configuredCount} / {coverage.totalCount}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {Math.round((coverage.configuredCount / coverage.totalCount) * 100)}% costing coverage
+            {coverage.partialCount > 0 && ` · ${coverage.partialCount} partially configured`}
+          </p>
+        </Card>
+      )}
 
       <Card>
         <Table>

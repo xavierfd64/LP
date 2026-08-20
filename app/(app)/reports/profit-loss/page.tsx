@@ -91,6 +91,12 @@ export default async function ProfitLossPage({ searchParams }: PageProps<"/repor
           understating them. Configure production cost on the relevant Services to complete this report.
         </Alert>
       )}
+      {fin.cogsTotalCount > 0 && (
+        <p className="text-xs text-slate-400">
+          Costing Coverage: {fin.cogsConfiguredCount} / {fin.cogsTotalCount} contributing line items this period (
+          {Math.round((fin.cogsConfiguredCount / fin.cogsTotalCount) * 100)}%)
+        </p>
+      )}
 
       <Card>
         <CardContent className="py-5">

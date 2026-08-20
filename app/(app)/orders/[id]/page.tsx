@@ -27,7 +27,7 @@ import { findActiveTrackingLink } from "@/lib/order-tracking";
 import { DocumentShareManager } from "@/components/documents/document-share-manager";
 import { findActiveShareLink } from "@/lib/document-sharing";
 import { InternalCostingPanel } from "@/components/documents/internal-costing-panel";
-import { estimateCostForLines } from "@/lib/service-cost";
+import { estimateCostForLines, type AggregateCostEstimate } from "@/lib/service-cost";
 
 export default async function OrderDetailPage({
   params,
@@ -72,16 +72,41 @@ export default async function OrderDetailPage({
   const canManageTracking = isAdmin || (await can(user, "ORDER_TRACKING_MANAGE"));
   const canShare = isAdmin || !isStaffLike || (await can(user, "DOCUMENT_SHARE"));
   const canViewCost = isStaffLike && (isAdmin || (await can(user, "COST_VIEW")));
-  // Only computable when this Order traces back to a Quotation — that's
-  // the one place a per-service selling amount actually exists (spec
-  // item 10: "estimated production cost", never invented from the
-  // Order's own single lump-sum total).
-  const costEstimate =
-    canViewCost && order.quotation
-      ? await estimateCostForLines(
-          order.quotation.lineItems.map((li) => ({ serviceId: li.serviceId, qty: li.qty, sellingAmount: Number(li.unitPrice) * li.qty }))
-        )
-      : null;
+
+  // Cost snapshot (Aug 20 4th update, Part D item 26/34) — an Order created
+  // after this update stores the production cost it was quoted at, taken
+  // once at creation time, and that historical figure is what's shown here
+  // — never recomputed against whatever the Service's BOM looks like today
+  // (spec item 27: "the old Job Order should not silently change its
+  // historical quoted cost"). An Order created before this field existed
+  // has no snapshot to show, so it falls back to a clearly-labeled live
+  // estimate — the same behavior this page had before Part D.
+  let costEstimate: AggregateCostEstimate | null = null;
+  let costPanelTitle = "Order Costing";
+  if (canViewCost && order.costSnapshotTakenAt) {
+    const totalCost = order.estimatedProductionCostSnapshot != null ? Number(order.estimatedProductionCostSnapshot) : 0;
+    const totalRevenue = Number(order.totalAmount);
+    costEstimate = {
+      totalCount: 1,
+      configuredCount: order.costSnapshotFullyConfigured ? 1 : 0,
+      unconfiguredCount: order.costSnapshotFullyConfigured ? 0 : 1,
+      fullyConfigured: order.costSnapshotFullyConfigured,
+      totalRevenue,
+      totalCost,
+      grossProfit: order.costSnapshotFullyConfigured ? totalRevenue - totalCost : null,
+      margin: order.costSnapshotFullyConfigured && totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : null,
+    };
+    costPanelTitle = "Order Costing (as of order creation)";
+  } else if (canViewCost && order.quotation) {
+    // Only computable when this Order traces back to a Quotation — that's
+    // the one place a per-service selling amount actually exists (spec
+    // item 10: "estimated production cost", never invented from the
+    // Order's own single lump-sum total).
+    costEstimate = await estimateCostForLines(
+      order.quotation.lineItems.map((li) => ({ serviceId: li.serviceId, qty: li.qty, sellingAmount: Number(li.unitPrice) * li.qty }))
+    );
+    costPanelTitle = "Order Costing (live estimate — no snapshot on file)";
+  }
 
   const summary = await paymentSummary(order.id);
   const templates = isStaffLike
@@ -167,7 +192,7 @@ export default async function OrderDetailPage({
         </Card>
       )}
 
-      {costEstimate && <InternalCostingPanel estimate={costEstimate} title="Order Costing" />}
+      {costEstimate && <InternalCostingPanel estimate={costEstimate} title={costPanelTitle} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card>

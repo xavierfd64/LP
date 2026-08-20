@@ -1,10 +1,14 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ServiceForm } from "../service-form";
 import { PricingForm } from "./pricing-form";
+import { computeServiceCostBreakdown } from "@/lib/service-costing";
 
 export default async function EditServicePage({ params }: PageProps<"/admin/services/[id]">) {
   const user = await requireUser();
@@ -18,6 +22,16 @@ export default async function EditServicePage({ params }: PageProps<"/admin/serv
     prisma.workflowTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
   ]);
   if (!service) notFound();
+
+  const costingStatus = (await computeServiceCostBreakdown(service.id, 1)).status;
+  const statusBadge =
+    costingStatus === "CONFIGURED" ? (
+      <Badge tone="green">Configured</Badge>
+    ) : costingStatus === "PARTIAL" ? (
+      <Badge tone="yellow">Partially Configured</Badge>
+    ) : (
+      <Badge tone="slate">Not Configured</Badge>
+    );
 
   return (
     <div className="max-w-xl space-y-6">
@@ -60,6 +74,22 @@ export default async function EditServicePage({ params }: PageProps<"/admin/serv
               discountPercent: t.discountPercent != null ? Number(t.discountPercent) : null,
             }))}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+          <CardTitle>Production Costing</CardTitle>
+          {statusBadge}
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-500">
+            Configure the materials, labor, machine, finishing, and other direct costs that make up this service&apos;s
+            estimated production cost.
+          </p>
+          <Link href={`/admin/services/${service.id}/costing`}>
+            <Button variant="outline">Manage Costing →</Button>
+          </Link>
         </CardContent>
       </Card>
     </div>
