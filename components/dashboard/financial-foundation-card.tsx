@@ -25,7 +25,7 @@ export function FinancialFoundationCard({ fin }: { fin: FinancialFoundationSumma
         <Row label="Net Profit" value={fin.netProfit != null ? formatCurrency(fin.netProfit) : "Not available"} muted={fin.netProfit == null} strong border />
         {!fin.cogsFullyConfigured && fin.cogsTotalCount > 0 && (
           <p className="pt-1 text-xs text-amber-600">
-            Production cost known for {fin.cogsConfiguredCount} of {fin.cogsTotalCount} items this month.{" "}
+            Production cost known for {fin.cogsConfiguredCount} of {fin.cogsTotalCount} orders this month.{" "}
             <Link href="/admin/services" className="underline">
               Configure Service costs
             </Link>

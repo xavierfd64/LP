@@ -86,15 +86,19 @@ export default async function ProfitLossPage({ searchParams }: PageProps<"/repor
 
       {!fin.cogsFullyConfigured && fin.cogsTotalCount > 0 && (
         <Alert tone="warning">
-          Production cost is only available for {fin.cogsConfiguredCount} of {fin.cogsTotalCount} contributing line
-          item{fin.cogsTotalCount === 1 ? "" : "s"} this period — Gross Profit and Net Profit are not shown to avoid
-          understating them. Configure production cost on the relevant Services to complete this report.
+          Production cost is only available for {fin.cogsConfiguredCount} of {fin.cogsTotalCount} contributing
+          order{fin.cogsTotalCount === 1 ? "" : "s"} this period — Gross Profit and Net Profit are not shown to avoid
+          understating them. Configure production cost on the relevant Services, or record production consumption, to
+          complete this report.
         </Alert>
       )}
       {fin.cogsTotalCount > 0 && (
         <p className="text-xs text-slate-400">
-          Costing Coverage: {fin.cogsConfiguredCount} / {fin.cogsTotalCount} contributing line items this period (
+          Costing Coverage: {fin.cogsConfiguredCount} / {fin.cogsTotalCount} contributing orders this period (
           {Math.round((fin.cogsConfiguredCount / fin.cogsTotalCount) * 100)}%)
+          {fin.costingCoveragePct != null && (
+            <> · Of costed orders, {fin.costingCoveragePct}% used actual production cost rather than the BOM estimate.</>
+          )}
         </p>
       )}
 

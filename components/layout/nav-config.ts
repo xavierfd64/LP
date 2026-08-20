@@ -27,6 +27,8 @@ const ICON_KEYS: Record<string, string> = {
   "/admin/expenses": "receiptText",
   "/reports/summary": "barChart",
   "/reports/profit-loss": "lineChart",
+  "/reports/service-profitability": "trendingUp",
+  "/reports/material-consumption": "layers",
   "/customers": "users",
   "/admin/users": "userCog",
   "/admin/staff-permissions": "shieldCheck",
@@ -66,6 +68,8 @@ const STAFF_NAV_RULES: { section: string; label: string; href: string; permissio
   { section: "CUSTOMERS", label: "Customers", href: "/customers", permission: "CUSTOMER_VIEW" },
   { section: "MANAGEMENT", label: "Reward Rules", href: "/admin/rewards", permission: "REWARDS_MANAGE_CONFIG" },
   { section: "MANAGEMENT", label: "Transaction Summary", href: "/reports/summary", permission: "REPORTS_VIEW" },
+  { section: "MANAGEMENT", label: "Service Profitability", href: "/reports/service-profitability", permission: "REPORTS_VIEW" },
+  { section: "MANAGEMENT", label: "Material Consumption", href: "/reports/material-consumption", permission: "REPORTS_VIEW" },
   { section: "SYSTEM", label: "Email Log", href: "/admin/email-log", permission: "EMAIL_LOG_VIEW" },
   { section: "SYSTEM", label: "Messenger Log", href: "/admin/messenger-log", permission: "EMAIL_LOG_VIEW" },
 ];
@@ -108,6 +112,8 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
           { label: "Staff & Permissions", href: "/admin/staff-permissions" },
           { label: "Reward Rules", href: "/admin/rewards" },
           { label: "Transaction Summary", href: "/reports/summary" },
+          { label: "Service Profitability", href: "/reports/service-profitability" },
+          { label: "Material Consumption", href: "/reports/material-consumption" },
         ]) },
         { section: "SYSTEM", items: withIcons([
           { label: "Audit Log", href: "/admin/audit-log" },

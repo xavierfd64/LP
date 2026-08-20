@@ -28,6 +28,10 @@ import { findActiveShareLink } from "@/lib/document-sharing";
 import { TrackingLinkManager } from "@/app/(app)/orders/[id]/tracking-link-manager";
 import { findActiveTrackingLink } from "@/lib/order-tracking";
 import { EditorShell, EditorHeader, EditorGrid, EditorPanel, InfoField } from "@/components/documents/editor-shell";
+import { computeExpectedConsumption, computeJobOrderCostSummary } from "@/lib/production-cost";
+import { RecordConsumptionForm } from "./record-consumption-form";
+import { ReverseConsumptionButton } from "./reverse-consumption-button";
+import { formatCurrency } from "@/lib/utils";
 
 export default async function JobOrderDetailPage({
   params,
@@ -47,6 +51,7 @@ export default async function JobOrderDetailPage({
       qcResults: { orderBy: { createdAt: "desc" }, include: { inspector: true, reworkRecord: { include: { assignedTo: true } } } },
       files: { orderBy: [{ category: "asc" }, { version: "desc" }], include: { uploadedBy: true } },
       fulfillments: { orderBy: { createdAt: "desc" } },
+      materialConsumptions: { orderBy: { createdAt: "desc" }, include: { inventoryItem: true } },
     },
   });
   if (!jo) notFound();
@@ -81,6 +86,20 @@ export default async function JobOrderDetailPage({
   const activeShareLink = canShare ? await findActiveShareLink("JOB_ORDER", jo.id) : null;
   const canManageTracking = isStaffLike && (isAdmin || (await can(user, "ORDER_TRACKING_MANAGE")));
   const activeTrackingLink = canManageTracking ? await findActiveTrackingLink(jo.orderId) : null;
+
+  // Aug 20 5th update, Part 5 — production/admin see expected-vs-available
+  // material quantities and can record what was actually consumed; the
+  // financial roll-up (cost, variance, profit) stays Staff/Admin-with-
+  // COST_VIEW only, same gating precedent as Parts A/D — PRODUCTION never
+  // sees cost or margin figures, only quantities.
+  const canRecordConsumption = isAdmin || user.role === "PRODUCTION" || (user.role === "STAFF" && (await can(user, "PRODUCTION_UPDATE_STAGE")));
+  const canViewMaterials = isProductionLike;
+  const canViewCost = isStaffLike && (isAdmin || (await can(user, "COST_VIEW")));
+  const expectedMaterials = canViewMaterials ? await computeExpectedConsumption(jo.id) : [];
+  const costSummary = canViewCost ? await computeJobOrderCostSummary(jo.id) : null;
+  const activeConsumptions = jo.materialConsumptions.filter((c) => !c.reversedAt);
+  const showUncostedWarning =
+    canViewMaterials && jo.status === "COMPLETED" && expectedMaterials.length > 0 && activeConsumptions.length === 0;
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const release = releaseJobOrderAction.bind(null, jo.id);
@@ -134,6 +153,12 @@ export default async function JobOrderDetailPage({
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
+      {showUncostedWarning && (
+        <Alert tone="warning">
+          Production materials have not been recorded. Costing may remain incomplete.
+        </Alert>
+      )}
+
       {jo.status === "QC" && (user.role === "PRODUCTION" || (isStaffLike && canMarkProductionComplete)) && (
         <Card>
           <CardHeader>
@@ -186,6 +211,134 @@ export default async function JobOrderDetailPage({
           )}
         </div>
       </EditorPanel>
+
+      {canViewMaterials && expectedMaterials.length > 0 && (
+        <EditorPanel title="Materials">
+          <div className="space-y-3">
+            {expectedMaterials.map((m) => {
+              const consumptionsForMaterial = jo.materialConsumptions.filter((c) => c.inventoryItemId === m.inventoryItemId);
+              return (
+                <div key={m.inventoryItemId} className="rounded-md border border-slate-200 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-slate-900">{m.name}</p>
+                      <p className="text-xs text-slate-500">
+                        Expected: {m.expectedQty} {m.unit} · Available: {m.availableQty} {m.unit}
+                        {m.consumedQty > 0 && ` · Recorded so far: ${m.consumedQty} ${m.unit}`}
+                      </p>
+                    </div>
+                    {canRecordConsumption && (
+                      <RecordConsumptionForm
+                        jobOrderId={jo.id}
+                        inventoryItemId={m.inventoryItemId}
+                        materialName={m.name}
+                        unit={m.unit}
+                        expectedQty={m.expectedQty}
+                        availableQty={m.availableQty}
+                      />
+                    )}
+                  </div>
+                  {consumptionsForMaterial.length > 0 && (
+                    <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                      {consumptionsForMaterial.map((c) => {
+                        const expected = c.expectedQty != null ? Number(c.expectedQty) : null;
+                        const actual = Number(c.actualQty);
+                        const variance = expected != null ? actual - expected : null;
+                        return (
+                          <div key={c.id} className={`flex flex-wrap items-center justify-between gap-2 text-xs ${c.reversedAt ? "opacity-50" : ""}`}>
+                            <span className="text-slate-600">
+                              Actual: {actual} {m.unit}
+                              {expected != null && variance != null && (
+                                <> · Variance: {variance > 0 ? `+${variance}` : variance} {m.unit}</>
+                              )}
+                              {c.varianceReason && ` · ${c.varianceReason}`}
+                              {c.reversedAt && " · Reversed"}
+                            </span>
+                            {canRecordConsumption && !c.reversedAt && (
+                              <ReverseConsumptionButton consumptionId={c.id} materialName={m.name} actualQty={actual} unit={m.unit} />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </EditorPanel>
+      )}
+
+      {canViewCost && costSummary && costSummary.costingStatus !== "NOT_COSTED" && (
+        <EditorPanel title="Production Cost Summary (Staff Only)">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase text-slate-500">Costing Status</span>
+              <Badge tone={costSummary.costingStatus === "FULLY_COSTED" ? "green" : "yellow"}>
+                {costSummary.costingStatus === "FULLY_COSTED" ? "Fully Costed" : "Partially Costed"}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-slate-500">Selling Price</p>
+                <p className="font-medium text-slate-900">{costSummary.sellingPrice != null ? formatCurrency(costSummary.sellingPrice) : "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Estimated Cost</p>
+                <p className="font-medium text-slate-900">{costSummary.estimatedProductionCost != null ? formatCurrency(costSummary.estimatedProductionCost) : "Not available"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Actual/Calculated Cost</p>
+                <p className="font-medium text-slate-900">{costSummary.actualProductionCost != null ? formatCurrency(costSummary.actualProductionCost) : "Not fully configured"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Cost Variance</p>
+                <p className={`font-medium ${costSummary.costVariance != null && costSummary.costVariance > 0 ? "text-error-600" : "text-slate-900"}`}>
+                  {costSummary.costVariance != null
+                    ? `${costSummary.costVariance > 0 ? "+" : ""}${formatCurrency(costSummary.costVariance)}${costSummary.costVariancePct != null ? ` (${costSummary.costVariancePct > 0 ? "+" : ""}${costSummary.costVariancePct.toFixed(1)}%)` : ""}`
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Estimated Profit</p>
+                <p className="font-medium text-slate-900">{costSummary.estimatedGrossProfit != null ? formatCurrency(costSummary.estimatedGrossProfit) : "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Actual Profit</p>
+                <p className="font-medium text-slate-900">
+                  {costSummary.actualGrossProfit != null ? formatCurrency(costSummary.actualGrossProfit) : "Not available"}
+                  {costSummary.actualGrossMarginPct != null && ` (${costSummary.actualGrossMarginPct.toFixed(1)}%)`}
+                </p>
+              </div>
+            </div>
+            {costSummary.varianceBreakdown.length > 0 && (
+              <div className="border-t border-slate-100 pt-3">
+                <p className="mb-1 text-xs uppercase text-slate-500">Cost Variance Breakdown</p>
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>Category</TH>
+                      <TH>Expected</TH>
+                      <TH>Actual</TH>
+                      <TH>Variance</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {costSummary.varianceBreakdown.map((v) => (
+                      <TR key={v.category}>
+                        <TD>{v.category}</TD>
+                        <TD>{v.expected != null ? formatCurrency(v.expected) : "—"}</TD>
+                        <TD>{v.actual != null ? formatCurrency(v.actual) : "—"}</TD>
+                        <TD>{v.variance != null ? `${v.variance > 0 ? "+" : ""}${formatCurrency(v.variance)}` : "—"}</TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </EditorPanel>
+      )}
 
       {jo.workflowTemplate.stages.length > 0 && (
         <EditorPanel title="Production Information">
