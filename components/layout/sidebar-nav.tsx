@@ -31,6 +31,8 @@ import {
   Puzzle,
   RefreshCw,
   Percent,
+  ReceiptText,
+  LineChart,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -65,6 +67,8 @@ const ICON_COMPONENTS: Record<string, LucideIcon> = {
   puzzle: Puzzle,
   refreshCw: RefreshCw,
   percent: Percent,
+  receiptText: ReceiptText,
+  lineChart: LineChart,
 };
 
 /** Grouped, optionally-collapsible sidebar nav (spec items 6/7) — used by both the desktop sidebar and the mobile drawer. */

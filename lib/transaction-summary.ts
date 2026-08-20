@@ -18,6 +18,25 @@ export type PeriodSelection = {
 
 export type PeriodRange = { start: Date; end: Date; label: string };
 
+/**
+ * Parses the period-related searchParams shared by every period-filtered
+ * report page (Transaction Summary, and — Aug 20 1st update — Profit &
+ * Loss) into a PeriodSelection. One parser, so both reports interpret
+ * `?type=&date=&month=&year=&quarter=&half=` identically.
+ */
+export function parsePeriodSearchParams(sp: Record<string, string | string[] | undefined>) {
+  const type = (typeof sp.type === "string" ? sp.type : "monthly") as PeriodType;
+  const now = new Date();
+  return {
+    type,
+    date: typeof sp.date === "string" ? sp.date : now.toISOString().slice(0, 10),
+    month: typeof sp.month === "string" ? sp.month : now.toISOString().slice(0, 7),
+    year: typeof sp.year === "string" ? Number(sp.year) : now.getFullYear(),
+    quarter: typeof sp.quarter === "string" ? Number(sp.quarter) : Math.floor(now.getMonth() / 3) + 1,
+    half: typeof sp.half === "string" ? Number(sp.half) : now.getMonth() < 6 ? 1 : 2,
+  };
+}
+
 const QUARTER_LABEL = ["Q1", "Q2", "Q3", "Q4"];
 const HALF_LABEL = ["First Half", "Second Half"];
 

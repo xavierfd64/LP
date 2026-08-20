@@ -32,6 +32,12 @@ const pricingSchema = z.object({
   basePrice: z.coerce.number().nonnegative().optional(),
   minQuantity: z.coerce.number().int().positive().optional(),
   instantQuoteEnabled: z.boolean(),
+  // Production cost foundation (Aug 20 1st update, spec item 7) —
+  // deliberately independent of pricingMethod: a service can have a
+  // configured cost while its pricing method is still "None" (staff
+  // review), so Staff building a manual quotation can still see an
+  // estimated margin even before the selling side is automated.
+  productionCost: z.coerce.number().nonnegative().optional(),
 });
 
 /**
@@ -49,6 +55,7 @@ export async function updateServicePricingAction(serviceId: string, _prevState: 
     basePrice: formData.get("basePrice") || undefined,
     minQuantity: formData.get("minQuantity") || undefined,
     instantQuoteEnabled: formData.get("instantQuoteEnabled") === "on",
+    productionCost: formData.get("productionCost") || undefined,
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
   const data = parsed.data;
@@ -79,6 +86,7 @@ export async function updateServicePricingAction(serviceId: string, _prevState: 
         basePrice: data.pricingMethod === "NONE" ? null : data.basePrice,
         minQuantity: data.minQuantity,
         instantQuoteEnabled: data.instantQuoteEnabled,
+        productionCost: data.productionCost ?? null,
         pricingTiers: { create: tiersParsed.data },
       },
     }),

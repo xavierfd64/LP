@@ -23,7 +23,9 @@ const ICON_KEYS: Record<string, string> = {
   "/admin/workflow-templates": "gitBranch",
   "/payments": "wallet",
   "/soa": "receipt",
+  "/admin/expenses": "receiptText",
   "/reports/summary": "barChart",
+  "/reports/profit-loss": "lineChart",
   "/customers": "users",
   "/admin/users": "userCog",
   "/admin/staff-permissions": "shieldCheck",
@@ -57,6 +59,8 @@ const STAFF_NAV_RULES: { section: string; label: string; href: string; permissio
   { section: "OPERATIONS", label: "Promotions", href: "/admin/promotions", permission: "SERVICE_MANAGE" },
   { section: "FINANCE", label: "Payments", href: "/payments", permission: "PAYMENT_VIEW" },
   { section: "FINANCE", label: "Statement of Account", href: "/soa", permission: "SOA_VIEW" },
+  { section: "FINANCE", label: "Operating Expenses", href: "/admin/expenses", permission: "EXPENSE_VIEW" },
+  { section: "FINANCE", label: "Profit & Loss", href: "/reports/profit-loss", permission: "REPORTS_VIEW" },
   { section: "CUSTOMERS", label: "Customers", href: "/customers", permission: "CUSTOMER_VIEW" },
   { section: "MANAGEMENT", label: "Reward Rules", href: "/admin/rewards", permission: "REWARDS_MANAGE_CONFIG" },
   { section: "MANAGEMENT", label: "Transaction Summary", href: "/reports/summary", permission: "REPORTS_VIEW" },
@@ -92,6 +96,8 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
         { section: "FINANCE", items: withIcons([
           { label: "Payments", href: "/payments" },
           { label: "Statement of Account", href: "/soa" },
+          { label: "Operating Expenses", href: "/admin/expenses" },
+          { label: "Profit & Loss", href: "/reports/profit-loss" },
         ]) },
         { section: "CUSTOMERS", items: withIcons([{ label: "Customers", href: "/customers" }]) },
         { section: "MANAGEMENT", items: withIcons([

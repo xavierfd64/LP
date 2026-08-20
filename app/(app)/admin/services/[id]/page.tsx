@@ -52,6 +52,7 @@ export default async function EditServicePage({ params }: PageProps<"/admin/serv
             basePrice={service.basePrice != null ? Number(service.basePrice) : null}
             minQuantity={service.minQuantity}
             instantQuoteEnabled={service.instantQuoteEnabled}
+            productionCost={service.productionCost != null ? Number(service.productionCost) : null}
             tiers={service.pricingTiers.map((t) => ({
               minQty: t.minQty,
               maxQty: t.maxQty,

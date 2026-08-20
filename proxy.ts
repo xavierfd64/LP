@@ -18,13 +18,19 @@ const PUBLIC_PATH_PREFIXES = ["/track/", "/documents/", "/reset-password/", "/ap
 
 // Path prefix -> roles allowed. Missing entry = any authenticated role.
 const ROLE_RULES: { prefix: string; roles: string[] }[] = [
-  // More specific prefixes must come before the general "/admin" rule below
-  // — ROLE_RULES.find() takes the first match. Reward configuration can be
-  // delegated to STAFF via the granular permission system (REWARDS_MANAGE_CONFIG),
-  // so it isn't locked behind the admin-only rule the way user/workflow-template
-  // management is.
-  { prefix: "/admin/rewards", roles: ["ADMIN", "STAFF"] },
-  { prefix: "/admin", roles: ["ADMIN"] },
+  // Pre-existing bug found+fixed during the Aug 20 1st update: this used to
+  // read `roles: ["ADMIN"]`, which silently blocked STAFF from every
+  // /admin/* page at the middleware layer — including /admin/services,
+  // /admin/promotions, /admin/email-log, /admin/messenger-log, and the new
+  // /admin/expenses + /admin/expense-categories — even for a Staff account
+  // granted the exact permission that page's own page-level check requires
+  // (e.g. SERVICE_MANAGE, EXPENSE_VIEW). Only /admin/rewards had been
+  // separately carved out, which is what made the bug easy to miss. Every
+  // /admin/* page.tsx already does its own correct requireRole(["ADMIN"])
+  // or can(user, "...") check (verified across all pages under app/(app)/admin/),
+  // so admitting STAFF here is safe — this rule now only keeps out
+  // CUSTOMER/PRODUCTION, and each page enforces the real, finer-grained rule.
+  { prefix: "/admin", roles: ["ADMIN", "STAFF"] },
   // STAFF can be granted production permissions too (e.g. a "Production Staff"
   // preset); the PRODUCTION role itself keeps its existing unrestricted access.
   { prefix: "/production", roles: ["PRODUCTION", "ADMIN", "STAFF"] },

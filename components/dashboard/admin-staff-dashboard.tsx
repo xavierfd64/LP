@@ -5,6 +5,7 @@ import { SectionHeader } from "./section-header";
 import { KpiCard } from "./kpi-card";
 import { NeedsAttention } from "./needs-attention";
 import { FinancialOverview } from "./financial-overview";
+import { FinancialFoundationCard } from "./financial-foundation-card";
 import { ReceivablesList } from "./receivables-list";
 import { ProductionToday } from "./production-today";
 import { TodaysActivity } from "./todays-activity";
@@ -25,6 +26,8 @@ import {
   getStatusCharts,
   getRevenueTrend6Months,
 } from "@/lib/dashboard-data";
+import { resolvePeriodRange } from "@/lib/transaction-summary";
+import { computeFinancialFoundation } from "@/lib/financial-summary";
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -53,7 +56,7 @@ export async function AdminStaffDashboard({
   canMessageCustomers: boolean;
   quickActions: QuickAction[];
 }) {
-  const [kpis, needsAttention, financial, receivables, production, activity, upcoming, insights, charts, revenueTrend, settings] = await Promise.all([
+  const [kpis, needsAttention, financial, receivables, production, activity, upcoming, insights, charts, revenueTrend, settings, financialFoundation] = await Promise.all([
     getPrimaryKpis(),
     getNeedsAttention(),
     getFinancialOverview("month"),
@@ -65,6 +68,7 @@ export async function AdminStaffDashboard({
     getStatusCharts(),
     canSeeFinancials ? getRevenueTrend6Months() : Promise.resolve([]),
     getBusinessSettings(),
+    canSeeFinancials ? computeFinancialFoundation(resolvePeriodRange({ type: "monthly" })) : Promise.resolve(null),
   ]);
   // Nextgen-only visual differences (colored KPI icon tiles, a donut
   // instead of a bar for Orders by Status) — same data either way, see
@@ -142,6 +146,12 @@ export async function AdminStaffDashboard({
         {canSeeFinancials ? <FinancialOverview initial={financial} /> : <div className="lg:col-span-2" />}
         {canSeeFinancials && <ReceivablesList rows={receivables} canMessage={canMessageCustomers} />}
       </div>
+
+      {canSeeFinancials && financialFoundation && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <FinancialFoundationCard fin={financialFoundation} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ProductionToday stages={production} />

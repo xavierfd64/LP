@@ -218,6 +218,10 @@ enum Permission {
   REPORTS_VIEW
   REPORTS_EXPORT
 
+  EXPENSE_VIEW
+  EXPENSE_MANAGE
+  COST_VIEW
+
   CUSTOMER_VIEW
   CUSTOMER_CREATE
   CUSTOMER_EDIT
@@ -291,6 +295,7 @@ model User {
   trackingLinksCreated    OrderTrackingLink[]
   statementsGenerated     StatementOfAccount[]
   adjustmentsCreated      AccountAdjustment[]
+  operatingExpensesCreated OperatingExpense[]
   statementSchedulesCreated StatementSchedule[]
   themesInstalled         InstalledTheme[]
   pluginsInstalled        InstalledPlugin[]
@@ -525,6 +530,14 @@ model Service {
   basePrice           Decimal?      @db.Decimal(12, 2)
   minQuantity         Int?
   instantQuoteEnabled Boolean       @default(false)
+
+  // Cost foundation (Aug 20 1st update — Financial Foundation, spec item 7).
+  // Deliberately a single flat figure, not yet a BOM breakdown (material/
+  // ink/labor/electricity/waste) — that's an explicitly future update (spec
+  // item 15). Null means "not configured", which is a distinct state from
+  // zero everywhere this is read: lib/service-cost.ts never treats an
+  // unconfigured cost as ₱0 (spec item 8's "never invent production costs").
+  productionCost Decimal? @db.Decimal(12, 2)
 
   inquiries  Inquiry[]
   lineItems  QuotationLineItem[]
@@ -1134,6 +1147,52 @@ model DocumentShareLink {
 enum AccountAdjustmentType {
   CHARGE
   CREDIT
+}
+
+/**
+ * Admin-extensible expense categories (Aug 20 1st update — Financial
+ * Foundation, spec item 3: "flexible enough to allow Admin to create
+ * additional expense categories"). A real table rather than an enum
+ * specifically so Admin can add one without a code change — the same
+ * reasoning already used for the Service Master over a hardcoded product
+ * list. `active` lets a category be retired without breaking historical
+ * expense records that reference it.
+ */
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  expenses OperatingExpense[]
+}
+
+/**
+ * Business overhead (rent, utilities, salaries, ...) — distinct from
+ * Production Cost/COGS (Service.productionCost), never mixed together in
+ * any calculation (spec item 13's explicit accounting distinction).
+ * `paymentMethod` reuses the existing PaymentMethod enum rather than a
+ * parallel one, since it's the same real-world set of choices.
+ */
+model OperatingExpense {
+  id              String          @id @default(cuid())
+  expenseNumber   String          @unique
+  expenseDate     DateTime
+  categoryId      String
+  category        ExpenseCategory @relation(fields: [categoryId], references: [id])
+  description     String
+  payee           String?
+  amount          Decimal         @db.Decimal(12, 2)
+  paymentMethod   PaymentMethod
+  referenceNumber String?
+  notes           String?
+  createdById     String?
+  createdBy       User?           @relation(fields: [createdById], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([expenseDate])
+  @@index([categoryId])
 }
 
 /**

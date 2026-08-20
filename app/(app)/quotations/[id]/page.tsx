@@ -11,6 +11,8 @@ import { Alert } from "@/components/ui/alert";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { EditorShell, EditorHeader, EditorGrid, EditorPanel, InfoField, TotalsPanel } from "@/components/documents/editor-shell";
 import { LineItemsView } from "@/components/documents/line-items-view";
+import { InternalCostingPanel } from "@/components/documents/internal-costing-panel";
+import { estimateCostForLines } from "@/lib/service-cost";
 import { sendQuotationAction } from "@/app/actions/quotations";
 import { RevisionRequestForm } from "./revision-request-form";
 import { EditQuotationForm } from "./edit-quotation-form";
@@ -61,6 +63,12 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
   const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
   const canShare = isAdmin || !isStaffLike || (await can(user, "DOCUMENT_SHARE"));
   const activeShareLink = canShare ? await findActiveShareLink("QUOTATION", quotation.id) : null;
+  const canViewCost = isStaffLike && (isAdmin || (await can(user, "COST_VIEW")));
+  const costEstimate = canViewCost
+    ? await estimateCostForLines(
+        quotation.lineItems.map((li) => ({ serviceId: li.serviceId, qty: li.qty, sellingAmount: Number(li.unitPrice) * li.qty }))
+      )
+    : null;
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const send = sendQuotationAction.bind(null, quotation.id);
@@ -149,6 +157,8 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
         />
         <TotalsPanel rows={totalsRows} total={{ label: "Total", value: formatCurrency(quotation.total.toString()) }} />
       </EditorPanel>
+
+      {costEstimate && <InternalCostingPanel estimate={costEstimate} title="Quotation Costing" />}
 
       {quotation.notes && (
         <EditorPanel title="Notes">

@@ -6,21 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
 import { OrdersByStatusChart, PaymentsByMethodChart } from "@/components/dashboard/admin-charts";
-import { resolvePeriodRange, computeTransactionSummary, type PeriodType } from "@/lib/transaction-summary";
+import { resolvePeriodRange, computeTransactionSummary, parsePeriodSearchParams } from "@/lib/transaction-summary";
 import { PeriodSelector } from "./period-selector";
-
-function parsePeriod(sp: Record<string, string | string[] | undefined>) {
-  const type = (typeof sp.type === "string" ? sp.type : "monthly") as PeriodType;
-  const now = new Date();
-  return {
-    type,
-    date: typeof sp.date === "string" ? sp.date : now.toISOString().slice(0, 10),
-    month: typeof sp.month === "string" ? sp.month : now.toISOString().slice(0, 7),
-    year: typeof sp.year === "string" ? Number(sp.year) : now.getFullYear(),
-    quarter: typeof sp.quarter === "string" ? Number(sp.quarter) : Math.floor(now.getMonth() / 3) + 1,
-    half: typeof sp.half === "string" ? Number(sp.half) : now.getMonth() < 6 ? 1 : 2,
-  };
-}
 
 export default async function TransactionSummaryPage({ searchParams }: PageProps<"/reports/summary">) {
   const user = await requireRole(["STAFF", "ADMIN"]);
@@ -28,7 +15,7 @@ export default async function TransactionSummaryPage({ searchParams }: PageProps
   const canExport = user.role === "ADMIN" || (await can(user, "REPORTS_EXPORT"));
 
   const sp = await searchParams;
-  const sel = parsePeriod(sp);
+  const sel = parsePeriodSearchParams(sp);
   const range = resolvePeriodRange(sel);
   const summary = await computeTransactionSummary(range);
 
@@ -48,11 +35,16 @@ export default async function TransactionSummaryPage({ searchParams }: PageProps
           <h1 className="text-2xl font-bold text-slate-900">Transaction Summary</h1>
           <p className="text-sm text-slate-500">{range.label}</p>
         </div>
-        {canExport && (
-          <Link href={`/reports/summary/print?${printParams.toString()}`} target="_blank">
-            <Button>Generate PDF</Button>
+        <div className="flex gap-2">
+          <Link href="/reports/profit-loss">
+            <Button variant="outline">View Profit &amp; Loss</Button>
           </Link>
-        )}
+          {canExport && (
+            <Link href={`/reports/summary/print?${printParams.toString()}`} target="_blank">
+              <Button>Generate PDF</Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       <Card>

@@ -31,6 +31,15 @@ export async function nextQuoteNumber(): Promise<string> {
   return `QUO-${year}-${seq}`;
 }
 
+export async function nextExpenseNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const count = await prisma.operatingExpense.count({
+    where: { expenseNumber: { startsWith: `EXP-${year}-` } },
+  });
+  const seq = String(count + 1).padStart(4, "0");
+  return `EXP-${year}-${seq}`;
+}
+
 function shortCode(name: string): string {
   const cleaned = name.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
   return cleaned.slice(0, 3) || "ITM";

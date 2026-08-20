@@ -108,6 +108,23 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    // Aug 20 1st update — Financial Foundation. Deliberately separate from
+    // "Reports" (viewing the P&L is gated by the existing REPORTS_VIEW,
+    // since a P&L is just another report) — these three are specifically
+    // about internal cost/expense data: recording expenses is a distinct
+    // capability from merely seeing cost figures embedded in a Quotation
+    // or Order (COST_VIEW), which is itself distinct from managing the
+    // Service Master's own cost configuration (reuses existing
+    // SERVICE_MANAGE, not a new key, since that's already the "edit a
+    // Service" permission and cost is just one more field on that form).
+    category: "Financial",
+    permissions: [
+      { key: "EXPENSE_VIEW", label: "View operating expenses" },
+      { key: "EXPENSE_MANAGE", label: "Add/edit/delete operating expenses and categories" },
+      { key: "COST_VIEW", label: "View internal production cost and profit margin on Quotations/Orders/Dashboard" },
+    ],
+  },
+  {
     category: "Customer Management",
     permissions: [
       { key: "CUSTOMER_VIEW", label: "View customers" },

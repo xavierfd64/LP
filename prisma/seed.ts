@@ -861,6 +861,22 @@ async function main() {
     ],
   });
 
+  // ---------- Operating Expense Categories (Aug 20 1st update) ----------
+  await prisma.expenseCategory.createMany({
+    data: [
+      { name: "Rent" },
+      { name: "Electricity & Utilities" },
+      { name: "Water" },
+      { name: "Internet & Phone" },
+      { name: "Salaries & Labor" },
+      { name: "Machine Maintenance" },
+      { name: "Transportation" },
+      { name: "Supplies" },
+      { name: "Marketing" },
+      { name: "Other" },
+    ],
+  });
+
   console.log("Seed complete.");
   console.log("Login credentials (all passwords: password123):");
   console.log("  Admin:      admin@lp.test");

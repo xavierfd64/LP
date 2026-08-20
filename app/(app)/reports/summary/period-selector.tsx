@@ -26,6 +26,7 @@ export function PeriodSelector({
   year,
   quarter,
   half,
+  basePath = "/reports/summary",
 }: {
   type: PeriodType;
   date: string;
@@ -33,6 +34,8 @@ export function PeriodSelector({
   year: number;
   quarter: number;
   half: number;
+  /** Aug 20 1st update: the P&L report (/reports/profit-loss) reuses this exact selector rather than a second one. */
+  basePath?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -40,7 +43,7 @@ export function PeriodSelector({
   function update(next: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString());
     for (const [k, v] of Object.entries(next)) params.set(k, v);
-    router.push(`/reports/summary?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   return (

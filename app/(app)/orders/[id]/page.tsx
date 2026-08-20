@@ -26,6 +26,8 @@ import { TrackingLinkManager } from "./tracking-link-manager";
 import { findActiveTrackingLink } from "@/lib/order-tracking";
 import { DocumentShareManager } from "@/components/documents/document-share-manager";
 import { findActiveShareLink } from "@/lib/document-sharing";
+import { InternalCostingPanel } from "@/components/documents/internal-costing-panel";
+import { estimateCostForLines } from "@/lib/service-cost";
 
 export default async function OrderDetailPage({
   params,
@@ -69,6 +71,17 @@ export default async function OrderDetailPage({
   const canViewComms = isAdmin || (await can(user, "COMMUNICATION_VIEW"));
   const canManageTracking = isAdmin || (await can(user, "ORDER_TRACKING_MANAGE"));
   const canShare = isAdmin || !isStaffLike || (await can(user, "DOCUMENT_SHARE"));
+  const canViewCost = isStaffLike && (isAdmin || (await can(user, "COST_VIEW")));
+  // Only computable when this Order traces back to a Quotation — that's
+  // the one place a per-service selling amount actually exists (spec
+  // item 10: "estimated production cost", never invented from the
+  // Order's own single lump-sum total).
+  const costEstimate =
+    canViewCost && order.quotation
+      ? await estimateCostForLines(
+          order.quotation.lineItems.map((li) => ({ serviceId: li.serviceId, qty: li.qty, sellingAmount: Number(li.unitPrice) * li.qty }))
+        )
+      : null;
 
   const summary = await paymentSummary(order.id);
   const templates = isStaffLike
@@ -153,6 +166,8 @@ export default async function OrderDetailPage({
           </CardContent>
         </Card>
       )}
+
+      {costEstimate && <InternalCostingPanel estimate={costEstimate} title="Order Costing" />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card>
