@@ -8,7 +8,12 @@ const variantClasses: Record<Variant, string> = {
   default: "bg-brand-600 text-white hover:bg-brand-700",
   outline: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
   ghost: "text-slate-700 hover:bg-slate-100",
-  destructive: "bg-red-600 text-white hover:bg-red-700",
+  // Reads the same customizable Error token Badge/Alert use, rather than a
+  // hardcoded red literal, so an Admin's Error color customization (or a
+  // theme switch) recolors destructive buttons too. Hover shade computed
+  // the same way brand-700 is (85% base + black) since no dedicated
+  // "error-700" token exists.
+  destructive: "bg-error-600 text-white hover:bg-[color-mix(in_srgb,var(--color-error-600)_85%,black)]",
   secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200",
 };
 

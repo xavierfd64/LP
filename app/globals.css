@@ -64,6 +64,33 @@
   --color-surface: #ffffff;
   --color-text-muted: #64748b;
   --color-border-default: #e2e8f0;
+
+  /* Sidebar chrome tokens (ProLine theme addition) — deliberately separate
+     from --color-surface/--color-brand-*: the sidebar's CONTAINER is the
+     one piece of chrome that visually differs most between themes (white
+     for 2026/nextgen, dark navy for ProLine), while the header bar and
+     everything else stays light in every theme (matches the ProLine
+     reference illustration — only the left sidebar goes dark). Defaults
+     here reproduce 2026/nextgen's existing hardcoded white sidebar exactly
+     (bg-white/border-slate-200/text-slate-600/text-slate-400/hover:bg-slate-100),
+     so those two themes are visually unchanged by this addition — only
+     buildThemeOverrideCss()'s ProLine branch overrides them.  */
+  --color-sidebar-bg: #ffffff;
+  --color-sidebar-border: #e2e8f0;
+  --color-sidebar-heading: #0f172a;
+  --color-sidebar-text: #475569;
+  --color-sidebar-text-muted: #94a3b8;
+  --color-sidebar-hover-bg: #f1f5f9;
+
+  /* Active nav-item state: aliased to the existing brand tokens by default
+     so 2026/nextgen's current look (a light bg-brand-50 pill) — including
+     tracking an admin's customized Primary color — is reproduced exactly.
+     ProLine's buildThemeOverrideCss() branch overrides these three to a
+     solid brand-600 pill with white text instead, which also automatically
+     tracks a customized Primary color. */
+  --color-sidebar-active-bg: var(--color-brand-50);
+  --color-sidebar-active-text: var(--color-brand-700);
+  --color-sidebar-active-border: var(--color-brand-600);
 }
 
 @theme inline {
@@ -105,6 +132,13 @@
   --color-text-muted: var(--color-text-muted);
   --color-border-default: var(--color-border-default);
 }
+
+/* Sidebar chrome tokens (--color-sidebar-*, defined in :root above) are
+   deliberately NOT re-exposed here as named @theme utilities (that would
+   produce awkward stuttering classes like `bg-sidebar-bg`). Components
+   read them directly via Tailwind's arbitrary-value syntax instead —
+   e.g. `bg-[var(--color-sidebar-bg)]` — which works off any CSS custom
+   property without needing @theme registration. */
 
 body {
   background: var(--background);

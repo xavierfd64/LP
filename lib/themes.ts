@@ -1,13 +1,14 @@
 /**
- * Theme registry (Aug 19 1st update, Part C). Deliberately NOT one entire
- * app per theme (spec item 47/56's explicit architectural rule) — both
- * "2026" and "nextgen" are the same compiled Core, differing only in
- * design tokens (colors/fonts, applied globally via CSS variables — see
- * app/globals.css + the root layout's server-rendered override <style>)
- * and, for the handful of shared chrome components that are genuinely
- * reskinned (KpiCard, DesktopSidebar), a `data-theme` attribute their own
- * CSS reads. Every page's data, routes, and business logic are identical
- * across both themes — only presentation differs.
+ * Theme registry (Aug 19 1st update, Part C; ProLine added Aug 21).
+ * Deliberately NOT one entire app per theme (spec item 47/56's explicit
+ * architectural rule) — "2026", "nextgen", and "proline" are all the same
+ * compiled Core, differing only in design tokens (colors/fonts, applied
+ * globally via CSS variables — see app/globals.css + the root layout's
+ * server-rendered override <style>) and a small number of shared chrome
+ * components that read the active theme to vary a prop or a few CSS
+ * variables (KpiCard's icon treatment, DesktopSidebar's colors via
+ * `sidebarTokens` below). Every page's data, routes, and business logic
+ * are identical across all three themes — only presentation differs.
  *
  * A real ZIP-uploaded third-party theme (Part D) gets a row in the
  * InstalledTheme table once validated, but activating an *uploaded*
@@ -31,6 +32,25 @@ export type ThemeManifest = {
     error: string;
     info: string;
     fontFamily: FontFamilyKey;
+  };
+  /**
+   * Sidebar chrome tokens — optional. Only ProLine sets these (dark navy
+   * sidebar); 2026/nextgen omit them entirely and buildThemeOverrideCss()
+   * falls back to app/globals.css's :root defaults, which reproduce their
+   * existing hardcoded white sidebar exactly. Not part of the admin
+   * Customization panel (spec: colors + typography only) — chrome, not a
+   * per-theme "brand color." Presence of this field also switches the
+   * active-nav-item state from a light bg-brand-50 pill (2026/nextgen) to
+   * a solid brand-600 pill with white text (ProLine) — see
+   * buildThemeOverrideCss().
+   */
+  sidebarTokens?: {
+    background: string;
+    border: string;
+    heading: string;
+    text: string;
+    textMuted: string;
+    hoverBg: string;
   };
 };
 
@@ -79,6 +99,31 @@ export const THEMES: Record<string, ThemeManifest> = {
       fontFamily: "montserrat",
     },
   },
+  proline: {
+    slug: "proline",
+    name: "ProLine",
+    version: "1.0.0",
+    author: "Let's Print",
+    description: "Clean, professional business theme — deep navy sidebar, blue primary actions, restrained semantic colors. Same data, same routes, same permissions as 2026.",
+    defaultTokens: {
+      primary: "#2563eb",
+      secondary: "#475569",
+      accent: "#0d9488",
+      success: "#059669",
+      warning: "#f59e0b",
+      error: "#dc2626",
+      info: "#2563eb",
+      fontFamily: "inter",
+    },
+    sidebarTokens: {
+      background: "#0f172a",
+      border: "#1e293b",
+      heading: "#ffffff",
+      text: "#cbd5e1",
+      textMuted: "#64748b",
+      hoverBg: "#1e293b",
+    },
+  },
 };
 
 export function getTheme(slug: string): ThemeManifest {
@@ -123,6 +168,24 @@ export function buildThemeOverrideCss(theme: ThemeManifest, overrides: TokenOver
   lines.push(`--color-brand-800: color-mix(in srgb, var(--color-brand-600) 70%, black);`);
   lines.push(`--color-brand-50: color-mix(in srgb, var(--color-brand-600) 6%, white);`);
   lines.push(`--color-brand-100: color-mix(in srgb, var(--color-brand-600) 12%, white);`);
+
+  // Sidebar chrome — only themes with sidebarTokens (ProLine) override
+  // these; 2026/nextgen leave them unset here and fall back to
+  // app/globals.css's :root defaults (their existing white sidebar look).
+  if (theme.sidebarTokens) {
+    const s = theme.sidebarTokens;
+    lines.push(`--color-sidebar-bg: ${s.background};`);
+    lines.push(`--color-sidebar-border: ${s.border};`);
+    lines.push(`--color-sidebar-heading: ${s.heading};`);
+    lines.push(`--color-sidebar-text: ${s.text};`);
+    lines.push(`--color-sidebar-text-muted: ${s.textMuted};`);
+    lines.push(`--color-sidebar-hover-bg: ${s.hoverBg};`);
+    // Dark sidebar -> a solid brand-600 active pill with white text reads
+    // far better than the light bg-brand-50 pill 2026/nextgen use.
+    lines.push(`--color-sidebar-active-bg: var(--color-brand-600);`);
+    lines.push(`--color-sidebar-active-text: #ffffff;`);
+    lines.push(`--color-sidebar-active-border: var(--color-brand-600);`);
+  }
 
   return `:root {\n  ${lines.join("\n  ")}\n}`;
 }

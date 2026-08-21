@@ -70,10 +70,16 @@ export async function AdminStaffDashboard({
     getBusinessSettings(),
     canSeeFinancials ? computeFinancialFoundation(resolvePeriodRange({ type: "monthly" })) : Promise.resolve(null),
   ]);
-  // Nextgen-only visual differences (colored KPI icon tiles, a donut
-  // instead of a bar for Orders by Status) — same data either way, see
-  // kpi-card.tsx's and admin-charts.tsx's own doc comments.
+  // Theme-conditional visual differences only (colored KPI icon tiles, a
+  // donut instead of a bar for Orders by Status) — same data in every
+  // case, see kpi-card.tsx's and admin-charts.tsx's own doc comments.
+  // Nextgen and ProLine both use icon tiles (ProLine's reference
+  // illustration shows the same icon-badge KPI treatment); ProLine keeps
+  // the plainer bar chart rather than nextgen's donut, matching its more
+  // restrained visual language.
   const isNextgen = settings.activeTheme === "nextgen";
+  const isProline = settings.activeTheme === "proline";
+  const showKpiIcons = isNextgen || isProline;
 
   const firstName = name.split(" ")[0];
   const todayLabel = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -98,7 +104,7 @@ export async function AdminStaffDashboard({
           value={formatCurrency(kpis.todaySales)}
           sub={salesTrend}
           href={canSeeFinancials ? "/reports/summary" : undefined}
-          icon={isNextgen ? TrendingUp : undefined}
+          icon={showKpiIcons ? TrendingUp : undefined}
           iconTone="green"
         />
         {canSeeFinancials && (
@@ -107,7 +113,7 @@ export async function AdminStaffDashboard({
             value={formatCurrency(kpis.outstandingBalance)}
             sub={`${kpis.outstandingCustomerCount} customer${kpis.outstandingCustomerCount === 1 ? "" : "s"}`}
             href="/payments"
-            icon={isNextgen ? Wallet : undefined}
+            icon={showKpiIcons ? Wallet : undefined}
             iconTone="red"
           />
         )}
@@ -116,7 +122,7 @@ export async function AdminStaffDashboard({
           value={kpis.openOrders}
           sub={`${kpis.inProductionCount} in production`}
           href="/orders"
-          icon={isNextgen ? Package : undefined}
+          icon={showKpiIcons ? Package : undefined}
           iconTone="blue"
         />
         {canSeeFinancials && (
@@ -126,7 +132,7 @@ export async function AdminStaffDashboard({
             sub={formatCurrency(kpis.pendingPaymentsAmount)}
             href="/payments"
             tone={kpis.pendingPaymentsCount > 0 ? "attention" : undefined}
-            icon={isNextgen ? CreditCard : undefined}
+            icon={showKpiIcons ? CreditCard : undefined}
             iconTone="orange"
           />
         )}
@@ -136,7 +142,7 @@ export async function AdminStaffDashboard({
           sub="Today"
           href="/inquiries"
           tone={kpis.newInquiries > 0 ? "attention" : undefined}
-          icon={isNextgen ? Inbox : undefined}
+          icon={showKpiIcons ? Inbox : undefined}
           iconTone="purple"
         />
       </div>

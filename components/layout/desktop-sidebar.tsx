@@ -38,7 +38,7 @@ export function DesktopSidebar({
   return (
     <aside
       className={cn(
-        "hidden shrink-0 flex-col border-r border-slate-200 bg-white px-3 py-4 transition-[width] duration-150 md:flex",
+        "hidden shrink-0 flex-col border-r border-[var(--color-sidebar-border)] bg-[var(--color-sidebar-bg)] px-3 py-4 transition-[width] duration-150 md:flex",
         collapsed ? "w-[68px]" : "w-60"
       )}
     >
@@ -46,8 +46,8 @@ export function DesktopSidebar({
         <BrandLogo src={logoPath} alt={businessName} size={32} />
         {!collapsed && (
           <div className="min-w-0">
-            <p className="truncate text-lg font-bold text-slate-900">{businessName}</p>
-            {tagline && <p className="truncate text-xs text-slate-400">{tagline}</p>}
+            <p className="truncate text-lg font-bold text-[var(--color-sidebar-heading)]">{businessName}</p>
+            {tagline && <p className="truncate text-xs text-[var(--color-sidebar-text-muted)]">{tagline}</p>}
           </div>
         )}
       </div>
@@ -57,7 +57,7 @@ export function DesktopSidebar({
       <button
         type="button"
         onClick={toggle}
-        className="mt-2 flex items-center justify-center gap-2 rounded-md border border-slate-200 py-2 text-xs text-slate-500 hover:bg-slate-50"
+        className="mt-2 flex items-center justify-center gap-2 rounded-md border border-[var(--color-sidebar-border)] py-2 text-xs text-[var(--color-sidebar-text-muted)] hover:bg-[var(--color-sidebar-hover-bg)]"
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         title={collapsed ? "Expand sidebar" : undefined}
       >

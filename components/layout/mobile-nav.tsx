@@ -39,19 +39,19 @@ export function MobileNav({
       {open && (
         <div className="fixed inset-0 z-50">
           <div className="fixed inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <aside className="fixed inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col overflow-y-auto border-r border-slate-200 bg-white px-3 py-4 shadow-xl">
+          <aside className="fixed inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col overflow-y-auto border-r border-[var(--color-sidebar-border)] bg-[var(--color-sidebar-bg)] px-3 py-4 shadow-xl">
             <div className="mb-6 flex items-center justify-between px-2">
               <div className="flex min-w-0 items-center gap-2">
                 <BrandLogo src={logoPath} alt={businessName} size={28} />
                 <div className="min-w-0">
-                  <p className="truncate text-lg font-bold text-slate-900">{businessName}</p>
-                  {tagline && <p className="truncate text-xs text-slate-400">{tagline}</p>}
+                  <p className="truncate text-lg font-bold text-[var(--color-sidebar-heading)]">{businessName}</p>
+                  {tagline && <p className="truncate text-xs text-[var(--color-sidebar-text-muted)]">{tagline}</p>}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                className="rounded-md p-1.5 text-[var(--color-sidebar-text-muted)] hover:bg-[var(--color-sidebar-hover-bg)] hover:text-[var(--color-sidebar-heading)]"
                 aria-label="Close menu"
               >
                 <X className="h-5 w-5" />
