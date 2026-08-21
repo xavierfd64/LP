@@ -57,6 +57,23 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
 
   const { orderId, amount, method, referenceNumber, paymentDate, notes } = parsed.data;
 
+  // Optional — staff recording a payment they've already verified doesn't
+  // require proof the way a customer's self-reported uploadPaymentProofAction
+  // does (different action, different status/validation semantics below);
+  // this is purely for keeping a record attached, same upload security
+  // (allow-list + magic-byte check) as every other upload in the app.
+  const proofFile = formData.get("proofFile") as File | null;
+  let proofFilePath: string | undefined;
+  if (proofFile && proofFile.size > 0) {
+    try {
+      const saved = await saveUploadedFile(proofFile, "document");
+      proofFilePath = saved.path;
+    } catch (e) {
+      if (e instanceof UploadRejectedError) return e.message;
+      throw e;
+    }
+  }
+
   const payment = await prisma.payment.create({
     data: {
       orderId,
@@ -66,6 +83,7 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
       paymentDate: paymentDate ? new Date(paymentDate) : undefined,
       notes,
       status: "CONFIRMED",
+      proofFilePath,
       recordedById: user.id,
     },
   });
@@ -77,7 +95,12 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
   });
   await autoCreateJobOrderIfPaymentSatisfied(orderId, user.id);
 
-  redirect(`/orders/${orderId}`);
+  // Same "caller says where to land" pattern uploadPaymentProofAction
+  // already uses below — RecordPaymentDialog (order detail page) and the
+  // Payments page's Record Payment modal both bind this same action but
+  // want to land somewhere different afterward.
+  const redirectTo = ((formData.get("redirectTo") as string) || "").trim();
+  redirect(redirectTo || `/orders/${orderId}`);
 }
 
 export async function uploadPaymentProofAction(_prevState: string | undefined, formData: FormData) {

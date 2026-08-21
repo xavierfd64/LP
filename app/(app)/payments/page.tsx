@@ -1,18 +1,27 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Wallet, Receipt, Clock, AlertTriangle } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
+import { getBusinessSettings } from "@/lib/business-settings";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
+import { KpiCard } from "@/components/dashboard/kpi-card";
+import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { confirmPaymentAction, rejectPaymentAction } from "@/app/actions/payments";
-import { PaymentForm } from "./payment-form";
+import { getPaymentsSummary, getPaginatedPayments } from "@/lib/payments-list";
+import type { PaymentFilterPeriod } from "@/lib/payment-filter-periods";
+import { RecordPaymentModal } from "./record-payment-modal";
+import { PaymentFilters } from "./payment-filters";
+import { PaymentsPagination } from "./payments-pagination";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
+
+const PAGE_SIZE = 15;
 
 export default async function PaymentsPage({ searchParams }: PageProps<"/payments">) {
   const user = await requireUser();
@@ -230,113 +239,160 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
   const canReject = isAdmin || (await can(user, "PAYMENT_REJECT"));
   const canRecord = isAdmin || (await can(user, "PAYMENT_RECORD"));
 
-  const [payments, orders] = await Promise.all([
-    prisma.payment.findMany({
-      include: { order: { include: { customer: true } } },
-      orderBy: { createdAt: "desc" },
+  const page = Math.max(1, Number(typeof sp.page === "string" ? sp.page : "1") || 1);
+  const q = typeof sp.q === "string" ? sp.q : "";
+  const status = typeof sp.status === "string" ? sp.status : "";
+  const period = (typeof sp.period === "string" ? sp.period : "all") as PaymentFilterPeriod;
+
+  const [summary, list, orders, settings] = await Promise.all([
+    getPaymentsSummary(),
+    getPaginatedPayments({
+      page,
+      pageSize: PAGE_SIZE,
+      q: q || undefined,
+      status: status === "PENDING" || status === "CONFIRMED" || status === "REJECTED" ? status : undefined,
+      period,
     }),
-    prisma.order.findMany({
-      include: { customer: true },
-      orderBy: { createdAt: "desc" },
-    }),
+    canRecord
+      ? prisma.order.findMany({ include: { customer: true }, orderBy: { createdAt: "desc" } })
+      : Promise.resolve([]),
+    getBusinessSettings(),
   ]);
+  const { payments } = list;
+  // ProLine/Nextgen both use the icon-badge KPI treatment already
+  // established on the admin dashboard (components/dashboard/admin-staff-
+  // dashboard.tsx) — same theme check, not a separate convention.
+  const showKpiIcons = settings.activeTheme === "nextgen" || settings.activeTheme === "proline";
 
   return (
     <div className="space-y-6">
       <TransactionBrandHeader />
-      <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
+          <p className="text-sm text-slate-500">Manage and track all customer payments.</p>
+        </div>
+        {canRecord && (
+          <RecordPaymentModal
+            orders={orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber, customerName: o.customer.name }))}
+            defaultOrderId={preselectedOrderId}
+          />
+        )}
+      </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>All payments</CardTitle>
-          </CardHeader>
-          <div className="overflow-x-auto">
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Order</TH>
-                  <TH>Customer</TH>
-                  <TH>Amount</TH>
-                  <TH>Method</TH>
-                  <TH>Status</TH>
-                  <TH>Date</TH>
-                  <TH>Proof</TH>
-                  <TH />
-                </TR>
-              </THead>
-              <TBody>
-                {payments.map((p) => {
-                  const confirm = confirmPaymentAction.bind(null, p.id);
-                  const reject = rejectPaymentAction.bind(null, p.id);
-                  return (
-                    <TR key={p.id}>
-                      <TD>
-                        <Link href={`/orders/${p.orderId}`} className="font-medium text-slate-900 underline">
-                          {p.order.orderNumber}
-                        </Link>
-                      </TD>
-                      <TD>{p.order.customer.name}</TD>
-                      <TD>{formatCurrency(p.amount.toString())}</TD>
-                      <TD>{p.method.replace(/_/g, " ")}</TD>
-                      <TD>
-                        <StatusBadge status={p.status} />
-                      </TD>
-                      <TD>{formatDateTime(p.createdAt)}</TD>
-                      <TD>
-                        {p.proofFilePath ? (
-                          <a href={p.proofFilePath} target="_blank" className="text-sm underline text-slate-600">
-                            View
-                          </a>
-                        ) : (
-                          "—"
-                        )}
-                      </TD>
-                      <TD>
-                        {p.status === "PENDING" && (canVerify || canReject) && (
-                          <div className="flex gap-2">
-                            {canVerify && (
-                              <form action={confirm}>
-                                <Button type="submit" size="sm">
-                                  Confirm
-                                </Button>
-                              </form>
-                            )}
-                            {canReject && (
-                              <form action={reject}>
-                                <Button type="submit" size="sm" variant="destructive">
-                                  Reject
-                                </Button>
-                              </form>
-                            )}
-                          </div>
-                        )}
-                      </TD>
-                    </TR>
-                  );
-                })}
-              </TBody>
-            </Table>
-          </div>
-          {payments.length === 0 && <EmptyState label="No payments recorded yet." />}
-        </Card>
-
-        {canRecord && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Record a payment</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PaymentForm
-                orders={orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber, customerName: o.customer.name }))}
-                defaultOrderId={preselectedOrderId}
-              />
-            </CardContent>
-          </Card>
-        )}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiCard
+          label="Total Paid (This Month)"
+          value={formatCurrency(summary.totalPaidThisMonth)}
+          href="/payments?period=monthly"
+          icon={showKpiIcons ? Wallet : undefined}
+          iconTone="green"
+        />
+        <KpiCard
+          label="Payments (This Month)"
+          value={summary.paymentsCountThisMonth}
+          href="/payments?period=monthly"
+          icon={showKpiIcons ? Receipt : undefined}
+          iconTone="blue"
+        />
+        <KpiCard
+          label="Outstanding Balance"
+          value={formatCurrency(summary.outstandingBalance)}
+          icon={showKpiIcons ? Clock : undefined}
+          iconTone="orange"
+        />
+        <KpiCard
+          label="Overdue Payments"
+          value={summary.overduePaymentsCount}
+          tone={summary.overduePaymentsCount > 0 ? "attention" : undefined}
+          icon={showKpiIcons ? AlertTriangle : undefined}
+          iconTone="red"
+        />
       </div>
+
+      <Card>
+        <CardContent className="py-4">
+          <PaymentFilters q={q} status={status} period={period} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Order</TH>
+                <TH>Customer</TH>
+                <TH>Amount</TH>
+                <TH>Method</TH>
+                <TH>Status</TH>
+                <TH>Date</TH>
+                <TH>Proof</TH>
+                <TH>Actions</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {payments.map((p) => {
+                const confirm = confirmPaymentAction.bind(null, p.id);
+                const reject = rejectPaymentAction.bind(null, p.id);
+                return (
+                  <TR key={p.id}>
+                    <TD>
+                      <Link href={`/orders/${p.orderId}`} className="font-medium text-slate-900 underline">
+                        {p.order.orderNumber}
+                      </Link>
+                    </TD>
+                    <TD>{p.order.customer.name}</TD>
+                    <TD>{formatCurrency(p.amount.toString())}</TD>
+                    <TD>{p.method.replace(/_/g, " ")}</TD>
+                    <TD>
+                      <StatusBadge status={p.status} />
+                    </TD>
+                    <TD>{formatDateTime(p.createdAt)}</TD>
+                    <TD>
+                      {p.proofFilePath ? (
+                        <a href={p.proofFilePath} target="_blank" className="text-sm underline text-slate-600">
+                          View
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </TD>
+                    <TD>
+                      {p.status === "PENDING" && (canVerify || canReject) ? (
+                        <div className="flex gap-2">
+                          {canVerify && (
+                            <form action={confirm}>
+                              <Button type="submit" size="sm">
+                                Confirm
+                              </Button>
+                            </form>
+                          )}
+                          {canReject && (
+                            <form action={reject}>
+                              <Button type="submit" size="sm" variant="destructive">
+                                Reject
+                              </Button>
+                            </form>
+                          )}
+                        </div>
+                      ) : (
+                        <Link href={`/orders/${p.orderId}`} className="text-sm font-medium text-brand-600 underline">
+                          View
+                        </Link>
+                      )}
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+        </div>
+        {payments.length === 0 && <EmptyState label="No payments match these filters." />}
+        <PaymentsPagination page={list.page} totalPages={list.totalPages} total={list.total} pageSize={list.pageSize} searchParams={sp} />
+      </Card>
     </div>
   );
 }

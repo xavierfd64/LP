@@ -67,11 +67,26 @@ export async function getPrimaryKpis() {
 
 export type NeedsAttentionItem = { label: string; count: number; href: string; tone: "red" | "yellow" };
 
+/**
+ * Orders with a real, past dueDate that still carry a balance — never a
+ * synthetic aging window (spec item 16). Extracted so getNeedsAttention()
+ * and the Payments page summary (lib/payments-list.ts) share the exact
+ * same "overdue" definition instead of each computing their own.
+ */
+export async function getOverduePaymentsCount(): Promise<number> {
+  const today = startOfToday();
+  const overdueOrders = await prisma.order.findMany({
+    where: { status: { notIn: ["COMPLETED", "CANCELLED"] }, dueDate: { lt: today } },
+    select: { id: true, totalAmount: true, payments: { where: { status: "CONFIRMED" }, select: { amount: true } } },
+  });
+  return overdueOrders.filter((o) => Number(o.totalAmount) - o.payments.reduce((s, p) => s + Number(p.amount), 0) > 0).length;
+}
+
 /** Spec item 13 — every item here is real, live data; never a placeholder count. */
 export async function getNeedsAttention(): Promise<NeedsAttentionItem[]> {
   const today = startOfToday();
 
-  const [openOrdersRaw, quotationsAwaiting, delayedJobOrders, lowStockCount] = await Promise.all([
+  const [openOrdersRaw, quotationsAwaiting, delayedJobOrders, lowStockCount, overduePaymentsCount] = await Promise.all([
     prisma.order.findMany({
       where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
       select: { id: true, totalAmount: true, payments: { where: { status: "CONFIRMED" }, select: { amount: true } } },
@@ -81,19 +96,13 @@ export async function getNeedsAttention(): Promise<NeedsAttentionItem[]> {
     prisma.inventoryItem.findMany({ select: { currentQty: true, reorderThreshold: true } }).then((items) =>
       items.filter((i) => i.currentQty <= i.reorderThreshold).length
     ),
+    getOverduePaymentsCount(),
   ]);
 
   const ordersAwaitingPayment = openOrdersRaw.filter((o) => {
     const confirmed = o.payments.reduce((s, p) => s + Number(p.amount), 0);
     return Number(o.totalAmount) - confirmed > 0;
   }).length;
-  // Only counts orders with a real dueDate that has actually passed and
-  // still carry a balance — never a synthetic aging window (spec item 16).
-  const overdueOrders = await prisma.order.findMany({
-    where: { status: { notIn: ["COMPLETED", "CANCELLED"] }, dueDate: { lt: today } },
-    select: { id: true, totalAmount: true, payments: { where: { status: "CONFIRMED" }, select: { amount: true } } },
-  });
-  const overduePaymentsCount = overdueOrders.filter((o) => Number(o.totalAmount) - o.payments.reduce((s, p) => s + Number(p.amount), 0) > 0).length;
 
   const items: NeedsAttentionItem[] = [];
   if (overduePaymentsCount > 0) items.push({ label: `${overduePaymentsCount} overdue payment${overduePaymentsCount === 1 ? "" : "s"}`, count: overduePaymentsCount, href: "/payments", tone: "red" });
