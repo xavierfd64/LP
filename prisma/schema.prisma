@@ -304,7 +304,8 @@ model User {
   trackingLinksCreated    OrderTrackingLink[]
   statementsGenerated     StatementOfAccount[]
   adjustmentsCreated      AccountAdjustment[]
-  operatingExpensesCreated OperatingExpense[]
+  operatingExpensesCreated OperatingExpense[] @relation("ExpenseCreatedBy")
+  operatingExpensesVoided  OperatingExpense[] @relation("ExpenseVoidedBy")
   statementSchedulesCreated StatementSchedule[]
   themesInstalled         InstalledTheme[]
   pluginsInstalled        InstalledPlugin[]
@@ -1395,9 +1396,18 @@ model OperatingExpense {
   referenceNumber String?
   notes           String?
   createdById     String?
-  createdBy       User?           @relation(fields: [createdById], references: [id])
+  createdBy       User?           @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+  // Void, never delete (security hardening pass #2, M20/section 20) — a
+  // financial record must stay auditable after the fact. Mirrors the exact
+  // cancelledAt/cancelledById pattern already used by SupplyLot and
+  // JobOrderMaterialConsumption elsewhere in this schema. voidExpenseAction
+  // sets these instead of running a destructive delete; every read that
+  // feeds a financial total (lib/financial-summary.ts) filters voidedAt: null.
+  voidedAt        DateTime?
+  voidedById      String?
+  voidedBy        User?           @relation("ExpenseVoidedBy", fields: [voidedById], references: [id])
 
   @@index([expenseDate])
   @@index([categoryId])

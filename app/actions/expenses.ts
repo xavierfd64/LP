@@ -76,6 +76,9 @@ export async function updateExpenseAction(expenseId: string, _prevState: string 
   const category = await prisma.expenseCategory.findUnique({ where: { id: data.categoryId } });
   if (!category || !category.active) return "Please select a valid category.";
 
+  const existing = await prisma.operatingExpense.findUniqueOrThrow({ where: { id: expenseId } });
+  if (existing.voidedAt) return "This expense has been voided and can no longer be edited.";
+
   await prisma.operatingExpense.update({
     where: { id: expenseId },
     data: {
@@ -99,18 +102,31 @@ export async function updateExpenseAction(expenseId: string, _prevState: string 
 }
 
 /**
- * Deletion must not happen silently (spec item 6) — the confirmation
- * itself lives client-side (a real confirm dialog, see delete-expense-
- * button.tsx), this action is just the guarded, audit-logged mutation it
- * calls after the user confirms.
+ * Void, never delete (security hardening pass #2, M20/section 20) — a
+ * financial record must stay auditable after the fact, exactly like the
+ * cancelledAt/cancelledById pattern already used by SupplyLot and
+ * JobOrderMaterialConsumption elsewhere in this app. Previously this ran a
+ * hard `prisma.operatingExpense.delete`, which destroyed the row entirely:
+ * historical P&L figures that had already counted it would silently no
+ * longer be reproducible, and the only trace left behind was a separate
+ * AuditLog entry most screens never cross-reference. Voiding instead keeps
+ * the row (and its dollar amount) permanently visible in the Expenses list
+ * and excluded from every financial total (lib/financial-summary.ts).
+ * Confirmation still lives client-side (a real confirm dialog, see
+ * void-expense-button.tsx), this action is the guarded, audit-logged
+ * mutation it calls after the user confirms.
  */
-export async function deleteExpenseAction(expenseId: string) {
+export async function voidExpenseAction(expenseId: string) {
   const user = await requirePermission("EXPENSE_MANAGE");
   const expense = await prisma.operatingExpense.findUniqueOrThrow({ where: { id: expenseId } });
+  if (expense.voidedAt) return; // already voided — nothing to do
 
-  await prisma.operatingExpense.delete({ where: { id: expenseId } });
+  await prisma.operatingExpense.update({
+    where: { id: expenseId },
+    data: { voidedAt: new Date(), voidedById: user.id },
+  });
 
-  await logAudit(user.id, "EXPENSE_DELETED", "OperatingExpense", expenseId, {
+  await logAudit(user.id, "EXPENSE_VOIDED", "OperatingExpense", expenseId, {
     expenseNumber: expense.expenseNumber,
     amount: Number(expense.amount),
   });

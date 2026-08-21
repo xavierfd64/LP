@@ -5,6 +5,7 @@ import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
@@ -223,6 +224,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
   const sp = await searchParams;
   const preselectedOrderId = typeof sp.orderId === "string" ? sp.orderId : undefined;
+  const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const isAdmin = user.role === "ADMIN";
   const canVerify = isAdmin || (await can(user, "PAYMENT_VERIFY"));
   const canReject = isAdmin || (await can(user, "PAYMENT_REJECT"));
@@ -243,6 +245,8 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
     <div className="space-y-6">
       <TransactionBrandHeader />
       <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
+
+      {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">

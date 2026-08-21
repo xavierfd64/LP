@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Input, Label, Select } from "@/components/ui/input";
-import { DeleteExpenseButton } from "./delete-expense-button";
+import { VoidExpenseButton } from "./void-expense-button";
+import { Badge } from "@/components/ui/badge";
 
 export default async function ExpensesPage({ searchParams }: PageProps<"/admin/expenses">) {
   const user = await requireUser();
@@ -60,7 +61,9 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/admin/e
       ? [...activeCategories, selectedCategory].sort((a, b) => a.name.localeCompare(b.name))
       : activeCategories;
 
-  const total = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  // Voided expenses stay in this list for the record but must never count
+  // toward a displayed total (security hardening pass #2, M20).
+  const total = expenses.filter((e) => !e.voidedAt).reduce((sum, e) => sum + Number(e.amount), 0);
 
   return (
     <div className="space-y-6">
@@ -169,9 +172,11 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/admin/e
           </THead>
           <TBody>
             {expenses.map((e) => (
-              <TR key={e.id}>
+              <TR key={e.id} className={e.voidedAt ? "opacity-60" : undefined}>
                 <TD className="text-sm text-slate-500">{formatDate(e.expenseDate)}</TD>
-                <TD className="font-medium text-slate-900">{e.expenseNumber}</TD>
+                <TD className="font-medium text-slate-900">
+                  {e.expenseNumber} {e.voidedAt && <Badge tone="red" className="ml-2">Voided</Badge>}
+                </TD>
                 <TD className="text-sm text-slate-600">{e.category.name}</TD>
                 <TD className="text-sm text-slate-700">
                   {e.description}
@@ -181,12 +186,12 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/admin/e
                 <TD className="font-medium text-slate-900">{formatCurrency(e.amount.toString())}</TD>
                 <TD className="text-sm text-slate-500">{e.paymentMethod.replace(/_/g, " ")}</TD>
                 <TD>
-                  {canManage && (
+                  {canManage && !e.voidedAt && (
                     <div className="flex items-center gap-3">
                       <Link href={`/admin/expenses/${e.id}/edit`} className="text-sm font-medium text-brand-600 underline">
                         Edit
                       </Link>
-                      <DeleteExpenseButton expenseId={e.id} expenseNumber={e.expenseNumber} />
+                      <VoidExpenseButton expenseId={e.id} expenseNumber={e.expenseNumber} />
                     </div>
                   )}
                 </TD>

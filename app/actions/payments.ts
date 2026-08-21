@@ -109,6 +109,21 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
   const customer = await getCurrentCustomer(user.id);
   if (order.customerId !== customer.id) throw new Error("Not allowed.");
 
+  // Security hardening pass #2 (M4/M5): the server must independently know
+  // how much is actually payable — never trust a customer-submitted amount
+  // on its own. A claimed amount beyond the real remaining balance is
+  // rejected here at submission time; confirmPaymentAction re-derives and
+  // re-checks this same balance again at confirmation time (state can move
+  // between upload and confirm), so this isn't the only gate — it's the
+  // earliest one, so a customer gets immediate feedback instead of a
+  // silently-stuck PENDING record.
+  const preSummary = await paymentSummary(orderId);
+  const balanceDue = preSummary.total - preSummary.confirmed;
+  if (balanceDue <= 0.01) return "This order has no remaining balance — no payment is needed.";
+  if (amount > balanceDue + 0.01) {
+    return `That amount exceeds the remaining balance of ${balanceDue.toFixed(2)}. Please enter an amount up to the balance due.`;
+  }
+
   let saved: { filename: string; path: string };
   try {
     saved = await saveUploadedFile(file, "document");
@@ -139,12 +154,58 @@ export async function uploadPaymentProofAction(_prevState: string | undefined, f
 
 export async function confirmPaymentAction(paymentId: string) {
   const user = await requirePermission("PAYMENT_VERIFY");
-  const payment = await prisma.payment.update({
-    where: { id: paymentId },
-    data: { status: "CONFIRMED" },
-    include: { order: true },
+
+  // Security hardening pass #2 (M4/M5, M7/M9): this is the actual moment a
+  // claimed amount becomes real, counted money — the authoritative
+  // server-side check belongs here, not just at upload time, because the
+  // order's balance can have moved since the payment was submitted (another
+  // payment recorded/confirmed in the meantime). Locks the Order row for
+  // the duration of the check + update (same `SELECT ... FOR UPDATE`
+  // pattern already used by autoCreateJobOrderForOrder) so two concurrent
+  // confirmations against the same order's balance can't both pass the
+  // check before either commits — the second one re-reads the
+  // now-updated confirmed total.
+  let payment;
+  try {
+    payment = await prisma.$transaction(async (tx) => {
+      const existing = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
+      await tx.$executeRaw`SELECT id FROM "Order" WHERE id = ${existing.orderId} FOR UPDATE`;
+
+      if (existing.status !== "PENDING") {
+        throw new RuleViolation(`This payment is already ${existing.status.toLowerCase()} — nothing to confirm.`);
+      }
+
+      const order = await tx.order.findUniqueOrThrow({ where: { id: existing.orderId } });
+      const confirmedAgg = await tx.payment.aggregate({
+        where: { orderId: existing.orderId, status: "CONFIRMED" },
+        _sum: { amount: true },
+      });
+      const confirmedTotal = Number(confirmedAgg._sum.amount ?? 0);
+      const balanceDue = Number(order.totalAmount) - confirmedTotal;
+      const amount = Number(existing.amount);
+      if (amount > balanceDue + 0.01) {
+        throw new RuleViolation(
+          `Cannot confirm: this payment's amount (${amount.toFixed(2)}) exceeds the order's remaining balance (${balanceDue.toFixed(2)}). Reject it and ask the customer to resubmit the correct amount, or record the difference separately.`
+        );
+      }
+
+      return tx.payment.update({
+        where: { id: paymentId },
+        data: { status: "CONFIRMED" },
+        include: { order: true },
+      });
+    });
+  } catch (e) {
+    if (e instanceof RuleViolation) {
+      redirect(`/payments?error=${encodeURIComponent(e.message)}`);
+    }
+    throw e;
+  }
+
+  await logAudit(user.id, "PAYMENT_CONFIRMED", "Payment", paymentId, {
+    orderId: payment.orderId,
+    amount: Number(payment.amount),
   });
-  await logAudit(user.id, "PAYMENT_CONFIRMED", "Payment", paymentId, { orderId: payment.orderId });
   await notifyCustomer(
     payment.order.customerId,
     "PAYMENT_CONFIRMED",

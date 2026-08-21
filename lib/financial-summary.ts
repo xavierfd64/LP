@@ -44,7 +44,7 @@ export async function getOperatingExpensesByCategory(range: PeriodRange): Promis
   const { start, end } = range;
   const grouped = await prisma.operatingExpense.groupBy({
     by: ["categoryId"],
-    where: { expenseDate: { gte: start, lt: end } },
+    where: { expenseDate: { gte: start, lt: end }, voidedAt: null },
     _sum: { amount: true },
   });
   if (grouped.length === 0) return [];
@@ -96,7 +96,7 @@ export async function computeFinancialFoundation(range: PeriodRange): Promise<Fi
       },
     }),
     prisma.operatingExpense.aggregate({
-      where: { expenseDate: { gte: start, lt: end } },
+      where: { expenseDate: { gte: start, lt: end }, voidedAt: null },
       _sum: { amount: true },
     }),
   ]);
