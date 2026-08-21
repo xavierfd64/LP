@@ -244,7 +244,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
   const status = typeof sp.status === "string" ? sp.status : "";
   const period = (typeof sp.period === "string" ? sp.period : "all") as PaymentFilterPeriod;
 
-  const [summary, list, orders, settings] = await Promise.all([
+  const [summary, list, defaultOrderRow, settings] = await Promise.all([
     getPaymentsSummary(),
     getPaginatedPayments({
       page,
@@ -253,12 +253,25 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
       status: status === "PENDING" || status === "CONFIRMED" || status === "REJECTED" ? status : undefined,
       period,
     }),
-    canRecord
-      ? prisma.order.findMany({ include: { customer: true }, orderBy: { createdAt: "desc" } })
-      : Promise.resolve([]),
+    // Only the single preselected order (if any) is ever fetched here — the
+    // full order list used to be loaded unconditionally for the old <Select>
+    // dropdown; it's now fetched on demand, server-side, by the searchable
+    // OrderCombobox (see app/actions/order-search.ts) instead.
+    canRecord && preselectedOrderId
+      ? prisma.order.findUnique({ where: { id: preselectedOrderId }, include: { customer: true, quotation: true } })
+      : Promise.resolve(null),
     getBusinessSettings(),
   ]);
   const { payments } = list;
+  const defaultOrder = defaultOrderRow
+    ? {
+        id: defaultOrderRow.id,
+        orderNumber: defaultOrderRow.orderNumber,
+        customerName: defaultOrderRow.customer.name,
+        customerPhone: defaultOrderRow.customer.contactNumber,
+        quoteNumber: defaultOrderRow.quotation?.quoteNumber ?? null,
+      }
+    : null;
   // ProLine/Nextgen both use the icon-badge KPI treatment already
   // established on the admin dashboard (components/dashboard/admin-staff-
   // dashboard.tsx) — same theme check, not a separate convention.
@@ -272,12 +285,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
           <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
           <p className="text-sm text-slate-500">Manage and track all customer payments.</p>
         </div>
-        {canRecord && (
-          <RecordPaymentModal
-            orders={orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber, customerName: o.customer.name }))}
-            defaultOrderId={preselectedOrderId}
-          />
-        )}
+        {canRecord && <RecordPaymentModal defaultOrder={defaultOrder} />}
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}

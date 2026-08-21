@@ -1,12 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { recordPaymentAction } from "@/app/actions/payments";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
-
-type Order = { id: string; orderNumber: string; customerName: string };
+import { OrderCombobox } from "./order-combobox";
+import type { OrderSearchResult } from "@/app/actions/order-search";
 
 /**
  * Shared by the standalone Payments-page modal and (going forward) any
@@ -15,21 +15,25 @@ type Order = { id: string; orderNumber: string; customerName: string };
  * the order detail page (recordPaymentAction's own fallback) when omitted.
  * `onCancel`/`submitLabel` are optional so this still renders standalone
  * (no cancel button, default label) if ever embedded without a modal shell.
+ *
+ * `defaultOrder` (full order/customer info, not just an id) preselects the
+ * combobox when arriving from an order-scoped "Record Payment" link —
+ * replaces the old `orders` array + defaultOrderId prop, since the order
+ * list is no longer preloaded in bulk (see order-combobox.tsx).
  */
 export function PaymentForm({
-  orders,
-  defaultOrderId,
+  defaultOrder,
   redirectTo,
   onCancel,
   submitLabel = "Record Payment (Confirmed)",
 }: {
-  orders: Order[];
-  defaultOrderId?: string;
+  defaultOrder?: OrderSearchResult | null;
   redirectTo?: string;
   onCancel?: () => void;
   submitLabel?: string;
 }) {
   const [error, formAction, pending] = useActionState(recordPaymentAction, undefined);
+  const [orderId, setOrderId] = useState(defaultOrder?.id ?? "");
 
   return (
     <form action={formAction} className="space-y-4">
@@ -37,14 +41,7 @@ export function PaymentForm({
       {error && <Alert tone="error">{error}</Alert>}
       <div>
         <Label htmlFor="orderId">Order</Label>
-        <Select id="orderId" name="orderId" required defaultValue={defaultOrderId ?? ""}>
-          <option value="">Select an order...</option>
-          {orders.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.orderNumber} — {o.customerName}
-            </option>
-          ))}
-        </Select>
+        <OrderCombobox name="orderId" defaultOrder={defaultOrder} onSelectionChange={setOrderId} />
       </div>
       <div>
         <Label htmlFor="amount">Amount (PHP)</Label>
@@ -89,7 +86,7 @@ export function PaymentForm({
             Cancel
           </Button>
         )}
-        <Button type="submit" disabled={pending} className={onCancel ? undefined : "w-full sm:w-auto"}>
+        <Button type="submit" disabled={pending || !orderId} className={onCancel ? undefined : "w-full sm:w-auto"}>
           {pending ? "Recording..." : submitLabel}
         </Button>
       </div>

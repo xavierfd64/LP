@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PaymentForm } from "./payment-form";
-
-type Order = { id: string; orderNumber: string; customerName: string };
+import type { OrderSearchResult } from "@/app/actions/order-search";
 
 /**
  * Replaces the old permanent "Record a payment" Card that used to sit
@@ -15,7 +14,7 @@ type Order = { id: string; orderNumber: string; customerName: string };
  * isn't reused verbatim here, but the actual form fields all live in the
  * one shared PaymentForm component, not duplicated into this file.
  */
-export function RecordPaymentModal({ orders, defaultOrderId }: { orders: Order[]; defaultOrderId?: string }) {
+export function RecordPaymentModal({ defaultOrder }: { defaultOrder?: OrderSearchResult | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -40,8 +39,7 @@ export function RecordPaymentModal({ orders, defaultOrderId }: { orders: Order[]
             </div>
             <div className="overflow-y-auto px-5 py-4">
               <PaymentForm
-                orders={orders}
-                defaultOrderId={defaultOrderId}
+                defaultOrder={defaultOrder}
                 redirectTo="/payments"
                 submitLabel="Record Payment"
                 onCancel={() => setOpen(false)}
