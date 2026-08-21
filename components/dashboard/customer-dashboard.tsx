@@ -298,7 +298,7 @@ export async function CustomerDashboard({ customerId, name }: { customerId: stri
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <QuickActionTile icon={Send} label="New Inquiry" href="/inquiries/new" />
             <QuickActionTile icon={ClipboardList} label="Request Quotation" href="/inquiries/new" />
-            <QuickActionTile icon={Package} label="Track Order" href="/" />
+            <QuickActionTile icon={Package} label="Track Order" href="/" prefetch={false} />
             <QuickActionTile icon={CreditCard} label="Make a Payment" href="/payments" />
             <QuickActionTile icon={Receipt} label="View SOA" href="/payments" />
             <QuickActionTile icon={MessageCircle} label="Chat with Us" onOpenChat />
@@ -366,11 +366,26 @@ function QuickActionTile({
   label,
   href,
   onOpenChat,
+  prefetch,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   href?: string;
   onOpenChat?: boolean;
+  /**
+   * Next.js `<Link>` default-prefetches any in-viewport link. For a route
+   * whose rendered content depends on auth state at fetch time (like `/`,
+   * which redirects an authenticated visitor straight back to /dashboard —
+   * see app/page.tsx), that prefetch is fetched WHILE the user is still
+   * logged in and can be cached client-side. If that cached response is
+   * ever reused for a later client-side navigation (e.g. right after
+   * logging out, before a hard reload), it could serve back the
+   * pre-logout, authenticated redirect instead of a fresh server check.
+   * Explicitly pass `prefetch={false}` for any tile whose target has this
+   * kind of auth-conditional redirect — "Track Order" (href="/") is the
+   * one case of this in the app today.
+   */
+  prefetch?: boolean;
 }) {
   const content = (
     <div className="flex h-full flex-col items-center justify-center gap-2 rounded-lg border border-slate-100 px-2 py-4 text-center hover:border-brand-200 hover:bg-brand-50/30">
@@ -383,7 +398,11 @@ function QuickActionTile({
     return <ChatOpenButton>{content}</ChatOpenButton>;
   }
 
-  return <Link href={href ?? "#"}>{content}</Link>;
+  return (
+    <Link href={href ?? "#"} prefetch={prefetch}>
+      {content}
+    </Link>
+  );
 }
 
 function EmptyState({ title, detail }: { title: string; detail: string }) {
