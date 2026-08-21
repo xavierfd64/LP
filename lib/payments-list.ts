@@ -58,17 +58,24 @@ const METHOD_SEARCH_LABELS: { value: "CASH" | "BANK_TRANSFER" | "GCASH" | "MAYA"
   { value: "VOUCHER", labels: ["voucher"] },
 ];
 
-export type PaymentListFilters = {
-  page: number;
-  pageSize: number;
+export type PaymentSearchFilters = {
   q?: string;
   status?: "PENDING" | "CONFIRMED" | "REJECTED";
   period?: PaymentFilterPeriod;
 };
 
-export async function getPaginatedPayments(filters: PaymentListFilters) {
-  const { page, pageSize, q, status, period } = filters;
+export type PaymentListFilters = PaymentSearchFilters & {
+  page: number;
+  pageSize: number;
+};
 
+/**
+ * The one authoritative "which payments match the current filters"
+ * definition — used by both the paginated table (getPaginatedPayments)
+ * and the export data functions below, so a filtered export can never
+ * drift from what the table itself shows for the same q/status/period.
+ */
+export function buildPaymentWhere({ q, status, period }: PaymentSearchFilters): Prisma.PaymentWhereInput {
   const where: Prisma.PaymentWhereInput = {};
   if (status) where.status = status;
   if (period && period !== "all") {
@@ -85,7 +92,12 @@ export async function getPaginatedPayments(filters: PaymentListFilters) {
       ...(matchedMethod ? [{ method: matchedMethod.value }] : []),
     ];
   }
+  return where;
+}
 
+export async function getPaginatedPayments(filters: PaymentListFilters) {
+  const { page, pageSize, ...searchFilters } = filters;
+  const where = buildPaymentWhere(searchFilters);
   const skip = (page - 1) * pageSize;
 
   const [payments, total] = await Promise.all([
@@ -100,4 +112,50 @@ export async function getPaginatedPayments(filters: PaymentListFilters) {
   ]);
 
   return { payments, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+// Caps how many rows a single export query pulls into server memory. There
+// is no streaming writer in this app (see lib/xlsx-writer.ts/csv-writer.ts
+// — both build a whole file in memory, matching the simplicity of every
+// other document-generation path here), so an unbounded export is capped
+// rather than risking an unbounded query for a business with a very large
+// payment history; getPaymentsForExport reports whether it was truncated
+// so the caller can say so rather than silently dropping rows.
+export const EXPORT_ROW_CAP = 5000;
+
+export async function getPaymentsForExport(filters: PaymentSearchFilters) {
+  const where = buildPaymentWhere(filters);
+  const [payments, total] = await Promise.all([
+    prisma.payment.findMany({
+      where,
+      include: { order: { include: { customer: true, quotation: true } }, recordedBy: true },
+      orderBy: { createdAt: "desc" },
+      take: EXPORT_ROW_CAP,
+    }),
+    prisma.payment.count({ where }),
+  ]);
+  return { payments, total, truncated: total > EXPORT_ROW_CAP };
+}
+
+export type PaymentExportRow = Awaited<ReturnType<typeof getPaymentsForExport>>["payments"][number];
+
+/**
+ * "Summary only" export mode — reuses buildPaymentWhere so the summary is
+ * scoped by the exact same filters as the table/other export modes, and
+ * uses Prisma's own groupBy/aggregate rather than a second hand-rolled
+ * totals calculation (the same "one authoritative definition" principle
+ * getPaymentsSummary above already follows for the dashboard cards).
+ */
+export async function getPaymentsExportSummary(filters: PaymentSearchFilters) {
+  const where = buildPaymentWhere(filters);
+  const [overall, byStatus, byMethod] = await Promise.all([
+    prisma.payment.aggregate({ where, _sum: { amount: true }, _count: { _all: true } }),
+    prisma.payment.groupBy({ by: ["status"], where, _sum: { amount: true }, _count: { _all: true } }),
+    prisma.payment.groupBy({ by: ["method"], where, _sum: { amount: true }, _count: { _all: true } }),
+  ]);
+  return {
+    overall: { count: overall._count._all, total: Number(overall._sum.amount ?? 0) },
+    byStatus: byStatus.map((s) => ({ status: s.status, count: s._count._all, total: Number(s._sum.amount ?? 0) })),
+    byMethod: byMethod.map((m) => ({ method: m.method, count: m._count._all, total: Number(m._sum.amount ?? 0) })),
+  };
 }

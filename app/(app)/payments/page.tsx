@@ -19,6 +19,7 @@ import type { PaymentFilterPeriod } from "@/lib/payment-filter-periods";
 import { RecordPaymentModal } from "./record-payment-modal";
 import { PaymentFilters } from "./payment-filters";
 import { PaymentsPagination } from "./payments-pagination";
+import { ExportPaymentsDialog } from "./export-payments-dialog";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 
 const PAGE_SIZE = 15;
@@ -321,8 +322,11 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
       </div>
 
       <Card>
-        <CardContent className="py-4">
-          <PaymentFilters q={q} status={status} period={period} />
+        <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex-1">
+            <PaymentFilters q={q} status={status} period={period} />
+          </div>
+          <ExportPaymentsDialog q={q} status={status} period={period} />
         </CardContent>
       </Card>
 
