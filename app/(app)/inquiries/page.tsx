@@ -6,7 +6,6 @@ import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils";
@@ -32,7 +31,6 @@ export default async function InquiriesPage({ searchParams }: PageProps<"/inquir
   const user = await requireUser();
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
   if (user.role === "STAFF" && !(await can(user, "INQUIRY_VIEW"))) redirect("/dashboard");
-  const canHandle = user.role === "ADMIN" || (await can(user, "INQUIRY_HANDLE"));
 
   // Customer's own inquiry list — unchanged, this redesign is scoped to
   // the staff/admin dashboard only (Aug 22 UI redesign update 2).
@@ -114,11 +112,6 @@ export default async function InquiriesPage({ searchParams }: PageProps<"/inquir
           <h1 className="text-2xl font-bold text-slate-900">Inquiries</h1>
           <p className="text-sm text-slate-500">Customer requests before a quotation is prepared.</p>
         </div>
-        {canHandle && (
-          <Link href="/inquiries/new">
-            <Button>+ New Inquiry</Button>
-          </Link>
-        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

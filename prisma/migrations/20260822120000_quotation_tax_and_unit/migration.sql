@@ -1,0 +1,2 @@
+ALTER TABLE "Quotation" ADD COLUMN "taxAmount" DECIMAL(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE "QuotationLineItem" ADD COLUMN "unit" TEXT;

@@ -6,7 +6,6 @@ export default async function AdminDashboardPage() {
   const user = await requireRole(["ADMIN"]);
 
   const quickActions: QuickAction[] = [
-    { label: "New Inquiry", href: "/inquiries/new" },
     { label: "New Quotation", href: "/quotations/new" },
     { label: "New Order", href: "/orders/new" },
     { label: "Record Payment", href: "/payments" },

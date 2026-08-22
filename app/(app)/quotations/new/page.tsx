@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { FileText } from "lucide-react";
 import { requireRole } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +12,7 @@ import type { LineItem } from "../line-items-editor";
 export default async function NewQuotationPage({ searchParams }: PageProps<"/quotations/new">) {
   const user = await requireRole(["STAFF", "ADMIN"]);
   if (user.role === "STAFF" && !(await can(user, "QUOTATION_CREATE"))) redirect("/quotations");
+  const canSend = user.role === "ADMIN" || (await can(user, "QUOTATION_SEND"));
   const sp = await searchParams;
   const inquiryId = typeof sp.inquiryId === "string" ? sp.inquiryId : undefined;
 
@@ -39,6 +41,7 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
         specFields: (li.service?.specFields as string[]) ?? [],
         description: li.description,
         qty: li.qty,
+        unit: li.unit ?? "",
         unitPrice: Number(li.unitPrice),
         specs: (li.specs as Record<string, string> | null) ?? null,
       }))
@@ -51,6 +54,7 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
             specFields: (inquiry.service?.specFields as string[]) ?? [],
             description: inquiry.description,
             qty: inquiry.roughQty ?? 1,
+            unit: inquiry.roughQtyUnit ?? "",
             unitPrice: 0,
             specs: (inquiry.specs as Record<string, string> | null) ?? null,
           },
@@ -61,8 +65,13 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
     <EditorShell>
       <EditorHeader
         eyebrow="Quotation"
-        title="New Quotation"
-        subtitle={inquiry ? `From inquiry: ${inquiry.desiredProduct}` : "Create a new quotation"}
+        title={
+          <span className="flex items-center gap-2">
+            <FileText className="h-6 w-6 text-brand-600" />
+            New Quotation
+          </span>
+        }
+        subtitle={inquiry ? `From inquiry: ${inquiry.desiredProduct}` : "Prepare a quotation for customer approval."}
       />
       <BusinessInfoBanner />
 
@@ -74,6 +83,7 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/quo
 
       <QuotationForm
         inquiryId={inquiry?.id}
+        canSend={canSend}
         defaultCustomer={
           inquiry
             ? {

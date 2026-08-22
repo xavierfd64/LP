@@ -19,6 +19,7 @@ const orderSchema = z.object({
   termsApprovedBy: z.string().optional(),
   termsReason: z.string().optional(),
   dueDate: z.string().optional(),
+  notes: z.string().max(1000).optional(),
 });
 
 export async function createOrderAction(_prevState: string | undefined, formData: FormData) {
@@ -33,6 +34,7 @@ export async function createOrderAction(_prevState: string | undefined, formData
     termsApprovedBy: formData.get("termsApprovedBy") || undefined,
     termsReason: formData.get("termsReason") || undefined,
     dueDate: formData.get("dueDate") || undefined,
+    notes: formData.get("notes") || undefined,
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
@@ -73,6 +75,7 @@ export async function createOrderAction(_prevState: string | undefined, formData
       termsApprovedBy: data.paymentTermType === "APPROVED_TERMS" ? data.termsApprovedBy : undefined,
       termsReason: data.paymentTermType === "APPROVED_TERMS" ? data.termsReason : undefined,
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+      notes: data.notes,
       estimatedProductionCostSnapshot: costSnapshot?.fullyConfigured ? costSnapshot.totalCost : null,
       costSnapshotFullyConfigured: costSnapshot?.fullyConfigured ?? false,
       costSnapshotTakenAt: costSnapshot ? new Date() : null,
@@ -97,7 +100,7 @@ export async function createOrderAction(_prevState: string | undefined, formData
     `/orders/${order.id}`
   );
 
-  redirect(`/orders/${order.id}`);
+  redirect(`/orders/${order.id}?created=1`);
 }
 
 const jobOrderSchema = z.object({

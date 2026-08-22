@@ -11,11 +11,11 @@ import { notifyStaff } from "@/lib/notifications";
 import { tryCreateInstantQuotation } from "@/lib/instant-quotation";
 
 const inquirySchema = z.object({
-  customerId: z.string().optional(),
   description: z.string().min(5, "Please describe what you need."),
   serviceId: z.string().min(1, "Please select a service."),
   specs: z.string().optional(),
   roughQty: z.coerce.number().int().positive().optional(),
+  roughQtyUnit: z.string().max(40).optional(),
 });
 
 function parseSpecs(raw: string | undefined): Record<string, string> | undefined {
@@ -29,24 +29,22 @@ function parseSpecs(raw: string | undefined): Record<string, string> | undefined
 
 export async function createInquiryAction(_prevState: string | undefined, formData: FormData) {
   const user = await requireUser();
-  if (user.role === "STAFF") await requirePermission("INQUIRY_HANDLE");
-  else if (user.role !== "CUSTOMER" && user.role !== "ADMIN") throw new Error("Not allowed.");
+  // Aug 22 3rd update — workflow correction: Admin/Staff can create a
+  // Quotation directly and no longer need to (or may) submit an Inquiry on
+  // a customer's behalf. Inquiries are customer-only from here on.
+  if (user.role !== "CUSTOMER") throw new Error("Not allowed.");
 
   const parsed = inquirySchema.safeParse({
-    customerId: formData.get("customerId") || undefined,
     description: formData.get("description"),
     serviceId: formData.get("serviceId"),
     specs: formData.get("specs") || undefined,
     roughQty: formData.get("roughQty") || undefined,
+    roughQtyUnit: formData.get("roughQtyUnit") || undefined,
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
-  let customerId = parsed.data.customerId;
-  if (user.role === "CUSTOMER") {
-    const customer = await getCurrentCustomer(user.id);
-    customerId = customer.id;
-  }
-  if (!customerId) return "Please select a customer.";
+  const customer = await getCurrentCustomer(user.id);
+  const customerId = customer.id;
 
   const service = await prisma.service.findUnique({ where: { id: parsed.data.serviceId } });
   if (!service || !service.active) return "Please select a valid, active service.";
@@ -59,6 +57,7 @@ export async function createInquiryAction(_prevState: string | undefined, formDa
       serviceId: service.id,
       specs: parseSpecs(parsed.data.specs),
       roughQty: parsed.data.roughQty,
+      roughQtyUnit: parsed.data.roughQtyUnit,
     },
   });
 

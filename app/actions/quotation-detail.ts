@@ -28,10 +28,11 @@ export type QuotationDetailResult =
         customerName: string;
         customerEmail: string | null;
         customerContact: string | null;
-        lineItems: { id: string; productType: string; description: string; qty: number; unitPrice: string }[];
+        lineItems: { id: string; productType: string; description: string; qty: number; unit: string | null; unitPrice: string }[];
         subtotal: string | null;
         discountAmount: string;
         discountLabel: string | null;
+        taxAmount: string;
         total: string;
         notes: string | null;
         hasOrder: boolean;
@@ -78,11 +79,13 @@ export async function getQuotationDetailAction(id: string): Promise<QuotationDet
         productType: li.productType,
         description: li.description,
         qty: li.qty,
+        unit: li.unit,
         unitPrice: li.unitPrice.toString(),
       })),
       subtotal: quotation.subtotal != null ? quotation.subtotal.toString() : null,
       discountAmount: quotation.discountAmount.toString(),
       discountLabel: quotation.discountLabel,
+      taxAmount: quotation.taxAmount.toString(),
       total: quotation.total.toString(),
       notes: quotation.notes,
       hasOrder,

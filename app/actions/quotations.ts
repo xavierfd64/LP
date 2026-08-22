@@ -4,7 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
-import { requirePermission } from "@/lib/permissions-guard";
+import { requirePermission, can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { nextQuoteNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
@@ -16,10 +16,11 @@ import { calculatePricing } from "@/lib/pricing";
 const lineItemsSchema = z.array(
   z.object({
     serviceId: z.string().min(1, "Please select a service for every line item."),
-    description: z.string().min(1),
+    description: z.string().optional().default(""),
     qty: z.coerce.number().int().positive(),
+    unit: z.string().max(40).optional(),
     unitPrice: z.coerce.number().nonnegative(),
-    specs: z.string().optional(),
+    specs: z.record(z.string(), z.string()).optional(),
   })
 );
 
@@ -28,30 +29,29 @@ type ParsedLineItem = {
   productType: string;
   description: string;
   qty: number;
+  unit?: string;
   unitPrice: number;
   specs?: Record<string, string>;
 };
 
 /**
- * Parses the parallel per-row arrays submitted by LineItemsEditor and
+ * Parses the single `lineItemsJson` blob LineItemsEditor submits and
  * re-derives each row's `productType` snapshot from the live Service
  * Master server-side (never trusting the client-synced hidden field) —
- * also rejects any row whose service is unknown/inactive.
+ * also rejects any row whose service is unknown/inactive. A single JSON
+ * field (rather than parallel getAll() arrays) is deliberate: the editor
+ * renders both a desktop table and a mobile card layout for the same
+ * items at once (only one visible per breakpoint via CSS), so per-row
+ * named inputs would each submit twice.
  */
 async function parseLineItems(formData: FormData): Promise<{ success: true; data: ParsedLineItem[] } | { success: false; message: string }> {
-  const serviceIds = formData.getAll("serviceId") as string[];
-  const descriptions = formData.getAll("description") as string[];
-  const qtys = formData.getAll("qty") as string[];
-  const unitPrices = formData.getAll("unitPrice") as string[];
-  const specsRaw = formData.getAll("specs") as string[];
-
-  const rawItems = serviceIds.map((_, i) => ({
-    serviceId: serviceIds[i],
-    description: descriptions[i],
-    qty: qtys[i],
-    unitPrice: unitPrices[i],
-    specs: specsRaw[i] || undefined,
-  }));
+  const raw = formData.get("lineItemsJson");
+  let rawItems: unknown;
+  try {
+    rawItems = raw ? JSON.parse(raw as string) : [];
+  } catch {
+    return { success: false, message: "Invalid line items." };
+  }
 
   const parsed = lineItemsSchema.safeParse(rawItems);
   if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? "Invalid line items." };
@@ -64,17 +64,15 @@ async function parseLineItems(formData: FormData): Promise<{ success: true; data
   for (const li of parsed.data) {
     const service = serviceMap.get(li.serviceId);
     if (!service) return { success: false, message: "One or more selected services are invalid or inactive." };
-    let specs: Record<string, string> | undefined;
-    if (li.specs) {
-      try {
-        specs = JSON.parse(li.specs);
-      } catch {
-        specs = undefined;
-      }
-    }
-    items.push({ serviceId: service.id, productType: service.name, description: li.description, qty: li.qty, unitPrice: li.unitPrice, specs });
+    items.push({ serviceId: service.id, productType: service.name, description: li.description, qty: li.qty, unit: li.unit, unitPrice: li.unitPrice, specs: li.specs });
   }
   return { success: true, data: items };
+}
+
+function clampPct(raw: FormDataEntryValue | null): number {
+  const n = Number(raw ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
 }
 
 export async function createQuotationAction(_prevState: string | undefined, formData: FormData) {
@@ -84,6 +82,13 @@ export async function createQuotationAction(_prevState: string | undefined, form
   const inquiryId = (formData.get("inquiryId") as string) || undefined;
   const validUntilRaw = formData.get("validUntil") as string | null;
   const notesRaw = (formData.get("notes") as string) || undefined;
+  // Aug 22 3rd update — Quotation Totals now supports a manual overall
+  // Discount (%) and Tax/VAT (%), recomputed from the line items here
+  // (never trusting a client-submitted total) exactly like every other
+  // pricing figure in this codebase.
+  const discountPct = clampPct(formData.get("discountPct"));
+  const taxPct = clampPct(formData.get("taxPct"));
+  const intent = formData.get("intent") === "send" ? "send" : "draft";
 
   const parsedItems = await parseLineItems(formData);
   if (!customerId) return "Please select a customer.";
@@ -99,7 +104,15 @@ export async function createQuotationAction(_prevState: string | undefined, form
     }
   }
 
-  const total = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
+  if (intent === "send") {
+    const canSend = user.role === "ADMIN" || (await can(user, "QUOTATION_SEND"));
+    if (!canSend) return "You do not have permission to send quotations to a customer. Save as draft instead.";
+  }
+
+  const subtotal = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
+  const discountAmount = (subtotal * discountPct) / 100;
+  const taxAmount = ((subtotal - discountAmount) * taxPct) / 100;
+  const total = subtotal - discountAmount + taxAmount;
   const quoteNumber = await nextQuoteNumber();
 
   const quotation = await prisma.quotation.create({
@@ -107,10 +120,14 @@ export async function createQuotationAction(_prevState: string | undefined, form
       quoteNumber,
       customerId,
       inquiryId,
-      status: "DRAFT",
+      status: intent === "send" ? "SENT" : "DRAFT",
       createdById: user.id,
       validUntil: validUntilRaw ? new Date(validUntilRaw) : undefined,
       notes: notesRaw,
+      subtotal,
+      discountAmount,
+      discountLabel: discountPct > 0 ? `Discount (${discountPct}%)` : null,
+      taxAmount,
       total,
       lineItems: { create: parsedItems.data },
     },
@@ -121,6 +138,10 @@ export async function createQuotationAction(_prevState: string | undefined, form
   }
 
   await logAudit(user.id, "QUOTATION_CREATED", "Quotation", quotation.id, { total });
+  if (intent === "send") {
+    await logAudit(user.id, "QUOTATION_SENT", "Quotation", quotation.id);
+    await notifyCustomer(customerId, "QUOTATION_SENT", `Your quotation ${quotation.quoteNumber} is ready for review.`, `/quotations/${quotation.id}`);
+  }
 
   redirect(`/quotations/${quotation.id}`);
 }

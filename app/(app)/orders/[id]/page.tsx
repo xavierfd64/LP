@@ -135,6 +135,7 @@ export default async function OrderDetailPage({
   const commsData = !isStaffLike || canViewComms ? await getConversationMessagesAction(conversation.id) : null;
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
+  const justCreated = sp.created === "1";
 
   // Transaction history — this Order's own audit trail plus its Quotation's
   // and Job Orders', merged and sorted, reusing the existing AuditLog
@@ -174,6 +175,9 @@ export default async function OrderDetailPage({
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
+      {justCreated && isStaffLike && (
+        <Alert tone="success">After creating the order, you can generate a Job Order and proceed with production.</Alert>
+      )}
 
       {order.quotation && (
         <Card>

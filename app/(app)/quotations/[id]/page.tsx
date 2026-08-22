@@ -83,6 +83,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
         ...(Number(quotation.discountAmount) > 0
           ? [{ label: quotation.discountLabel ?? "Discount", value: formatCurrency(quotation.discountAmount.toString()), negative: true }]
           : []),
+        ...(Number(quotation.taxAmount) > 0 ? [{ label: "Tax / VAT", value: formatCurrency(quotation.taxAmount.toString()) }] : []),
       ]
     : [];
 
@@ -153,7 +154,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
 
       <EditorPanel title="Line Items">
         <LineItemsView
-          items={quotation.lineItems.map((li) => ({ id: li.id, productType: li.productType, description: li.description, qty: li.qty, unitPrice: li.unitPrice.toString() }))}
+          items={quotation.lineItems.map((li) => ({ id: li.id, productType: li.productType, description: li.description, qty: li.qty, unit: li.unit, unitPrice: li.unitPrice.toString() }))}
         />
         <TotalsPanel rows={totalsRows} total={{ label: "Total", value: formatCurrency(quotation.total.toString()) }} />
       </EditorPanel>

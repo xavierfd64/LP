@@ -43,6 +43,7 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
           ...(Number(detail.discountAmount) > 0
             ? [{ label: detail.discountLabel ?? "Discount", value: formatCurrency(detail.discountAmount), negative: true }]
             : []),
+          ...(Number(detail.taxAmount) > 0 ? [{ label: "Tax / VAT", value: formatCurrency(detail.taxAmount) }] : []),
         ]
       : [];
 
@@ -67,7 +68,7 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
 
             <section className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-brand-700">Line Items</h3>
-              <LineItemsView items={detail.lineItems.map((li) => ({ ...li, unitPrice: li.unitPrice }))} />
+              <LineItemsView items={detail.lineItems} />
               <TotalsPanel rows={totalsRows} total={{ label: "Grand Total", value: formatCurrency(detail.total) }} />
             </section>
 

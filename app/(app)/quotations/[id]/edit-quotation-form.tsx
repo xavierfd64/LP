@@ -19,6 +19,7 @@ export function EditQuotationForm({
   const action = editQuotationAction.bind(null, quotationId);
   const [error, formAction, pending] = useActionState(action, undefined);
   const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<LineItem[]>(lineItems);
 
   if (!open) {
     return (
@@ -35,7 +36,7 @@ export function EditQuotationForm({
         <Label htmlFor="validUntil">Valid until</Label>
         <Input id="validUntil" name="validUntil" type="date" />
       </div>
-      <LineItemsEditor initialItems={lineItems} />
+      <LineItemsEditor items={items} onChange={setItems} />
       <div>
         <Label htmlFor="notes">Notes (optional)</Label>
         <Textarea id="notes" name="notes" rows={2} defaultValue={notes ?? ""} />

@@ -31,7 +31,7 @@ export default async function QuotationPrintPage({ params }: PageProps<"/quotati
     redirect("/dashboard");
   }
 
-  const subtotal = quotation.lineItems.reduce((sum, li) => sum + li.qty * Number(li.unitPrice), 0);
+  const subtotal = quotation.subtotal != null ? Number(quotation.subtotal) : quotation.lineItems.reduce((sum, li) => sum + li.qty * Number(li.unitPrice), 0);
   const contact =
     quotation.customer.email ?? quotation.customer.contactNumber ?? quotation.customer.user?.email ?? quotation.customer.user?.phone ?? null;
 
@@ -62,7 +62,12 @@ export default async function QuotationPrintPage({ params }: PageProps<"/quotati
         />
       </DocumentSection>
 
-      <DocumentTotals subtotal={subtotal} grandTotal={Number(quotation.total)} />
+      <DocumentTotals
+        subtotal={subtotal}
+        discount={Number(quotation.discountAmount) > 0 ? Number(quotation.discountAmount) : undefined}
+        rows={Number(quotation.taxAmount) > 0 ? [{ label: "Tax / VAT", value: formatCurrency(Number(quotation.taxAmount)) }] : undefined}
+        grandTotal={Number(quotation.total)}
+      />
 
       <DocumentSection title="Approval">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
