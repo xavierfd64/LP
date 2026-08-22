@@ -1274,6 +1274,15 @@ model BusinessSettings {
   themeColorOverrides  Json    @default("{}")
   themeFontFamily      String  @default("montserrat")
 
+  // IANA timezone name (e.g. "Asia/Manila") — the single source of truth
+  // for how every timestamp in the app displays "local" business time.
+  // See instrumentation.ts, which reads this once at server start and sets
+  // process.env.TZ before any request is served: every existing
+  // formatDate/formatDateTime call and every un-timezone-qualified
+  // Date/toLocaleString computation (dashboard "today" boundaries, report
+  // periods, etc.) becomes timezone-correct with no per-call-site changes.
+  timezone String @default("Asia/Manila")
+
   updatedAt DateTime @updatedAt
 }
 

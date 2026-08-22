@@ -49,6 +49,7 @@ export type BusinessSettings = {
   activeTheme: string;
   themeColorOverrides: unknown;
   themeFontFamily: string;
+  timezone: string;
 };
 
 const FALLBACK: BusinessSettings = {
@@ -93,6 +94,7 @@ const FALLBACK: BusinessSettings = {
   activeTheme: "2026",
   themeColorOverrides: {},
   themeFontFamily: "montserrat",
+  timezone: "Asia/Manila",
 };
 
 /**

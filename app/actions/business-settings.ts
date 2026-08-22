@@ -37,7 +37,23 @@ const settingsSchema = z.object({
   postalCode: z.string().optional(),
   assignmentMode: z.enum(["MANUAL", "AUTOMATIC", "MANUAL_WITH_AUTO_FALLBACK"]),
   paymentInstructions: z.string().optional(),
+  timezone: z.string().min(1, "Select a timezone."),
 });
+
+/**
+ * A real IANA timezone name Node's Intl can resolve — rejects garbage
+ * input rather than trusting the <select>'s value blindly (defense in
+ * depth: a tampered form post shouldn't be able to set process.env.TZ,
+ * read by instrumentation.ts on next restart, to something invalid).
+ */
+function isValidTimeZone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function emptyToUndefined(v: FormDataEntryValue | null) {
   const s = (v as string) || "";
@@ -61,8 +77,10 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
     postalCode: emptyToUndefined(formData.get("postalCode")),
     assignmentMode: formData.get("assignmentMode"),
     paymentInstructions: emptyToUndefined(formData.get("paymentInstructions")),
+    timezone: formData.get("timezone"),
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+  if (!isValidTimeZone(parsed.data.timezone)) return "That timezone isn't recognized.";
 
   const data: Record<string, string | null> = {
     businessName: parsed.data.businessName,
@@ -78,6 +96,7 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
     postalCode: parsed.data.postalCode ?? null,
     assignmentMode: parsed.data.assignmentMode,
     paymentInstructions: parsed.data.paymentInstructions ?? null,
+    timezone: parsed.data.timezone,
   };
 
   // Branding source (spec items 48/49): each of logo/favicon independently

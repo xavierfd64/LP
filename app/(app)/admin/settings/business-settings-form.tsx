@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { BrandLogo } from "@/components/branding/brand-logo";
+import { BUSINESS_TIMEZONES } from "@/lib/business-timezones";
 import type { BusinessSettings } from "@/lib/business-settings";
 
 type ImageSource = "upload" | "url" | "default";
@@ -125,6 +126,28 @@ export function BusinessSettingsForm({ settings }: { settings: BusinessSettings 
             defaultValue={settings.paymentInstructions ?? ""}
             placeholder="e.g. GCash: 0917-000-0000 (Juan Dela Cruz) · BDO: 0012-3456-7890"
           />
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-700">Regional</h2>
+        <div>
+          <Label htmlFor="timezone">Business Time Zone</Label>
+          <Select id="timezone" name="timezone" defaultValue={settings.timezone} className="max-w-sm">
+            {!BUSINESS_TIMEZONES.some((tz) => tz.value === settings.timezone) && (
+              <option value={settings.timezone}>{settings.timezone}</option>
+            )}
+            {BUSINESS_TIMEZONES.map((tz) => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label}
+              </option>
+            ))}
+          </Select>
+          <p className="mt-1 text-xs text-slate-400">
+            Every timestamp in the app — inquiries, quotations, orders, payments, production, dashboard dates, and
+            reports — displays in this time zone. Takes effect the next time the server restarts (e.g. the next
+            deploy), not instantly.
+          </p>
         </div>
       </section>
 
