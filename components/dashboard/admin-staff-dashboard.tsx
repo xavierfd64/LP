@@ -1,6 +1,5 @@
 import { Wallet, Package, CreditCard, Inbox, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getBusinessSettings } from "@/lib/business-settings";
 import { SectionHeader } from "./section-header";
 import { KpiCard } from "./kpi-card";
 import { NeedsAttention } from "./needs-attention";
@@ -56,7 +55,7 @@ export async function AdminStaffDashboard({
   canMessageCustomers: boolean;
   quickActions: QuickAction[];
 }) {
-  const [kpis, needsAttention, financial, receivables, production, activity, upcoming, insights, charts, revenueTrend, settings, financialFoundation] = await Promise.all([
+  const [kpis, needsAttention, financial, receivables, production, activity, upcoming, insights, charts, revenueTrend, financialFoundation] = await Promise.all([
     getPrimaryKpis(),
     getNeedsAttention(),
     getFinancialOverview("month"),
@@ -67,19 +66,8 @@ export async function AdminStaffDashboard({
     getBusinessInsights(),
     getStatusCharts(),
     canSeeFinancials ? getRevenueTrend6Months() : Promise.resolve([]),
-    getBusinessSettings(),
     canSeeFinancials ? computeFinancialFoundation(resolvePeriodRange({ type: "monthly" })) : Promise.resolve(null),
   ]);
-  // Theme-conditional visual differences only (colored KPI icon tiles, a
-  // donut instead of a bar for Orders by Status) — same data in every
-  // case, see kpi-card.tsx's and admin-charts.tsx's own doc comments.
-  // Nextgen and ProLine both use icon tiles (ProLine's reference
-  // illustration shows the same icon-badge KPI treatment); ProLine keeps
-  // the plainer bar chart rather than nextgen's donut, matching its more
-  // restrained visual language.
-  const isNextgen = settings.activeTheme === "nextgen";
-  const isProline = settings.activeTheme === "proline";
-  const showKpiIcons = isNextgen || isProline;
 
   const firstName = name.split(" ")[0];
   const todayLabel = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -98,13 +86,13 @@ export async function AdminStaffDashboard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <KpiCard
           label="Today's Sales"
           value={formatCurrency(kpis.todaySales)}
           sub={salesTrend}
           href={canSeeFinancials ? "/reports/summary" : undefined}
-          icon={showKpiIcons ? TrendingUp : undefined}
+          icon={TrendingUp}
           iconTone="green"
         />
         {canSeeFinancials && (
@@ -113,7 +101,7 @@ export async function AdminStaffDashboard({
             value={formatCurrency(kpis.outstandingBalance)}
             sub={`${kpis.outstandingCustomerCount} customer${kpis.outstandingCustomerCount === 1 ? "" : "s"}`}
             href="/payments"
-            icon={showKpiIcons ? Wallet : undefined}
+            icon={Wallet}
             iconTone="red"
           />
         )}
@@ -122,7 +110,7 @@ export async function AdminStaffDashboard({
           value={kpis.openOrders}
           sub={`${kpis.inProductionCount} in production`}
           href="/orders"
-          icon={showKpiIcons ? Package : undefined}
+          icon={Package}
           iconTone="blue"
         />
         {canSeeFinancials && (
@@ -132,7 +120,7 @@ export async function AdminStaffDashboard({
             sub={formatCurrency(kpis.pendingPaymentsAmount)}
             href="/payments"
             tone={kpis.pendingPaymentsCount > 0 ? "attention" : undefined}
-            icon={showKpiIcons ? CreditCard : undefined}
+            icon={CreditCard}
             iconTone="orange"
           />
         )}
@@ -142,7 +130,7 @@ export async function AdminStaffDashboard({
           sub="Today"
           href="/inquiries"
           tone={kpis.newInquiries > 0 ? "attention" : undefined}
-          icon={showKpiIcons ? Inbox : undefined}
+          icon={Inbox}
           iconTone="purple"
         />
       </div>
@@ -153,13 +141,8 @@ export async function AdminStaffDashboard({
         {canSeeFinancials && <ReceivablesList rows={receivables} canMessage={canMessageCustomers} />}
       </div>
 
-      {canSeeFinancials && financialFoundation && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FinancialFoundationCard fin={financialFoundation} />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {canSeeFinancials && financialFoundation && <FinancialFoundationCard fin={financialFoundation} />}
         <ProductionToday stages={production} />
         <TodaysActivity rows={activity} showAmounts={canSeeFinancials} />
       </div>
@@ -170,7 +153,7 @@ export async function AdminStaffDashboard({
             <SectionHeader title="Orders by Status" />
           </CardHeader>
           <CardContent>
-            <OrdersByStatusChart data={charts.ordersByStatus} variant={isNextgen ? "donut" : "bar"} />
+            <OrdersByStatusChart data={charts.ordersByStatus} variant="donut" />
           </CardContent>
         </Card>
         {canSeeFinancials && (

@@ -11,17 +11,14 @@ const ICON_TONE_CLASSES: Record<string, string> = {
 };
 
 /**
- * Primary KPI tile (spec item 11) — the number is the dominant element,
- * a subtitle carries the trend/context, and the whole card is clickable
- * when a destination makes sense. Kept visually uniform across the row
- * (spec item 25's "do not make every card visually different").
+ * Primary KPI tile — the number is the dominant element, a subtitle
+ * carries the trend/context, and the whole card is clickable when a
+ * destination makes sense. Kept visually uniform across the row (spec:
+ * "do not make every card visually different").
  *
- * `icon`/`iconTone` are Nextgen-theme-only (Aug 19 1st update) — a plain
- * Server Component prop (no client boundary crossed, unlike the earlier
- * nav-icon lesson: both this component and every caller are Server
- * Components), rendered only when the caller passes them, which callers
- * only do when the active theme is "nextgen". The 2026 theme's cards stay
- * exactly as before when these are omitted.
+ * `icon`/`iconTone` render a small colored icon tile above the label
+ * (Aug 22 dashboard redesign) — every caller passes these now, applied
+ * uniformly across themes rather than gated to a specific theme.
  */
 export function KpiCard({
   label,
@@ -49,7 +46,7 @@ export function KpiCard({
           </div>
         )}
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-        <p className="mt-1 text-2xl font-bold text-slate-900 md:text-3xl">{value}</p>
+        <p className="mt-1 text-2xl font-bold text-slate-900 lg:text-3xl">{value}</p>
         {sub && <p className={cn("mt-0.5 text-xs", tone === "attention" ? "font-medium text-red-600" : "text-slate-400")}>{sub}</p>}
       </CardContent>
     </Card>

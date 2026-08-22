@@ -56,22 +56,40 @@ export function OrdersByStatusChart({ data, variant = "bar" }: { data: { status:
   if (variant === "donut") {
     const total = data.reduce((sum, d) => sum + d.count, 0);
     return (
-      <div>
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie data={data} dataKey="count" nameKey="status" innerRadius={55} outerRadius={85} paddingAngle={2}>
-              {data.map((d) => (
-                <Cell key={d.status} fill={STATUS_COLORS[d.status] ?? DEFAULT_COLOR} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(value) => [value, "Orders"]} labelFormatter={(v) => label(String(v))} contentStyle={tooltipStyle} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="mt-1 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-slate-500">
+      <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <div className="relative h-[180px] w-[180px] shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="count"
+                nameKey="status"
+                cx="50%"
+                cy="50%"
+                innerRadius={55}
+                outerRadius={85}
+                paddingAngle={2}
+              >
+                {data.map((d) => (
+                  <Cell key={d.status} fill={STATUS_COLORS[d.status] ?? DEFAULT_COLOR} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => [value, "Orders"]} labelFormatter={(v) => label(String(v))} contentStyle={tooltipStyle} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-2xl font-bold text-slate-900">{total}</span>
+            <span className="text-[11px] text-slate-500">Total Orders</span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5 text-xs text-slate-600">
           {data.map((d) => (
             <span key={d.status} className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: STATUS_COLORS[d.status] ?? DEFAULT_COLOR }} />
-              {label(d.status)} ({total > 0 ? Math.round((d.count / total) * 100) : 0}%)
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: STATUS_COLORS[d.status] ?? DEFAULT_COLOR }} />
+              <span className="font-medium text-slate-700">{label(d.status)}</span>
+              <span className="text-slate-400">
+                {d.count} ({total > 0 ? Math.round((d.count / total) * 100) : 0}%)
+              </span>
             </span>
           ))}
         </div>

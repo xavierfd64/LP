@@ -1,20 +1,29 @@
 import Link from "next/link";
+import { Inbox, FileText, Package, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { SectionHeader } from "./section-header";
-import { StatusBadge } from "@/components/ui/badge";
-import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
-import { formatCurrency } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/table";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { ActivityRow } from "@/lib/dashboard-data";
+
+// Same tone family as kpi-card.tsx's ICON_TONE_CLASSES, one icon per
+// transaction type so the feed reads at a glance (Aug 22 dashboard
+// redesign) — mirrors the KPI row's own icon-tile treatment rather than
+// introducing a separate visual language for this one card.
+const TYPE_ICON: Record<ActivityRow["transaction"], { icon: React.ComponentType<{ className?: string }>; cls: string }> = {
+  Inquiry: { icon: Inbox, cls: "bg-accent-100 text-accent-600" },
+  Quotation: { icon: FileText, cls: "bg-info-100 text-info-600" },
+  "Job Order": { icon: Package, cls: "bg-warning-100 text-warning-600" },
+  Payment: { icon: Wallet, cls: "bg-success-100 text-success-600" },
+};
 
 /**
  * Spec item 19 — every row is a real record; clicking it opens the actual
- * existing detail page, never a synthetic activity feed entity. Cell
- * padding/min-widths are overridden locally here (9th update, item 25's
- * "do not redesign unrelated components") rather than in the shared
- * Table/TH/TD primitives those defaults would also change every other
- * table in the app — this is a spacing correction scoped to this one
- * component. Horizontal scroll, when it's needed at all, stays contained
- * inside the CardContent's own overflow-x-auto wrapper, never the page.
+ * existing detail page, never a synthetic activity feed entity. A compact
+ * icon feed (rather than a wide data table) so this reads well at the
+ * narrower 1/3-column width it now shares a row with (Aug 22 dashboard
+ * redesign) — same underlying rows/fields, just a denser presentation;
+ * status is still one click away on the linked detail page.
  */
 export function TodaysActivity({ rows, showAmounts }: { rows: ActivityRow[]; showAmounts: boolean }) {
   return (
@@ -24,45 +33,31 @@ export function TodaysActivity({ rows, showAmounts }: { rows: ActivityRow[]; sho
       </CardHeader>
       <CardContent className="p-0">
         {rows.length === 0 ? (
-          <EmptyState label="No transactions recorded today." />
+          <div className="px-5 py-4">
+            <EmptyState label="No transactions recorded today." />
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table className="min-w-[640px]">
-              <THead>
-                <TR>
-                  <TH className="px-5 py-3 whitespace-nowrap">Time</TH>
-                  <TH className="min-w-[140px] px-5 py-3">Customer</TH>
-                  <TH className="min-w-[120px] px-5 py-3">Transaction</TH>
-                  <TH className="min-w-[130px] px-5 py-3">Reference</TH>
-                  {showAmounts && <TH className="min-w-[110px] px-5 py-3 text-right">Amount</TH>}
-                  <TH className="px-5 py-3">Status</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {rows.map((r) => (
-                  <TR key={r.id}>
-                    <TD className="whitespace-nowrap px-5 py-3.5 text-xs text-slate-400">
-                      {r.time.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-                    </TD>
-                    <TD className="px-5 py-3.5 text-sm leading-snug break-words">{r.customer}</TD>
-                    <TD className="px-5 py-3.5 text-sm leading-snug break-words text-slate-500">{r.transaction}</TD>
-                    <TD className="px-5 py-3.5 leading-snug break-words">
-                      <Link href={r.href} className="text-sm font-medium text-slate-900 underline">
-                        {r.reference}
-                      </Link>
-                    </TD>
-                    {showAmounts && (
-                      <TD className="whitespace-nowrap px-5 py-3.5 text-right text-sm">
-                        {r.amount !== null ? formatCurrency(r.amount) : "—"}
-                      </TD>
-                    )}
-                    <TD className="px-5 py-3.5">
-                      <StatusBadge status={r.status} />
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
+          <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto">
+            {rows.map((r) => {
+              const { icon: Icon, cls } = TYPE_ICON[r.transaction];
+              return (
+                <Link key={r.id} href={r.href} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
+                  <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full", cls)}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-slate-900">{r.customer}</span>
+                    <span className="block text-xs text-slate-400">
+                      {r.time.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · {r.transaction}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="block text-xs font-semibold text-slate-700">{r.reference}</span>
+                    {showAmounts && r.amount !== null && <span className="block text-xs text-slate-400">{formatCurrency(r.amount)}</span>}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         )}
       </CardContent>

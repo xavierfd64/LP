@@ -15,7 +15,7 @@ export function ProductionToday({ stages }: { stages: ProductionStageCount[] }) 
         {stages.length === 0 ? (
           <EmptyState label="No active job orders in production." />
         ) : (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2">
             {stages.map((s) => (
               <Link
                 key={s.stage}
@@ -23,7 +23,7 @@ export function ProductionToday({ stages }: { stages: ProductionStageCount[] }) 
                 className="rounded-md border border-slate-100 px-2 py-2.5 text-center transition-colors hover:border-brand-200 hover:bg-brand-50"
               >
                 <p className="text-lg font-bold text-slate-900">{s.count}</p>
-                <p className="truncate text-[11px] uppercase tracking-wide text-slate-500">{s.stage}</p>
+                <p className="line-clamp-2 text-[11px] uppercase leading-tight tracking-wide text-slate-500">{s.stage}</p>
               </Link>
             ))}
           </div>
