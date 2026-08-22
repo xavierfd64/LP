@@ -154,6 +154,17 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    category: "Customer Form",
+    permissions: [
+      { key: "FORM_VIEW", label: "View customer forms" },
+      { key: "FORM_CREATE", label: "Generate customer forms and links" },
+      { key: "FORM_MANAGE_LINK", label: "Resend/copy/regenerate form links" },
+      { key: "FORM_EDIT", label: "Add/edit/delete unprinted form items, add items/orders" },
+      { key: "FORM_REOPEN", label: "Reopen a submitted/locked customer form" },
+      { key: "FORM_ITEM_UNLOCK_OVERRIDE", label: "Override a printed item's lock (exceptional)" },
+    ],
+  },
+  {
     category: "Statement of Account",
     permissions: [
       { key: "SOA_VIEW", label: "View statements of account" },
@@ -229,6 +240,10 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "DOCUMENT_SHARE",
     "DOCUMENT_DOWNLOAD",
     "ORDER_TRACKING_MANAGE",
+    "FORM_VIEW",
+    "FORM_CREATE",
+    "FORM_MANAGE_LINK",
+    "FORM_EDIT",
   ],
   Cashier: [
     "ORDER_VIEW",
@@ -274,6 +289,11 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "SOA_SHARE",
     "SOA_REVOKE",
     "EMAIL_LOG_VIEW",
+    "FORM_VIEW",
+    "FORM_CREATE",
+    "FORM_MANAGE_LINK",
+    "FORM_EDIT",
+    "FORM_REOPEN",
   ],
   "Production Staff": [
     "ORDER_VIEW",
@@ -281,6 +301,7 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "PRODUCTION_UPDATE_STAGE",
     "PRODUCTION_MARK_STAGE_COMPLETE",
     "PRODUCTION_MARK_COMPLETE",
+    "FORM_VIEW",
   ],
   "Fulfillment Staff": [
     "ORDER_VIEW",

@@ -36,6 +36,9 @@ export const MESSENGER_EVENTS: Record<string, { category: MessengerCategory; lab
   ORDER_COMPLETED: { category: "DELIVERY", label: "Order Completed" },
   SOA_GENERATED: { category: "SOA_REMINDER", label: "Statement of Account Generated" },
   SOA_PAYMENT_REMINDER: { category: "SOA_REMINDER", label: "SOA Payment Reminder" },
+  FORM_LINK_SENT: { category: "PRODUCTION", label: "Customer Form Link Sent" },
+  FORM_REOPENED: { category: "PRODUCTION", label: "Customer Form Reopened" },
+  FORM_ITEM_ADDED: { category: "PRODUCTION", label: "Customer Form Items Added" },
   // Sent from the Production Kanban's Messenger Dispatch dialog, not the
   // automatic per-event funnel above — label-only entry (never checked
   // against messengerEventSettings) so it displays cleanly in the log.

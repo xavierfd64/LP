@@ -24,6 +24,7 @@ import {
 } from "@/app/actions/fulfillment";
 import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
 import { DocumentShareManager } from "@/components/documents/document-share-manager";
+import { GenerateFormDialog } from "./generate-form-dialog";
 import { findActiveShareLink } from "@/lib/document-sharing";
 import { TrackingLinkManager } from "@/app/(app)/orders/[id]/tracking-link-manager";
 import { findActiveTrackingLink } from "@/lib/order-tracking";
@@ -52,6 +53,7 @@ export default async function JobOrderDetailPage({
       files: { orderBy: [{ category: "asc" }, { version: "desc" }], include: { uploadedBy: true } },
       fulfillments: { orderBy: { createdAt: "desc" } },
       materialConsumptions: { orderBy: { createdAt: "desc" }, include: { inventoryItem: true } },
+      customerForm: { include: { items: true } },
     },
   });
   if (!jo) notFound();
@@ -86,6 +88,8 @@ export default async function JobOrderDetailPage({
   const activeShareLink = canShare ? await findActiveShareLink("JOB_ORDER", jo.id) : null;
   const canManageTracking = isStaffLike && (isAdmin || (await can(user, "ORDER_TRACKING_MANAGE")));
   const activeTrackingLink = canManageTracking ? await findActiveTrackingLink(jo.orderId) : null;
+  const canCreateForm = isAdmin || (isStaffLike && (await can(user, "FORM_CREATE")));
+  const canViewForm = isAdmin || (isStaffLike && (await can(user, "FORM_VIEW")));
 
   // Aug 20 5th update, Part 5 — production/admin see expected-vs-available
   // material quantities and can record what was actually consumed; the
@@ -165,14 +169,25 @@ export default async function JobOrderDetailPage({
             <CardTitle>Record QC result</CardTitle>
           </CardHeader>
           <CardContent>
-            <QCForm
-              jobOrderId={jo.id}
-              quantity={jo.quantity}
-              stages={jo.workflowTemplate.stages.filter((s) => !s.isQCStage)}
-              defaultAssignedStage={
-                jo.workflowTemplate.stages.find((s) => s.order === jo.currentStageOrder - 1)?.name
-              }
-            />
+            {jo.customerForm && jo.customerForm.items.length > 0 ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-600">
+                  A Customer Form with {jo.customerForm.items.length} item(s) is linked to this job order — use the per-item QC Checklist.
+                </p>
+                <Link href={`/job-orders/${jo.id}/qc-checklist`}>
+                  <Button type="button">Open QC Checklist</Button>
+                </Link>
+              </div>
+            ) : (
+              <QCForm
+                jobOrderId={jo.id}
+                quantity={jo.quantity}
+                stages={jo.workflowTemplate.stages.filter((s) => !s.isQCStage)}
+                defaultAssignedStage={
+                  jo.workflowTemplate.stages.find((s) => s.order === jo.currentStageOrder - 1)?.name
+                }
+              />
+            )}
           </CardContent>
         </Card>
       )}
@@ -577,6 +592,35 @@ export default async function JobOrderDetailPage({
 
       {((isStaffLike && canViewComms) || user.role === "CUSTOMER") && (
         <DiscussInChatboxButton refType="JOB_ORDER" refId={jo.id} label={jo.joNumber} />
+      )}
+
+      {canViewForm && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Form</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {jo.customerForm ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">{jo.customerForm.title}</p>
+                  <p className="text-xs text-slate-500">
+                    Status: {jo.customerForm.status === "SUBMITTED" ? "Submitted & Locked" : "Open — awaiting customer"}
+                  </p>
+                </div>
+                <Link href={`/forms/${jo.customerForm.id}`}>
+                  <Button type="button" variant="outline" size="sm">
+                    View Form
+                  </Button>
+                </Link>
+              </div>
+            ) : canCreateForm ? (
+              <GenerateFormDialog jobOrderId={jo.id} defaultTitle={`${jo.productType} Form`} defaultQty={jo.quantity} />
+            ) : (
+              <p className="text-sm text-slate-400">No customer form has been generated for this job order yet.</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {canShare && (

@@ -45,6 +45,10 @@ export const EMAIL_EVENTS = {
   SOA_SHARED: { label: "Statement of Account Shared", category: "Statement of Account" },
   SOA_PAYMENT_REMINDER: { label: "SOA Payment Reminder", category: "Statement of Account" },
   PASSWORD_RESET: { label: "Password Reset Requested", category: "Account" },
+  FORM_LINK_SENT: { label: "Customer Form Link Sent", category: "Customer Form" },
+  FORM_SUBMITTED: { label: "Customer Form Submitted", category: "Customer Form" },
+  FORM_REOPENED: { label: "Customer Form Reopened", category: "Customer Form" },
+  FORM_ITEM_ADDED: { label: "Customer Form Items Added", category: "Customer Form" },
 } as const;
 
 /** Notification types that stay bell/Chatbox-only — chat activity and short-lived reminders aren't a good fit for an external email per event. */
@@ -78,6 +82,7 @@ export const EMAIL_VARIABLES = [
   "tracking_link",
   "document_link",
   "soa_link",
+  "form_link",
   "reset_link",
   "business_name",
   "business_phone",

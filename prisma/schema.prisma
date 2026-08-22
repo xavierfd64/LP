@@ -243,6 +243,13 @@ enum Permission {
   DOCUMENT_REVOKE
   ORDER_TRACKING_MANAGE
 
+  FORM_VIEW
+  FORM_CREATE
+  FORM_MANAGE_LINK
+  FORM_EDIT
+  FORM_REOPEN
+  FORM_ITEM_UNLOCK_OVERRIDE
+
   SOA_VIEW
   SOA_GENERATE
   SOA_SHARE
@@ -312,6 +319,13 @@ model User {
   supplyLotsCancelled     SupplyLot[] @relation("SupplyLotCancelledBy")
   consumptionsCreated     JobOrderMaterialConsumption[] @relation("ConsumptionCreatedBy")
   consumptionsReversed    JobOrderMaterialConsumption[] @relation("ConsumptionReversedBy")
+  customerFormsCreated    CustomerForm[] @relation("CustomerFormCreatedBy")
+  customerFormsReopened   CustomerForm[] @relation("CustomerFormReopenedBy")
+  formItemsPrinted        CustomerFormItem[] @relation("FormItemPrintedBy")
+  formItemsQcChecked      CustomerFormItem[] @relation("FormItemQcCheckedBy")
+  formLinksCreated        CustomerFormLink[]
+  formDeliveriesSent      CustomerFormDelivery[]
+  formOrdersAdded         CustomerFormOrder[]
 }
 
 // Existence of a row = granted. Only meaningful for role=STAFF users — ADMIN
@@ -374,6 +388,7 @@ model Customer {
   statementSchedules StatementSchedule[]
   messengerConnection MessengerConnection?
   messengerLogs       MessengerLog[]
+  customerForms       CustomerForm[]
 
   @@index([name])
   @@index([email])
@@ -519,6 +534,8 @@ model Order {
   shareLinks    DocumentShareLink[]
   trackingLinks OrderTrackingLink[]
   adjustments   AccountAdjustment[]
+  customerForms CustomerForm[]
+  formOrderAdditions CustomerFormOrder[]
 }
 
 model WorkflowTemplate {
@@ -747,6 +764,7 @@ model JobOrder {
   referencedInMessages Message[]
   shareLinks    DocumentShareLink[]
   materialConsumptions JobOrderMaterialConsumption[]
+  customerForm  CustomerForm?
 
   @@unique([orderId, joNumber])
 }
@@ -1330,6 +1348,161 @@ model OrderTrackingLink {
   viewCount    Int      @default(0)
   lastViewedAt DateTime?
   createdAt DateTime  @default(now())
+}
+
+enum CustomerFormStatus {
+  OPEN
+  SUBMITTED
+}
+
+enum FormDeliveryMethod {
+  EMAIL
+  MESSENGER
+  DIRECT_LINK
+  SMS
+}
+
+enum FormDeliveryStatus {
+  SENT
+  DELIVERED
+  COPIED
+  PENDING
+  FAILED
+}
+
+/**
+ * Aug 22 Update 5 — the Customer Form that connects a Job Order's
+ * production specifics (per-item size/name/number/qty, mirroring
+ * QuotationLineItem's shape rather than a hardcoded jersey-only column
+ * set) to a customer-facing, login-free, token-authorized fill-in page.
+ * One form per Job Order (1:1, `jobOrderId @unique`) — a job order that
+ * needs a second batch of items uses "Add Items" on the SAME form rather
+ * than a second form, and "Add Order" attaches an additional Order via
+ * CustomerFormOrder without creating a second form either (spec 7.1/7.2:
+ * "do not silently merge unrelated orders" / "preserve all existing
+ * items"). `status` alone is the one-time-submission lock: OPEN means the
+ * customer may still edit and submit; SUBMITTED means the form is locked
+ * and only an authorized Admin/Staff reopen (logged via AuditLog, see
+ * lib/audit.ts) can set it back to OPEN. Item-level print locks
+ * (CustomerFormItem.printed) are a SEPARATE, narrower lock that
+ * reopening this form must never clear (spec item 6's explicit rule).
+ */
+model CustomerForm {
+  id           String             @id @default(cuid())
+  jobOrderId   String             @unique
+  jobOrder     JobOrder           @relation(fields: [jobOrderId], references: [id])
+  orderId      String
+  order        Order              @relation(fields: [orderId], references: [id])
+  customerId   String
+  customer     Customer           @relation(fields: [customerId], references: [id])
+  formType     String
+  title        String
+  instructions String?
+  status       CustomerFormStatus @default(OPEN)
+  deadline     DateTime?
+  notes        String?
+  submittedAt  DateTime?
+
+  lastReopenedAt   DateTime?
+  lastReopenedById String?
+  lastReopenedBy   User?    @relation("CustomerFormReopenedBy", fields: [lastReopenedById], references: [id])
+  lastReopenReason String?
+
+  createdById String
+  createdBy   User     @relation("CustomerFormCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items          CustomerFormItem[]
+  links          CustomerFormLink[]
+  deliveries     CustomerFormDelivery[]
+  additionalOrders CustomerFormOrder[]
+}
+
+/**
+ * One row per jersey/product entry the customer (or staff, via Add Items)
+ * fills in — `specs` reuses the same Service.specFields-driven dynamic
+ * field mechanism already used by Inquiry/Quotation line items (spec's
+ * "Size"/"Number" columns are per-service-configurable, never hardcoded
+ * to jerseys). `printed`/`printedAt`/`printedById` is the item-level lock
+ * (spec item 6) — set only by an explicit "Mark as Printed" Staff/Admin
+ * action (never inferred from the Job Order's overall stage, which
+ * advances as a whole while items print incrementally within it) and
+ * never cleared by reopening the parent form. `qcChecked`* backs the QC
+ * Checklist (spec item 9) directly off this same row — no second,
+ * duplicated QC-item data structure.
+ */
+model CustomerFormItem {
+  id          String   @id @default(cuid())
+  formId      String
+  form        CustomerForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  sortOrder   Int
+  name        String
+  specs       Json?
+  notes       String?
+  qty         Int
+
+  printed     Boolean   @default(false)
+  printedAt   DateTime?
+  printedById String?
+  printedBy   User?     @relation("FormItemPrintedBy", fields: [printedById], references: [id])
+
+  qcChecked     Boolean   @default(false)
+  qcCheckedAt   DateTime?
+  qcCheckedById String?
+  qcCheckedBy   User?     @relation("FormItemQcCheckedBy", fields: [qcCheckedById], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/**
+ * A token the customer form is reachable at — same shape/expiry/revoke
+ * pattern as DocumentShareLink/OrderTrackingLink (see generateSecureToken
+ * in lib/order-tracking.ts). Regenerating creates a new row and revokes
+ * the previous one rather than mutating it in place, so the delivery
+ * history (CustomerFormDelivery, a separate model) always stays intact —
+ * spec 8's "do not destroy the historical delivery record."
+ */
+model CustomerFormLink {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  formId      String
+  form        CustomerForm @relation(fields: [formId], references: [id])
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  viewCount   Int      @default(0)
+  lastViewedAt DateTime?
+  createdAt   DateTime @default(now())
+}
+
+/** One row per delivery attempt (spec item 8) — deliberately a real queryable table, not just AuditLog entries, since the Form Link & Delivery view needs a structured per-method/recipient/status ledger with its own Resend actions. */
+model CustomerFormDelivery {
+  id            String   @id @default(cuid())
+  formId        String
+  form          CustomerForm @relation(fields: [formId], references: [id])
+  method        FormDeliveryMethod
+  recipient     String
+  deliveredById String?
+  deliveredBy   User?    @relation(fields: [deliveredById], references: [id])
+  status        FormDeliveryStatus
+  detail        String?
+  createdAt     DateTime @default(now())
+}
+
+/** An additional Order attached to an existing form (spec 7.2) — the form's own `orderId` stays the original/primary order; this join table lists whatever else has been attached since, without merging or replacing it. */
+model CustomerFormOrder {
+  id        String   @id @default(cuid())
+  formId    String
+  form      CustomerForm @relation(fields: [formId], references: [id])
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  addedById String
+  addedBy   User     @relation(fields: [addedById], references: [id])
+  note      String?
+  createdAt DateTime @default(now())
 }
 
 /**

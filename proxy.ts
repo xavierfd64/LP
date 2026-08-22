@@ -14,7 +14,7 @@ const PUBLIC_PATHS = ["/", "/login", "/register", "/forgot-password"];
 // token IS the authorization, like /track and /documents).
 // Meta's webhook has no session either — it authenticates itself via the
 // hub.verify_token handshake / X-Hub-Signature-256, checked inside the route.
-const PUBLIC_PATH_PREFIXES = ["/track/", "/documents/", "/reset-password/", "/api/messenger/"];
+const PUBLIC_PATH_PREFIXES = ["/track/", "/documents/", "/form/", "/reset-password/", "/api/messenger/"];
 
 // Path prefix -> roles allowed. Missing entry = any authenticated role.
 const ROLE_RULES: { prefix: string; roles: string[] }[] = [
