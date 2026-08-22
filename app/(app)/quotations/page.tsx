@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { ListFilters } from "@/components/lists/list-filters";
 import { ListPagination } from "@/components/lists/list-pagination";
@@ -49,7 +48,6 @@ export default async function QuotationsPage({ searchParams }: PageProps<"/quota
 
     return (
       <div className="space-y-6">
-        <TransactionBrandHeader />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">My Quotations</h1>
@@ -114,7 +112,6 @@ export default async function QuotationsPage({ searchParams }: PageProps<"/quota
 
   return (
     <div className="space-y-6">
-      <TransactionBrandHeader />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Quotations</h1>

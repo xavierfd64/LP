@@ -20,7 +20,6 @@ import { RecordPaymentModal } from "./record-payment-modal";
 import { PaymentFilters } from "./payment-filters";
 import { PaymentsPagination } from "./payments-pagination";
 import { ExportPaymentsDialog } from "./export-payments-dialog";
-import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 
 const PAGE_SIZE = 15;
 
@@ -67,7 +66,6 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
     return (
       <div className="space-y-6">
-        <TransactionBrandHeader />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{isSoaView ? "Statement of Account" : "My Payments"}</h1>
@@ -280,7 +278,6 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
   return (
     <div className="space-y-6">
-      <TransactionBrandHeader />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Payments</h1>

@@ -87,6 +87,9 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
                 .
               </Alert>
             )}
+            {!detail.hasOrder && !detail.canConvertToOrder && detail.status !== "APPROVED" && (
+              <Alert tone="info">Convert to Order becomes available once this quotation is Approved.</Alert>
+            )}
           </>
         )}
       </ModalBody>

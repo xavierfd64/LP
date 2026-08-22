@@ -87,6 +87,9 @@ export function InquiryDetailModal({ inquiryId, onClose }: { inquiryId: string; 
                 .
               </Alert>
             )}
+            {!detail.canCreateQuotation && !detail.activeQuotation && (detail.status === "CLOSED" || detail.status === "CANCELLED") && (
+              <Alert tone="info">This inquiry is {detail.status.toLowerCase()} — no further quotation actions are available.</Alert>
+            )}
           </>
         )}
       </ModalBody>
