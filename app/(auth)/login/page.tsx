@@ -44,7 +44,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
       <div className="rounded-md border border-slate-200 bg-white p-3 text-center">
         <p className="text-sm text-slate-500">Don&apos;t want to log in?</p>
-        <Link href="/">
+        {/* /track, not "/" — "/" redirects an authenticated visitor to their
+            dashboard, which from the login page (right after a logout) could
+            look like an automatic re-login. /track never checks session. */}
+        <Link href="/track">
           <Button type="button" variant="outline" className="mt-2 w-full">
             Track Your Order
           </Button>
