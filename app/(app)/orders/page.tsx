@@ -18,6 +18,7 @@ import { getOrdersSummary, getPaginatedOrders } from "@/lib/orders-list";
 import { exportOrdersAction } from "@/app/actions/orders-export";
 import { ORDER_EXPORT_COLUMNS, DEFAULT_ORDER_EXPORT_COLUMNS } from "@/lib/order-export-columns";
 import { OrdersTable, type OrderRow } from "./orders-table";
+import { NewOrderTrigger } from "./new-order-trigger";
 import type { PaymentFilterPeriod } from "@/lib/payment-filter-periods";
 
 const PAGE_SIZE = 15;
@@ -129,11 +130,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
           <h1 className="text-2xl font-bold text-slate-900">Orders</h1>
           <p className="text-sm text-slate-500">Track job orders, payments, and fulfillment.</p>
         </div>
-        {canCreate && (
-          <Link href="/orders/new">
-            <Button>+ New Order</Button>
-          </Link>
-        )}
+        {canCreate && <NewOrderTrigger />}
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

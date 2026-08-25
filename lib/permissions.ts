@@ -221,6 +221,7 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
   "Sales Staff": [
     "INQUIRY_VIEW",
     "INQUIRY_HANDLE",
+    "INQUIRY_CANCEL",
     "CUSTOMER_VIEW",
     "CUSTOMER_CREATE",
     "QUOTATION_VIEW",
@@ -228,8 +229,10 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "QUOTATION_EDIT",
     "QUOTATION_SEND",
     "QUOTATION_HANDLE_MODIFICATION",
+    "QUOTATION_CANCEL",
     "ORDER_VIEW",
     "ORDER_CREATE",
+    "ORDER_CANCEL",
     "REPORTS_VIEW",
     "COMMUNICATION_VIEW",
     "COMMUNICATION_SEND",
@@ -262,6 +265,7 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
   "Customer Service": [
     "INQUIRY_VIEW",
     "INQUIRY_HANDLE",
+    "INQUIRY_CANCEL",
     "CUSTOMER_VIEW",
     "CUSTOMER_CREATE",
     "CUSTOMER_EDIT",

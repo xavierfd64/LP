@@ -24,6 +24,7 @@ export const EMAIL_EVENTS = {
   QUOTATION_FORCE_APPROVED: { label: "Quotation Approved (Staff-assisted)", category: "Quotation" },
   ORDER_CREATED: { label: "Order Created", category: "Orders" },
   ORDER_COMPLETED: { label: "Order Completed", category: "Orders" },
+  ORDER_CANCELLED: { label: "Order Cancelled", category: "Orders" },
   PAYMENT_PROOF_UPLOADED: { label: "Payment Proof Uploaded", category: "Payments" },
   PAYMENT_CONFIRMED: { label: "Payment Confirmed", category: "Payments" },
   PAYMENT_REJECTED: { label: "Payment Rejected", category: "Payments" },

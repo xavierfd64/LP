@@ -12,7 +12,8 @@ import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/tab
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { paymentSummary } from "@/lib/workflow";
 import { AddJobOrderForm } from "./add-jo-form";
-import { startProductionAction } from "@/app/actions/orders";
+import { startProductionAction, restoreOrderAction } from "@/app/actions/orders";
+import { CancelOrderForm } from "./cancel-order-form";
 import { releaseJobOrderAction, sendBalanceReminderAction } from "@/app/actions/payments";
 import { PaymentProofForm } from "./payment-proof-form";
 import { ReleaseExceptionForm } from "./release-exception-form";
@@ -46,6 +47,7 @@ export default async function OrderDetailPage({
       jobOrders: { include: { workflowTemplate: true }, orderBy: { joNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
       fulfillments: { orderBy: { createdAt: "desc" }, include: { jobOrder: true } },
+      cancelledBy: true,
     },
   });
   if (!order) notFound();
@@ -72,6 +74,7 @@ export default async function OrderDetailPage({
   const canManageTracking = isAdmin || (await can(user, "ORDER_TRACKING_MANAGE"));
   const canShare = isAdmin || !isStaffLike || (await can(user, "DOCUMENT_SHARE"));
   const canViewCost = isStaffLike && (isAdmin || (await can(user, "COST_VIEW")));
+  const canCancel = isAdmin || (await can(user, "ORDER_CANCEL"));
 
   // Cost snapshot (Aug 20 4th update, Part D item 26/34) — an Order created
   // after this update stores the production cost it was quoted at, taken
@@ -179,6 +182,26 @@ export default async function OrderDetailPage({
         <Alert tone="success">After creating the order, you can generate a Job Order and proceed with production.</Alert>
       )}
 
+      {order.status === "CANCELLED" && (
+        <Alert tone="error">
+          Cancelled by {order.cancelledBy?.name ?? "staff"}
+          {order.cancelledAt ? ` on ${formatDateTime(order.cancelledAt)}` : ""}: {order.cancelReason}
+        </Alert>
+      )}
+
+      {isStaffLike && canCancel && (
+        <div className="flex flex-wrap gap-2">
+          {order.status !== "CANCELLED" && order.status !== "COMPLETED" && <CancelOrderForm orderId={order.id} />}
+          {order.status === "CANCELLED" && (
+            <form action={restoreOrderAction.bind(null, order.id)}>
+              <Button type="submit" variant="outline" size="sm">
+                Restore Order
+              </Button>
+            </form>
+          )}
+        </div>
+      )}
+
       {order.quotation && (
         <Card>
           <CardHeader>
@@ -250,7 +273,7 @@ export default async function OrderDetailPage({
                 <span className="text-yellow-700">Awaiting partial payment</span>
               )}
             </p>
-            {isStaffLike && canRecordPayment && !summary.fullyPaid && (
+            {isStaffLike && canRecordPayment && !summary.fullyPaid && order.status !== "CANCELLED" && (
               <RecordPaymentDialog
                 orderId={order.id}
                 orderNumber={order.orderNumber}
@@ -259,8 +282,8 @@ export default async function OrderDetailPage({
               />
             )}
             <div className="pt-2 flex flex-col gap-2 items-start">
-              {!isStaffLike && !summary.fullyPaid && <PaymentProofForm orderId={order.id} />}
-              {!isStaffLike && !summary.fullyPaid && (
+              {!isStaffLike && !summary.fullyPaid && order.status !== "CANCELLED" && <PaymentProofForm orderId={order.id} />}
+              {!isStaffLike && !summary.fullyPaid && order.status !== "CANCELLED" && (
                 <ApplyVoucherForm orderId={order.id} vouchers={availableVouchers} />
               )}
               {isStaffLike && canModifyOrder && !summary.fullyPaid && !order.releaseException && (
@@ -326,7 +349,7 @@ export default async function OrderDetailPage({
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Job Orders</CardTitle>
-          {isStaffLike && canModifyOrder && (
+          {isStaffLike && canModifyOrder && order.status !== "CANCELLED" && (
             <AddJobOrderForm
               orderId={order.id}
               templates={templates}
@@ -367,14 +390,14 @@ export default async function OrderDetailPage({
                     <Link href={`/job-orders/${jo.id}`} className="text-sm font-medium text-slate-900 underline">
                       View
                     </Link>
-                    {isStaffLike && canStartProduction && jo.status === "ON_HOLD" && (
+                    {isStaffLike && canStartProduction && jo.status === "ON_HOLD" && order.status !== "CANCELLED" && (
                       <form action={start}>
                         <Button type="submit" size="sm" variant="outline">
                           Start Production
                         </Button>
                       </form>
                     )}
-                    {isStaffLike && canModifyOrder && jo.status === "READY" && (
+                    {isStaffLike && canModifyOrder && jo.status === "READY" && order.status !== "CANCELLED" && (
                       <form action={release}>
                         <Button type="submit" size="sm" variant="outline">
                           Release
@@ -477,7 +500,11 @@ export default async function OrderDetailPage({
                   <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600" />
                   <div>
                     <p className="font-medium text-slate-900">{entry.action.replace(/_/g, " ")}</p>
-                    <p className="text-xs text-slate-400">
+                    {/* suppressHydrationWarning: formatDateTime is timezone-dependent
+                        (server process TZ vs. the browser's own, independent TZ) — the
+                        same known, previously-fixed divergence as Update 5's date
+                        renderings; the displayed value is correct either way. */}
+                    <p className="text-xs text-slate-400" suppressHydrationWarning>
                       {formatDateTime(entry.createdAt)}
                       {entry.actor ? ` · ${entry.actor.name}` : entry.changes ? " · System" : ""}
                     </p>

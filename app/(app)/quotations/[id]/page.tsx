@@ -13,7 +13,7 @@ import { EditorShell, EditorHeader, EditorGrid, EditorPanel, InfoField, TotalsPa
 import { LineItemsView } from "@/components/documents/line-items-view";
 import { InternalCostingPanel } from "@/components/documents/internal-costing-panel";
 import { estimateCostForLines } from "@/lib/service-cost";
-import { sendQuotationAction } from "@/app/actions/quotations";
+import { sendQuotationAction, restoreQuotationAction } from "@/app/actions/quotations";
 import { RevisionRequestForm } from "./revision-request-form";
 import { EditQuotationForm } from "./edit-quotation-form";
 import { CancelQuotationForm } from "./cancel-quotation-form";
@@ -232,6 +232,13 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
           />
         )}
         {isStaffLike && canCancel && editable && <CancelQuotationForm quotationId={quotation.id} />}
+        {isStaffLike && canCancel && quotation.status === "CANCELLED" && (
+          <form action={restoreQuotationAction.bind(null, quotation.id)}>
+            <Button type="submit" variant="outline">
+              Restore Quotation
+            </Button>
+          </form>
+        )}
       </div>
 
       {hasOrder && (

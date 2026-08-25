@@ -18,6 +18,7 @@ import { getQuotationsSummary, getPaginatedQuotations } from "@/lib/quotations-l
 import { exportQuotationsAction } from "@/app/actions/quotations-export";
 import { QUOTATION_EXPORT_COLUMNS, DEFAULT_QUOTATION_EXPORT_COLUMNS } from "@/lib/quotation-export-columns";
 import { QuotationsTable, type QuotationRow } from "./quotations-table";
+import { NewQuotationTrigger } from "./new-quotation-trigger";
 import type { PaymentFilterPeriod } from "@/lib/payment-filter-periods";
 
 const PAGE_SIZE = 15;
@@ -35,6 +36,7 @@ export default async function QuotationsPage({ searchParams }: PageProps<"/quota
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
   if (user.role === "STAFF" && !(await can(user, "QUOTATION_VIEW"))) redirect("/dashboard");
   const canCreate = user.role === "ADMIN" || (await can(user, "QUOTATION_CREATE"));
+  const canSend = user.role === "ADMIN" || (await can(user, "QUOTATION_SEND"));
 
   // Customer's own quotation list — unchanged, this redesign is scoped to
   // the staff/admin dashboard only (Aug 22 UI redesign update 2).
@@ -117,11 +119,7 @@ export default async function QuotationsPage({ searchParams }: PageProps<"/quota
           <h1 className="text-2xl font-bold text-slate-900">Quotations</h1>
           <p className="text-sm text-slate-500">Review pricing before an order is created.</p>
         </div>
-        {canCreate && (
-          <Link href="/quotations/new">
-            <Button>+ New Quotation</Button>
-          </Link>
-        )}
+        {canCreate && <NewQuotationTrigger canSend={canSend} />}
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

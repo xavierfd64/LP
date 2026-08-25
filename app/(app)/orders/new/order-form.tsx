@@ -25,12 +25,15 @@ export function OrderForm({
   initialQuotationLineItems,
   initialQuotationTotals,
   defaultTotal,
+  onCancel,
 }: {
   initialQuotation?: QuotationSearchResult | null;
   defaultCustomer?: CustomerSearchResult | null;
   initialQuotationLineItems?: ViewLineItem[];
   initialQuotationTotals?: { subtotal: string | null; discountAmount: string; discountLabel: string | null; taxAmount?: string };
   defaultTotal?: number;
+  /** When set (e.g. rendered inside a dialogue box), Cancel calls this instead of navigating to /orders. */
+  onCancel?: () => void;
 }) {
   const [error, formAction, pending] = useActionState(createOrderAction, undefined);
   const [source, setSource] = useState<Source>(initialQuotation ? "FROM_QUOTATION" : "NEW");
@@ -240,11 +243,17 @@ export function OrderForm({
         <Button type="submit" size="lg" disabled={pending || !effectiveCustomer}>
           {pending ? "Creating..." : "Create Order"}
         </Button>
-        <Link href="/orders">
-          <Button type="button" variant="outline" size="lg" className="w-full sm:w-auto">
+        {onCancel ? (
+          <Button type="button" variant="outline" size="lg" className="w-full sm:w-auto" onClick={onCancel}>
             Cancel
           </Button>
-        </Link>
+        ) : (
+          <Link href="/orders">
+            <Button type="button" variant="outline" size="lg" className="w-full sm:w-auto">
+              Cancel
+            </Button>
+          </Link>
+        )}
       </div>
     </form>
   );

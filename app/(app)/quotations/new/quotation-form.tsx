@@ -19,11 +19,14 @@ export function QuotationForm({
   defaultCustomer,
   defaultLineItems,
   canSend,
+  onCancel,
 }: {
   inquiryId?: string;
   defaultCustomer?: CustomerSearchResult | null;
   defaultLineItems?: LineItem[];
   canSend: boolean;
+  /** When set (e.g. rendered inside a dialogue box), Cancel calls this instead of navigating to /quotations. */
+  onCancel?: () => void;
 }) {
   const [error, formAction, pending] = useActionState(createQuotationAction, undefined);
   const [items, setItems] = useState<LineItem[]>(defaultLineItems && defaultLineItems.length > 0 ? defaultLineItems : [{ ...emptyLineItem }]);
@@ -134,11 +137,17 @@ export function QuotationForm({
             {pending ? "Sending..." : "Send for Approval"}
           </Button>
         )}
-        <Link href="/quotations">
-          <Button type="button" variant="ghost" size="lg" className="w-full sm:w-auto">
+        {onCancel ? (
+          <Button type="button" variant="ghost" size="lg" className="w-full sm:w-auto" onClick={onCancel}>
             Cancel
           </Button>
-        </Link>
+        ) : (
+          <Link href="/quotations">
+            <Button type="button" variant="ghost" size="lg" className="w-full sm:w-auto">
+              Cancel
+            </Button>
+          </Link>
+        )}
       </div>
     </form>
   );

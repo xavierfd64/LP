@@ -49,11 +49,13 @@ export async function AdminStaffDashboard({
   canSeeFinancials,
   canMessageCustomers,
   quickActions,
+  canSendQuotation,
 }: {
   name: string;
   canSeeFinancials: boolean;
   canMessageCustomers: boolean;
   quickActions: QuickAction[];
+  canSendQuotation: boolean;
 }) {
   const [kpis, needsAttention, financial, receivables, production, activity, upcoming, insights, charts, revenueTrend, financialFoundation] = await Promise.all([
     getPrimaryKpis(),
@@ -82,11 +84,16 @@ export async function AdminStaffDashboard({
         </div>
         <div className="flex items-center gap-3">
           <span className="hidden text-sm text-slate-500 sm:inline">Today · {todayLabel}</span>
-          <QuickActionMenu actions={quickActions} />
+          <QuickActionMenu actions={quickActions} canSend={canSendQuotation} />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      {/* md:grid-cols-3 (Aug 25 update 1) — without this step, 768–1023px
+          tablet widths jumped straight from 2 columns to 5 the instant the
+          lg breakpoint (1024px) hit, squeezing every card too narrow for
+          its figure to fit; 3 columns gives each card enough width in that
+          tablet range, with 5 still reserved for genuine desktop widths. */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           label="Today's Sales"
           value={formatCurrency(kpis.todaySales)}

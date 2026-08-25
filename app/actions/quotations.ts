@@ -413,16 +413,50 @@ export async function cancelQuotationAction(quotationId: string, _prevState: str
 
   await prisma.quotation.update({
     where: { id: quotationId },
-    data: { status: "CANCELLED", cancelledById: user.id, cancelReason: parsed.data.reason },
+    data: {
+      status: "CANCELLED",
+      statusBeforeCancel: quotation.status,
+      cancelledById: user.id,
+      cancelReason: parsed.data.reason,
+      cancelledAt: new Date(),
+    },
   });
 
-  await logAudit(user.id, "QUOTATION_CANCELLED", "Quotation", quotationId, { reason: parsed.data.reason });
+  await logAudit(user.id, "QUOTATION_CANCELLED", "Quotation", quotationId, { previousStatus: quotation.status, reason: parsed.data.reason });
   await notifyCustomer(
     quotation.customerId,
     "QUOTATION_CANCELLED",
     `Quotation ${quotation.quoteNumber} was cancelled: ${parsed.data.reason}`,
     `/quotations/${quotationId}`
   );
+
+  redirect(`/quotations/${quotationId}`);
+}
+
+/**
+ * Restores a cancelled quotation to whatever status it was cancelled from
+ * (DRAFT/SENT/REVISION_REQUESTED) — never a blind reset to DRAFT. Gated by
+ * the same QUOTATION_CANCEL permission as cancelQuotationAction, mirroring
+ * the Inquiry cancel/restore pair.
+ */
+export async function restoreQuotationAction(quotationId: string) {
+  const user = await requirePermission("QUOTATION_CANCEL");
+  const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } });
+
+  if (quotation.status !== "CANCELLED") return;
+
+  const restoredStatus = quotation.statusBeforeCancel ?? "DRAFT";
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: {
+      status: restoredStatus,
+      statusBeforeCancel: null,
+      cancelledById: null,
+      cancelReason: null,
+      cancelledAt: null,
+    },
+  });
+  await logAudit(user.id, "QUOTATION_RESTORED", "Quotation", quotationId, { restoredStatus });
 
   redirect(`/quotations/${quotationId}`);
 }

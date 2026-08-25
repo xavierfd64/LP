@@ -92,7 +92,7 @@ export async function getNeedsAttention(): Promise<NeedsAttentionItem[]> {
       select: { id: true, totalAmount: true, payments: { where: { status: "CONFIRMED" }, select: { amount: true } } },
     }),
     prisma.quotation.count({ where: { status: "SENT" } }),
-    prisma.jobOrder.count({ where: { status: { in: ["IN_PROGRESS", "REWORK", "QC"] }, deadline: { lt: today } } }),
+    prisma.jobOrder.count({ where: { status: { in: ["IN_PROGRESS", "REWORK", "QC"] }, deadline: { lt: today }, order: { status: { not: "CANCELLED" } } } }),
     prisma.inventoryItem.findMany({ select: { currentQty: true, reorderThreshold: true } }).then((items) =>
       items.filter((i) => i.currentQty <= i.reorderThreshold).length
     ),
@@ -305,7 +305,7 @@ export type ProductionStageCount = { stage: string; count: number };
 export async function getProductionToday(): Promise<ProductionStageCount[]> {
   const [jobOrders, templates] = await Promise.all([
     prisma.jobOrder.findMany({
-      where: { status: { in: ["IN_PROGRESS", "REWORK", "QC", "READY"] } },
+      where: { status: { in: ["IN_PROGRESS", "REWORK", "QC", "READY"] }, order: { status: { not: "CANCELLED" } } },
       include: { stageLogs: { orderBy: { createdAt: "desc" } } },
     }),
     prisma.workflowTemplate.findMany({ where: { active: true }, include: { stages: { orderBy: { order: "asc" } } } }),
@@ -363,14 +363,26 @@ export async function getTodaysActivity(limit = 10): Promise<ActivityRow[]> {
 
 export type UpcomingFulfillmentBucket = { label: string; count: number };
 
-/** Spec item 20 — compact date-bucketed summary rather than the large mostly-empty list the old dashboard showed. */
+/**
+ * Spec item 20 — compact date-bucketed summary rather than the large
+ * mostly-empty list the old dashboard showed. Aug 25 update 1: excludes
+ * fulfillments on a cancelled order (a cancellation doesn't retroactively
+ * touch the Fulfillment row itself, so this join is what keeps it out of
+ * "Upcoming"), and only counts a scheduled date that's actually still
+ * ahead — a SCHEDULED fulfillment whose date has already passed is an
+ * overdue/missed fulfillment, not an "upcoming" one.
+ */
 export async function getUpcomingFulfillments(): Promise<UpcomingFulfillmentBucket[]> {
+  const today = startOfToday();
   const fulfillments = await prisma.fulfillment.findMany({
-    where: { status: { in: ["SCHEDULED", "BOOKED", "IN_TRANSIT"] }, scheduledDate: { not: null } },
+    where: {
+      status: { in: ["SCHEDULED", "BOOKED", "IN_TRANSIT"] },
+      scheduledDate: { gte: today },
+      order: { status: { not: "CANCELLED" } },
+    },
     select: { scheduledDate: true },
   });
 
-  const today = startOfToday();
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
   const buckets = new Map<string, number>();
   for (const f of fulfillments) {

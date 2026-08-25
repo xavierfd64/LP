@@ -52,12 +52,16 @@ export async function getPaginatedOrders(filters: OrderListFilters) {
   return { orders, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
-/** All four cards scoped to "this month", matching the illustration. */
+/**
+ * All four cards scoped to "this month", matching the illustration. `total`
+ * excludes CANCELLED (Aug 25 update 1) so a cancelled order never inflates
+ * the active count.
+ */
 export async function getOrdersSummary() {
   const { start, end } = resolvePeriodRange({ type: "monthly" });
   const monthWhere = { createdAt: { gte: start, lt: end } };
   const [total, open, inProduction, completed] = await Promise.all([
-    prisma.order.count({ where: monthWhere }),
+    prisma.order.count({ where: { ...monthWhere, status: { not: "CANCELLED" } } }),
     prisma.order.count({ where: { ...monthWhere, status: "OPEN" } }),
     prisma.order.count({ where: { ...monthWhere, status: "IN_PRODUCTION" } }),
     prisma.order.count({ where: { ...monthWhere, status: "COMPLETED" } }),

@@ -45,12 +45,18 @@ export async function getPaginatedInquiries(filters: InquiryListFilters) {
   return { inquiries, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
-/** Every summary card is scoped to "this month", matching the illustration's subtext on all four cards. */
+/**
+ * Every summary card is scoped to "this month", matching the illustration's
+ * subtext on all four cards. `total` excludes CANCELLED (Aug 25 update 1 —
+ * "must not incorrectly inflate active business figures") — the per-status
+ * breakdown cards are unaffected since NEW/QUOTED/CLOSED already naturally
+ * exclude cancelled records.
+ */
 export async function getInquiriesSummary() {
   const { start, end } = resolvePeriodRange({ type: "monthly" });
   const monthWhere = { createdAt: { gte: start, lt: end } };
   const [total, quoted, fresh, closed] = await Promise.all([
-    prisma.inquiry.count({ where: monthWhere }),
+    prisma.inquiry.count({ where: { ...monthWhere, status: { not: "CANCELLED" } } }),
     prisma.inquiry.count({ where: { ...monthWhere, status: "QUOTED" } }),
     prisma.inquiry.count({ where: { ...monthWhere, status: "NEW" } }),
     prisma.inquiry.count({ where: { ...monthWhere, status: "CLOSED" } }),

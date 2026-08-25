@@ -45,12 +45,16 @@ export async function getPaginatedQuotations(filters: QuotationListFilters) {
   return { quotations, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
-/** All four cards scoped to "this month"; "Draft / Rejected" is one combined card, matching the illustration exactly. */
+/**
+ * All four cards scoped to "this month"; "Draft / Rejected" is one combined
+ * card, matching the illustration exactly. `total` excludes CANCELLED (Aug
+ * 25 update 1) so a cancelled quotation never inflates the active count.
+ */
 export async function getQuotationsSummary() {
   const { start, end } = resolvePeriodRange({ type: "monthly" });
   const monthWhere = { createdAt: { gte: start, lt: end } };
   const [total, approved, sent, draftOrRejected] = await Promise.all([
-    prisma.quotation.count({ where: monthWhere }),
+    prisma.quotation.count({ where: { ...monthWhere, status: { not: "CANCELLED" } } }),
     prisma.quotation.count({ where: { ...monthWhere, status: "APPROVED" } }),
     prisma.quotation.count({ where: { ...monthWhere, status: "SENT" } }),
     prisma.quotation.count({ where: { ...monthWhere, status: { in: ["DRAFT", "REJECTED"] } } }),

@@ -131,6 +131,11 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
 
   const data = parsed.data;
 
+  // Aug 25 update 1 — a cancelled order must not continue through active
+  // production: no new job order can be added to it.
+  const parentOrder = await prisma.order.findUniqueOrThrow({ where: { id: data.orderId } });
+  if (parentOrder.status === "CANCELLED") return "This order is cancelled — restore it first to add a job order.";
+
   const service = await prisma.service.findUnique({ where: { id: data.serviceId } });
   if (!service || !service.active) return "Please select a valid, active service.";
 
@@ -171,7 +176,12 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
 
 export async function startProductionAction(jobOrderId: string) {
   const user = await requirePermission("PRODUCTION_UPDATE_STAGE", ["PRODUCTION"]);
-  const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
+  const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId }, include: { order: true } });
+
+  // Aug 25 update 1 — a cancelled order must not continue through active production.
+  if (jo.order.status === "CANCELLED") {
+    redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent("This order has been cancelled — restore it first to start production.")}`);
+  }
 
   try {
     await startProduction(jobOrderId, user.id);
@@ -183,4 +193,83 @@ export async function startProductionAction(jobOrderId: string) {
   }
 
   redirect(`/job-orders/${jo.id}`);
+}
+
+const cancelOrderSchema = z.object({
+  reason: z.string().min(3, "Enter a reason for cancelling."),
+});
+
+/**
+ * Order cancel (Aug 25 update 1). Business rule, chosen after inspecting
+ * the Quotation → Order → Production → QC → Invoice → Payment chain: an
+ * order can be cancelled as long as none of its Job Orders have reached
+ * RELEASED or COMPLETED — i.e. nothing has actually been handed to the
+ * customer or finished production yet. Job Orders still ON_HOLD/
+ * IN_PROGRESS/QC/REWORK are left completely untouched (their stage logs,
+ * QC results, and inventory consumption records are never modified or
+ * deleted — full data integrity preserved); cancelling only flips the
+ * Order's own status, which is what excludes it from active dashboards,
+ * Upcoming Fulfillment, and the Production Kanban's live board (see the
+ * order-not-cancelled filter added to those queries) — satisfying "must
+ * not continue through active Production workflow" without silently
+ * discarding already-completed work.
+ */
+export async function cancelOrderAction(orderId: string, _prevState: string | undefined, formData: FormData) {
+  const user = await requirePermission("ORDER_CANCEL");
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { jobOrders: true } });
+
+  if (order.status === "CANCELLED" || order.status === "COMPLETED") {
+    return "This order can no longer be cancelled.";
+  }
+  const blockingJobOrder = order.jobOrders.find((jo) => jo.status === "RELEASED" || jo.status === "COMPLETED");
+  if (blockingJobOrder) {
+    return `This order can't be cancelled — job order ${blockingJobOrder.joNumber} has already been released/completed. Production has already been handed over.`;
+  }
+
+  const parsed = cancelOrderSchema.safeParse({ reason: formData.get("reason") });
+  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: "CANCELLED",
+      statusBeforeCancel: order.status,
+      cancelledById: user.id,
+      cancelReason: parsed.data.reason,
+      cancelledAt: new Date(),
+    },
+  });
+
+  await logAudit(user.id, "ORDER_CANCELLED", "Order", orderId, { previousStatus: order.status, reason: parsed.data.reason });
+  await notifyCustomer(
+    order.customerId,
+    "ORDER_CANCELLED",
+    `Order ${order.orderNumber} was cancelled: ${parsed.data.reason}`,
+    `/orders/${orderId}`
+  );
+
+  redirect(`/orders/${orderId}`);
+}
+
+/** Restores a cancelled order to whatever status it was cancelled from (OPEN/IN_PRODUCTION/FULFILLING) — never a blind reset to OPEN. */
+export async function restoreOrderAction(orderId: string) {
+  const user = await requirePermission("ORDER_CANCEL");
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+
+  if (order.status !== "CANCELLED") return;
+
+  const restoredStatus = order.statusBeforeCancel ?? "OPEN";
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: restoredStatus,
+      statusBeforeCancel: null,
+      cancelledById: null,
+      cancelReason: null,
+      cancelledAt: null,
+    },
+  });
+  await logAudit(user.id, "ORDER_RESTORED", "Order", orderId, { restoredStatus });
+
+  redirect(`/orders/${orderId}`);
 }

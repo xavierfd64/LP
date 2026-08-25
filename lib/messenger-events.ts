@@ -22,6 +22,7 @@ export const MESSENGER_EVENTS: Record<string, { category: MessengerCategory; lab
   QUOTATION_APPROVED: { category: "PAYMENT", label: "Quotation Approved" },
   QUOTATION_FORCE_APPROVED: { category: "PAYMENT", label: "Quotation Approved" },
   ORDER_CREATED: { category: "PAYMENT", label: "Order Created" },
+  ORDER_CANCELLED: { category: "PAYMENT", label: "Order Cancelled" },
   PAYMENT_CONFIRMED: { category: "PAYMENT", label: "Payment Confirmed" },
   BALANCE_REMINDER: { category: "PAYMENT", label: "Payment Reminder" },
   JOB_ORDER_CREATED: { category: "PRODUCTION", label: "Job Order Created" },

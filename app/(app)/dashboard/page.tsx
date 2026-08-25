@@ -16,18 +16,19 @@ export default async function DashboardPage() {
   // Same dashboard Admin sees (spec item 37) — data and quick actions are
   // gated by this Staff account's actual granted permissions, never a
   // second, parallel Staff-specific dashboard implementation.
-  const [canSeeFinancials, canMessageCustomers, canCreateQuotation, canCreateOrder, canRecordPayment] = await Promise.all([
+  const [canSeeFinancials, canMessageCustomers, canCreateQuotation, canSendQuotation, canCreateOrder, canRecordPayment] = await Promise.all([
     can(user, "PAYMENT_VIEW"),
     can(user, "COMMUNICATION_SEARCH_CUSTOMER"),
     can(user, "QUOTATION_CREATE"),
+    can(user, "QUOTATION_SEND"),
     can(user, "ORDER_CREATE"),
     can(user, "PAYMENT_RECORD"),
   ]);
 
   const quickActions: QuickAction[] = [
-    ...(canCreateQuotation ? [{ label: "New Quotation", href: "/quotations/new" }] : []),
-    ...(canCreateOrder ? [{ label: "New Order", href: "/orders/new" }] : []),
-    ...(canRecordPayment ? [{ label: "Record Payment", href: "/payments" }] : []),
+    ...(canCreateQuotation ? [{ label: "New Quotation", kind: "quotation" as const }] : []),
+    ...(canCreateOrder ? [{ label: "New Order", kind: "order" as const }] : []),
+    ...(canRecordPayment ? [{ label: "Record Payment", kind: "payment" as const }] : []),
   ];
 
   return (
@@ -36,6 +37,7 @@ export default async function DashboardPage() {
       canSeeFinancials={canSeeFinancials}
       canMessageCustomers={canMessageCustomers}
       quickActions={quickActions}
+      canSendQuotation={canSendQuotation}
     />
   );
 }

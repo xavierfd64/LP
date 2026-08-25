@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -9,6 +8,7 @@ import { EmptyState } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
 import { startCustomerConversationAction } from "@/app/actions/messages";
 import { ReceivableDetailsModal } from "./receivable-details-modal";
+import { SoaModal } from "./soa-modal";
 import type { ReceivableRow } from "@/lib/dashboard-data";
 import type { SoaBalanceStatus } from "@/lib/soa";
 
@@ -41,11 +41,7 @@ export function ReceivablesList({ rows, canMessage }: { rows: ReceivableRow[]; c
             <p className="mt-0.5 text-sm font-semibold text-slate-700">{formatCurrency(r.balance)} outstanding</p>
             <div className="mt-2 flex gap-1.5">
               <ReceivableDetailsModal customerId={r.customerId} canMessage={canMessage} />
-              <Link href={`/soa/customer/${r.customerId}`}>
-                <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs">
-                  SOA
-                </Button>
-              </Link>
+              <SoaModal customerId={r.customerId} />
               {canMessage && (
                 <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => message(r.customerId)}>
                   Message

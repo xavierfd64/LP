@@ -326,6 +326,8 @@ model User {
   formLinksCreated        CustomerFormLink[]
   formDeliveriesSent      CustomerFormDelivery[]
   formOrdersAdded         CustomerFormOrder[]
+  inquiriesCancelled      Inquiry[] @relation("InquiryCancelledBy")
+  ordersCancelled         Order[] @relation("OrderCancelledBy")
 }
 
 // Existence of a row = granted. Only meaningful for role=STAFF users — ADMIN
@@ -411,6 +413,16 @@ model Inquiry {
   roughQty       Int?
   roughQtyUnit   String?
   status         InquiryStatus @default(NEW)
+  // Cancel/restore tracking (Aug 25 update 1) — mirrors the exact
+  // cancelledAt/cancelledById pattern already used by SupplyLot/Expense.
+  // statusBeforeCancel remembers what to restore to (NEW or QUOTED), since
+  // "restore" must never guess or always reset to NEW when it was actually
+  // QUOTED at cancel time.
+  cancelledAt        DateTime?
+  cancelledById       String?
+  cancelledBy         User?    @relation("InquiryCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason        String?
+  statusBeforeCancel  InquiryStatus?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -449,6 +461,11 @@ model Quotation {
   cancelledById   String?
   cancelledBy     User?    @relation("QuotationCancelledBy", fields: [cancelledById], references: [id])
   cancelReason    String?
+  cancelledAt     DateTime?
+  // Aug 25 update 1 — what to restore to; a cancelled quotation is always
+  // cancelled from DRAFT/SENT/REVISION_REQUESTED (see cancelQuotationAction),
+  // so restore must return to that exact prior status, not always DRAFT.
+  statusBeforeCancel QuotationStatus?
   approvedByStaffId    String?
   approvedByStaff      User?   @relation("QuotationForceApprovedBy", fields: [approvedByStaffId], references: [id])
   approvalBypassReason String?
@@ -512,6 +529,14 @@ model Order {
   // 22 3rd update New Order form) — purely informational, never read by
   // any pricing/production/payment logic.
   notes            String?
+  // Cancel/restore tracking (Aug 25 update 1) — same shape as Inquiry's,
+  // for the same reason: restore must return to the exact status the order
+  // was cancelled from (OPEN or IN_PRODUCTION), not always OPEN.
+  cancelledAt        DateTime?
+  cancelledById       String?
+  cancelledBy         User?    @relation("OrderCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason        String?
+  statusBeforeCancel  OrderStatus?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 

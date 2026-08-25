@@ -63,7 +63,10 @@ export default async function ProductionQueuePage({ searchParams }: PageProps<"/
       orderBy: { name: "asc" },
     }),
     prisma.jobOrder.findMany({
-      where: { status: { in: ["IN_PROGRESS", "REWORK", "QC", "READY"] } },
+      // order.status !== CANCELLED (Aug 25 update 1) — a cancelled order's
+      // job orders must not continue to appear on the live Kanban even if
+      // production had already started before the cancellation.
+      where: { status: { in: ["IN_PROGRESS", "REWORK", "QC", "READY"] }, order: { status: { not: "CANCELLED" } } },
       include: {
         order: { include: { customer: true, fulfillments: { orderBy: { createdAt: "desc" }, take: 1 } } },
         service: { include: { workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } } } },

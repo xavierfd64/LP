@@ -137,10 +137,80 @@ export async function updateInquiryAction(inquiryId: string, _prevState: string 
 export async function cancelInquiryAction(inquiryId: string) {
   const user = await requireUser();
   if (user.role !== "CUSTOMER") throw new Error("Not allowed.");
-  await assertOwnsEditableInquiry(user, inquiryId);
+  const inquiry = await assertOwnsEditableInquiry(user, inquiryId);
 
-  await prisma.inquiry.update({ where: { id: inquiryId }, data: { status: "CANCELLED" } });
-  await logAudit(user.id, "INQUIRY_CANCELLED", "Inquiry", inquiryId);
+  await prisma.inquiry.update({
+    where: { id: inquiryId },
+    data: {
+      status: "CANCELLED",
+      statusBeforeCancel: inquiry.status,
+      cancelledAt: new Date(),
+      cancelledById: user.id,
+      cancelReason: "Cancelled by customer.",
+    },
+  });
+  await logAudit(user.id, "INQUIRY_CANCELLED", "Inquiry", inquiryId, { previousStatus: inquiry.status });
+
+  redirect(`/inquiries/${inquiryId}`);
+}
+
+const staffCancelInquirySchema = z.object({
+  reason: z.string().min(3, "Enter a reason for cancelling."),
+});
+
+/**
+ * Staff/admin cancel (Aug 25 update 1) — separate from the customer's own
+ * cancelInquiryAction above (kept unchanged) since staff can cancel from
+ * either NEW or QUOTED (a customer may only cancel while still NEW), and
+ * staff must record a reason. Same INQUIRY_CANCEL permission gates
+ * restoreInquiryAction below — one permission for the whole cancel/restore
+ * workflow, mirroring how QUOTATION_CANCEL already governs quotation cancel.
+ */
+export async function staffCancelInquiryAction(inquiryId: string, _prevState: string | undefined, formData: FormData) {
+  const user = await requirePermission("INQUIRY_CANCEL");
+  const inquiry = await prisma.inquiry.findUniqueOrThrow({ where: { id: inquiryId } });
+
+  if (inquiry.status !== "NEW" && inquiry.status !== "QUOTED") {
+    return "This inquiry can no longer be cancelled.";
+  }
+
+  const parsed = staffCancelInquirySchema.safeParse({ reason: formData.get("reason") });
+  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+
+  await prisma.inquiry.update({
+    where: { id: inquiryId },
+    data: {
+      status: "CANCELLED",
+      statusBeforeCancel: inquiry.status,
+      cancelledAt: new Date(),
+      cancelledById: user.id,
+      cancelReason: parsed.data.reason,
+    },
+  });
+  await logAudit(user.id, "INQUIRY_CANCELLED", "Inquiry", inquiryId, { previousStatus: inquiry.status, reason: parsed.data.reason });
+
+  redirect(`/inquiries/${inquiryId}`);
+}
+
+/** Restores a cancelled inquiry to whatever status it was cancelled from (NEW or QUOTED) — never a blind reset to NEW. */
+export async function restoreInquiryAction(inquiryId: string) {
+  const user = await requirePermission("INQUIRY_CANCEL");
+  const inquiry = await prisma.inquiry.findUniqueOrThrow({ where: { id: inquiryId } });
+
+  if (inquiry.status !== "CANCELLED") return;
+
+  const restoredStatus = inquiry.statusBeforeCancel ?? "NEW";
+  await prisma.inquiry.update({
+    where: { id: inquiryId },
+    data: {
+      status: restoredStatus,
+      statusBeforeCancel: null,
+      cancelledAt: null,
+      cancelledById: null,
+      cancelReason: null,
+    },
+  });
+  await logAudit(user.id, "INQUIRY_RESTORED", "Inquiry", inquiryId, { restoredStatus });
 
   redirect(`/inquiries/${inquiryId}`);
 }

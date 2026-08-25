@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { formatDateTime } from "@/lib/utils";
-import { closeInquiryAction, cancelInquiryAction } from "@/app/actions/inquiries";
+import { closeInquiryAction, cancelInquiryAction, restoreInquiryAction } from "@/app/actions/inquiries";
 import { InquiryEditForm } from "./inquiry-edit-form";
+import { StaffCancelInquiryForm } from "./staff-cancel-inquiry-form";
 import { isActiveQuotationStatus } from "@/lib/quotation-status";
 import { DiscussInChatboxButton } from "@/components/messaging/discuss-in-chatbox-button";
 import { EditorShell, EditorHeader, EditorGrid, EditorPanel, InfoField } from "@/components/documents/editor-shell";
@@ -23,7 +24,7 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
 
   const inquiry = await prisma.inquiry.findUnique({
     where: { id },
-    include: { customer: true, quotations: true, service: true },
+    include: { customer: true, quotations: true, service: true, cancelledBy: true },
   });
   if (!inquiry) notFound();
 
@@ -37,6 +38,7 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
   const canHandle = user.role === "ADMIN" || (await can(user, "INQUIRY_HANDLE"));
   const canCreateQuotation = user.role === "ADMIN" || (await can(user, "QUOTATION_CREATE"));
   const canViewComms = user.role === "ADMIN" || (await can(user, "COMMUNICATION_VIEW"));
+  const canCancel = user.role === "ADMIN" || (await can(user, "INQUIRY_CANCEL"));
 
   const errorMsg = typeof sp.error === "string" ? sp.error : undefined;
   const closeAction = closeInquiryAction.bind(null, inquiry.id);
@@ -58,6 +60,13 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
       />
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
+
+      {inquiry.status === "CANCELLED" && (
+        <Alert tone="error">
+          Cancelled by {inquiry.cancelledBy?.name ?? "customer"}
+          {inquiry.cancelledAt ? ` on ${formatDateTime(inquiry.cancelledAt)}` : ""}: {inquiry.cancelReason}
+        </Alert>
+      )}
 
       {!isStaffLike && inquiry.status === "NEW" && !instantQuotation && (
         <Alert tone="info">
@@ -141,7 +150,7 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
       )}
 
       {isStaffLike && (canConvert || inquiry.status !== "CLOSED") && (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {canConvert && canCreateQuotation && (
             <Link href={`/quotations/new?inquiryId=${inquiry.id}`}>
               <Button>Convert to Quotation</Button>
@@ -151,6 +160,16 @@ export default async function InquiryDetailPage({ params, searchParams }: PagePr
             <form action={closeAction}>
               <Button variant="outline" type="submit">
                 Close Inquiry
+              </Button>
+            </form>
+          )}
+          {canCancel && (inquiry.status === "NEW" || inquiry.status === "QUOTED") && (
+            <StaffCancelInquiryForm inquiryId={inquiry.id} />
+          )}
+          {canCancel && inquiry.status === "CANCELLED" && (
+            <form action={restoreInquiryAction.bind(null, inquiry.id)}>
+              <Button variant="outline" type="submit">
+                Restore Inquiry
               </Button>
             </form>
           )}
