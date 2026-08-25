@@ -279,6 +279,20 @@ model User {
   phone        String?
   active       Boolean   @default(true)
   lastActiveAt DateTime?
+  // Bumped on every logout (see app/api/logout/route.ts) and compared
+  // against the value embedded in each JWT on every request (lib/auth.ts's
+  // jwt callback) — the only way to make logout unconditionally effective
+  // for a stateless JWT session. Clearing the browser's session cookie
+  // alone cannot: Auth.js's own auth() middleware wrapper re-issues a
+  // fresh session cookie on every authenticated request it sees (by
+  // design, for rolling-session keep-alive), and any request already in
+  // flight when logout runs — Next.js prefetches every visible sidebar
+  // link on load — still carries the pre-logout cookie and is indistin-
+  // guishable, cryptographically, from a legitimate one. This field makes
+  // logout a real, server-side fact instead of purely a client-cookie
+  // convention: once bumped, every token minted before it is rejected on
+  // its very next use, in-flight or not.
+  sessionVersion Int     @default(0)
   /// Set (and refreshed) whenever this account signs in via that provider —
   /// drives the "Login & Security" connected-methods display. No separate
   /// Account/adapter table (see lib/auth.ts) since email is the only join

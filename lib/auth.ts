@@ -81,6 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
             name: user.name,
             email: user.email,
             role: user.role,
+            sessionVersion: user.sessionVersion,
           };
         },
       }),
@@ -160,11 +161,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
           if (!dbUser) return token;
           token.id = dbUser.id;
           token.role = dbUser.role;
+          token.sessionVersion = dbUser.sessionVersion;
           return token;
         }
         if (user) {
           token.role = (user as { role: string }).role;
           token.id = (user as { id: string }).id;
+          token.sessionVersion = (user as { sessionVersion: number }).sessionVersion;
+          return token;
+        }
+        // Every subsequent request (no fresh sign-in this call) — the path
+        // actually checked on each page load/middleware pass. See
+        // User.sessionVersion's doc comment in schema.prisma: a plain
+        // client-side cookie clear on logout is not sufficient by itself —
+        // Auth.js's own auth() middleware wrapper re-issues a fresh session
+        // cookie on every authenticated request it sees, and a request
+        // already in flight when logout runs (Next.js prefetches every
+        // visible sidebar link) still carries the pre-logout cookie and
+        // would otherwise revive it. Comparing against a fresh DB read here
+        // means logout is real the moment it happens, not merely the
+        // moment the browser gets around to dropping a cookie: returning
+        // null invalidates this token for every caller, including ones
+        // already mid-flight.
+        if (typeof token.id === "string") {
+          const dbUser = await prisma.user.findUnique({ where: { id: token.id }, select: { sessionVersion: true, active: true } });
+          if (!dbUser || !dbUser.active || dbUser.sessionVersion !== token.sessionVersion) {
+            return null;
+          }
         }
         return token;
       },

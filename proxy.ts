@@ -96,6 +96,18 @@ export default auth((req) => {
   return NextResponse.next();
 });
 
+// api/logout is excluded from the matcher entirely (not just handled
+// inside the callback as a "public path") — Auth.js's `auth()` wrapper
+// itself refreshes/re-issues the session-token cookie as a side effect of
+// decoding a request's existing session, independent of whatever
+// NextResponse the wrapped callback below returns. Routing /api/logout
+// through that same auth() wrapper meant every logout POST could get its
+// session cookie refreshed by the wrapper on the way in, then cleared by
+// the route handler on the way out — a real, empirically-confirmed race
+// between those two Set-Cookie sources within the *same* response. Fully
+// bypassing the wrapper for this one path removes the race outright: nothing
+// but app/api/logout/route.ts's own explicit deletions can touch this
+// response's cookies.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|uploads).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|uploads|api/logout).*)"],
 };

@@ -1,7 +1,7 @@
 "use server";
 
 import { AuthError } from "next-auth";
-import { signIn, signOut } from "@/lib/auth";
+import { signIn } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -121,6 +121,18 @@ export async function oauthSignInAction(provider: "google" | "facebook", callbac
   await signIn(provider, { redirectTo });
 }
 
-export async function logoutAction() {
-  await signOut({ redirectTo: "/login" });
-}
+// Logout itself lives at app/api/logout/route.ts, a plain Route Handler —
+// deliberately not a Server Action. Auth.js's own signOut() and a Server
+// Action wrapping it were both tried first: with JWT sessions there's no
+// server-side session to revoke, only cookies to clear, and the clearing
+// computation itself was confirmed correct (read the cookie jar straight
+// back after applying it) in both — but on this exact Next.js 16.3.0 /
+// next-auth 5.0.0-beta.32 combination, neither reliably got the clearing
+// Set-Cookie to the browser before the very next request (a hard
+// navigation, or one of the sidebar-link prefetches every admin/staff
+// dashboard fires on load) went out still carrying — and, since Auth.js
+// re-issues a fresh session-token cookie on every authenticated request,
+// re-establishing — the old session. A real Route Handler's native
+// "POST, redirect + Set-Cookie in one response, browser follows it"
+// sequence has no such gap. See that file and LogoutButton
+// (components/layout/logout-button.tsx) for the full account.

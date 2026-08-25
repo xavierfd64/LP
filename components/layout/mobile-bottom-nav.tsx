@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LayoutDashboard, Package, Receipt, FileBarChart, MoreHorizontal, X, FileText, Wallet, Gift, MessageCircle, UserCircle, KeyRound, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { logoutAction } from "@/app/actions/auth";
 import { isNavItemActive } from "./is-nav-item-active";
 
 const PRIMARY = [
@@ -80,7 +79,11 @@ export function MobileBottomNav() {
                 Chat
               </button>
             </div>
-            <form action={logoutAction} className="mt-2">
+            {/* Native form POST to a real Route Handler, not a Server
+                Action — see LogoutButton (components/layout/logout-button.tsx)
+                for why: it needs the browser's own atomic
+                "POST, redirect + Set-Cookie in one response" sequence. */}
+            <form action="/api/logout" method="POST" className="mt-2">
               <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-100 px-2 py-3 text-sm font-medium text-red-600 hover:bg-red-50">
                 <LogOut className="h-4 w-4" /> Sign Out
               </button>
