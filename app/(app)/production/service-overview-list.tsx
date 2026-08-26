@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { READY_COLUMN, type ServiceBoard } from "@/lib/production-board-types";
+import { renderStageIcon } from "@/lib/production-icons";
 
 const ICON_TONES = [
   "bg-purple-100 text-purple-600",
@@ -94,7 +95,7 @@ export function ServiceOverviewList({ boards }: { boards: ServiceBoard[] }) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
                   <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", ICON_TONES[i % ICON_TONES.length])}>
-                    <Package className="h-5 w-5" />
+                    {renderStageIcon(board.label, "h-5 w-5")}
                   </span>
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-slate-900">{board.label}</p>

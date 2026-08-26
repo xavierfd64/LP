@@ -75,6 +75,18 @@ enum JobOrderStatus {
   COMPLETED
 }
 
+/// Production Job Card + Job Details Side Panel priority flag (Production UI
+/// corrective pass — the approved illustrations show a real 🚩High/Medium/Low
+/// flag on every card, not decorative text). Defaults to MEDIUM so every
+/// pre-existing and newly-created Job Order has a real, meaningful value
+/// from day one rather than an artificial "unset" state needing a fallback
+/// everywhere it's displayed.
+enum JobOrderPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum StageLogStatus {
   READY
   IN_PROGRESS
@@ -277,6 +289,12 @@ model User {
   passwordHash String?
   role         Role
   phone        String?
+  /// Job function shown next to this person's name on the Production
+  /// Kanban card/side panel (e.g. "Printer / Operator") — purely
+  /// descriptive, optional, editable from Admin -> Users. Never fabricated
+  /// when unset: the UI shows nothing rather than guessing a title from
+  /// the system Role.
+  title        String?
   active       Boolean   @default(true)
   lastActiveAt DateTime?
   // Bumped on every logout (see app/api/logout/route.ts) and compared
@@ -788,6 +806,7 @@ model JobOrder {
   workflowTemplate   WorkflowTemplate @relation(fields: [workflowTemplateId], references: [id])
   currentStageOrder  Int         @default(1)
   status        JobOrderStatus @default(ON_HOLD)
+  priority      JobOrderPriority @default(MEDIUM)
   deadline      DateTime?
   productionInstructions String?
   createdAt     DateTime       @default(now())

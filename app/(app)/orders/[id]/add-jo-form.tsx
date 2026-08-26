@@ -85,6 +85,14 @@ export function AddJobOrderForm({
           <Label htmlFor="deadline">Deadline</Label>
           <Input id="deadline" name="deadline" type="date" />
         </div>
+        <div>
+          <Label htmlFor="priority">Priority</Label>
+          <Select id="priority" name="priority" defaultValue="MEDIUM">
+            <option value="LOW">Low</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HIGH">High</option>
+          </Select>
+        </div>
       </div>
       <div>
         <Label htmlFor="description">Description</Label>

@@ -99,6 +99,7 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
       readyAt: readyAt ? readyAt.toISOString() : null,
       overdue: !!jo.deadline && jo.deadline.getTime() < now && jo.status !== "READY",
       status: jo.status,
+      priority: jo.priority,
       orderId: jo.orderId,
       orderNumber: jo.order.orderNumber,
       customerName: jo.order.customer.name,
@@ -110,6 +111,7 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
       currentLogStatus: currentLog?.status ?? null,
       assignedStaffId: currentLog?.assignedToId ?? null,
       assignedStaffName: currentLog?.assignedTo?.name ?? null,
+      assignedStaffTitle: currentLog?.assignedTo?.title ?? null,
       updatedAt: jo.updatedAt.toISOString(),
     };
     board.jobOrders.push(item);

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Boxes, Factory, Percent, PackageCheck, Settings, BarChart3, ClipboardList } from "lucide-react";
+import { Boxes, Factory, Percent, PackageCheck, Settings, BarChart3, ClipboardList, Clock } from "lucide-react";
 import { requireRole } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { Alert } from "@/components/ui/alert";
@@ -80,6 +80,13 @@ export default async function ProductionOverviewPage({ searchParams }: PageProps
         <KpiCard label="In QC" value={stageCounts.inQc} sub={`${pct(stageCounts.inQc)}% of active jobs`} icon={Percent} iconTone="orange" />
         <KpiCard label="Ready for Delivery" value={stageCounts.ready} sub={`${pct(stageCounts.ready)}% of active jobs`} icon={PackageCheck} iconTone="purple" />
         <CompletedTodayCard count={completedTodayItems.length} items={completedTodayItems} />
+        {/* Desktop (illustration 1) has 5 cards; mobile (illustration 6)
+            adds a 6th "Overdue Jobs" card — real data already computed for
+            the per-service "N Overdue" labels below, just also surfaced as
+            its own top-level stat on the breakpoint that illustrates it. */}
+        <div className="lg:hidden">
+          <KpiCard label="Overdue Jobs" value={stageCounts.overdue} sub="Past due date" icon={Clock} iconTone="orange" />
+        </div>
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}

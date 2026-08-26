@@ -106,6 +106,7 @@ async function main() {
       passwordHash: await hash("password123"),
       role: "PRODUCTION",
       phone: "0917-000-0004",
+      title: "Printer / Operator",
     },
   });
   const prod2 = await prisma.user.create({
@@ -115,6 +116,7 @@ async function main() {
       passwordHash: await hash("password123"),
       role: "PRODUCTION",
       phone: "0917-000-0005",
+      title: "QC Inspector",
     },
   });
 
@@ -578,6 +580,7 @@ async function main() {
       workflowTemplateId: jerseyTemplate.id,
       currentStageOrder: 1,
       status: "ON_HOLD",
+      priority: "LOW",
       deadline: new Date("2026-09-10"),
     },
   });
@@ -620,6 +623,7 @@ async function main() {
       workflowTemplateId: dtfTemplate.id,
       currentStageOrder: 3,
       status: "IN_PROGRESS",
+      priority: "HIGH",
       deadline: new Date("2026-08-25"),
     },
   });
@@ -643,6 +647,7 @@ async function main() {
       workflowTemplateId: dtfTemplate.id,
       currentStageOrder: 3,
       status: "REWORK",
+      priority: "MEDIUM",
       deadline: new Date("2026-08-22"),
     },
   });

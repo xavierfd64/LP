@@ -6,6 +6,7 @@ import { Plus, Search, CheckCircle2, Loader2, AlertTriangle } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { PriorityFlag } from "@/components/ui/priority-flag";
 import { cn, formatDate } from "@/lib/utils";
 import {
   getEligibleJobOrdersAction,
@@ -270,7 +271,10 @@ export function AddJobDialog({
                           >
                             <span className="flex items-center justify-between gap-2">
                               <span className="font-semibold text-slate-900">{j.joNumber}</span>
-                              {j.overdue && <Badge tone="red">Overdue</Badge>}
+                              <span className="flex items-center gap-1.5">
+                                {j.overdue && <Badge tone="red">Overdue</Badge>}
+                                <PriorityFlag priority={j.priority} showLabel={false} />
+                              </span>
                             </span>
                             <span className="mt-0.5 block text-slate-500">
                               {j.customerName} · {j.productType}
@@ -294,6 +298,7 @@ export function AddJobDialog({
                           <SummaryRow label="Customer" value={selectedJobOrder.customerName} />
                           <SummaryRow label="Due Date" value={selectedJobOrder.deadline ? formatDate(selectedJobOrder.deadline) : "—"} />
                           <SummaryRow label="Product" value={selectedJobOrder.productType} />
+                          <SummaryRow label="Priority" value={<PriorityFlag priority={selectedJobOrder.priority} />} />
                           <SummaryRow label="Order" value={selectedJobOrder.orderNumber} />
                         </div>
                       ) : (
@@ -341,6 +346,7 @@ export function AddJobDialog({
                       <SummaryRow label="Service / Workflow" value={selectedService?.name ?? "—"} />
                       <SummaryRow label="Job Order" value={selectedJobOrder.joNumber} />
                       <SummaryRow label="Initial Stage" value={selectedStage.name} />
+                      <SummaryRow label="Priority" value={<PriorityFlag priority={selectedJobOrder.priority} />} />
                       <SummaryRow label="Assigned To" value={staff.find((s) => s.id === assigneeId)?.name ?? "Unassigned"} />
                       <p className="pt-1 text-slate-500">The job will be added to the selected initial process and workflow.</p>
                     </div>
@@ -381,7 +387,7 @@ export function AddJobDialog({
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="text-slate-400">{label}</span>

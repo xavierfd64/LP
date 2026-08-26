@@ -2,10 +2,26 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { X, Expand, FileText, MessageCircle, Loader2, ArrowRight, ArrowLeft, Copy, ExternalLink } from "lucide-react";
+import {
+  X,
+  Expand,
+  FileText,
+  MessageCircle,
+  Loader2,
+  ArrowRight,
+  ArrowLeft,
+  Copy,
+  ExternalLink,
+  Info,
+  ClipboardList,
+  Paperclip,
+  ClipboardCheck,
+  History as HistoryIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { StatusBadge, Badge } from "@/components/ui/badge";
+import { PriorityFlag } from "@/components/ui/priority-flag";
 import { formatDate, formatDateTime, cn } from "@/lib/utils";
 import { READY_COLUMN } from "@/lib/production-board-types";
 import {
@@ -19,7 +35,16 @@ import {
 import { openTransactionInChatAction } from "@/app/actions/messages";
 
 const TABS = ["Overview", "Customer Form", "Files", "QC Checklist", "History", "Messages"] as const;
-type Tab = (typeof TABS)[number];
+export type Tab = (typeof TABS)[number];
+
+const TAB_ICONS: Record<Tab, typeof Info> = {
+  Overview: Info,
+  "Customer Form": ClipboardList,
+  Files: Paperclip,
+  "QC Checklist": ClipboardCheck,
+  History: HistoryIcon,
+  Messages: MessageCircle,
+};
 
 const HISTORY_LABELS: Record<string, string> = {
   START_PRODUCTION: "Started production",
@@ -52,12 +77,14 @@ const HISTORY_LABELS: Record<string, string> = {
  */
 export function JobDetailsPanel({
   jobOrderId,
+  initialTab,
   onClose,
   onRequestMove,
   onRequestReturn,
   onChanged,
 }: {
   jobOrderId: string | null;
+  initialTab?: Tab;
   onClose: () => void;
   onRequestMove: (data: JobOrderPanelData, toStageName: string) => void;
   onRequestReturn: (data: JobOrderPanelData) => void;
@@ -73,7 +100,7 @@ export function JobDetailsPanel({
 
   useEffect(() => {
     if (!jobOrderId) return;
-    setTab("Overview");
+    setTab(initialTab ?? "Overview");
     setData(null);
     setLoading(true);
     Promise.all([getJobOrderPanelDataAction(jobOrderId), getProductionStaffAction()]).then(([d, s]) => {
@@ -81,7 +108,7 @@ export function JobDetailsPanel({
       setStaff(s);
       setLoading(false);
     });
-  }, [jobOrderId]);
+  }, [jobOrderId, initialTab]);
 
   async function handleReassign(assigneeId: string) {
     if (!data) return;
@@ -176,10 +203,14 @@ export function JobDetailsPanel({
                   type="button"
                   onClick={() => setTab(t)}
                   className={cn(
-                    "shrink-0 border-b-2 px-2.5 py-2 text-xs font-medium",
+                    "flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-2 text-xs font-medium",
                     tab === t ? "border-brand-600 text-brand-700" : "border-transparent text-slate-500 hover:text-slate-800"
                   )}
                 >
+                  {(() => {
+                    const TabIcon = TAB_ICONS[t];
+                    return <TabIcon className="h-3.5 w-3.5" />;
+                  })()}
                   {t}
                 </button>
               ))}
@@ -201,6 +232,7 @@ export function JobDetailsPanel({
                       <Field label="Service" value={data.productType} />
                       <Field label="Due Date" value={data.deadline ? formatDate(data.deadline) : "—"} tone={data.overdue ? "red" : undefined} />
                       <Field label="Customer" value={data.customerName} />
+                      <Field label="Priority" value={<PriorityFlag priority={data.priority} />} />
                       <Field label="Order" value={data.orderNumber} />
                       <Field label="Created" value={formatDateTime(data.createdAt)} />
                     </div>
@@ -236,7 +268,10 @@ export function JobDetailsPanel({
                   <section className="border-t border-slate-100 pt-4">
                     <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Assigned Staff</p>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm text-slate-800">{data.assignedStaffName ?? "Unassigned"}</span>
+                      <span className="text-sm text-slate-800">
+                        {data.assignedStaffName ?? "Unassigned"}
+                        {data.assignedStaffTitle && <span className="text-slate-400"> · {data.assignedStaffTitle}</span>}
+                      </span>
                       <Select
                         className="w-40"
                         value={data.assignedStaffId ?? ""}
@@ -284,6 +319,34 @@ export function JobDetailsPanel({
                       )}
                     </section>
                   )}
+
+                  <section className="border-t border-slate-100 pt-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase text-slate-500">Recent Activity</p>
+                      {data.history.length > 3 && (
+                        <button type="button" onClick={() => setTab("History")} className="text-xs text-brand-600 hover:underline">
+                          View all
+                        </button>
+                      )}
+                    </div>
+                    {data.history.length === 0 ? (
+                      <p className="text-xs text-slate-400">No activity recorded yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {data.history.slice(0, 3).map((h) => (
+                          <div key={h.id} className="flex items-start gap-2 text-xs">
+                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-400" />
+                            <div className="min-w-0">
+                              <p className="font-medium text-slate-800">{HISTORY_LABELS[h.action] ?? h.action.replace(/_/g, " ")}</p>
+                              <p className="text-slate-400">
+                                {h.actorName} · {formatDateTime(h.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
                 </>
               )}
 
@@ -388,7 +451,7 @@ export function JobDetailsPanel({
   );
 }
 
-function Field({ label, value, tone }: { label: string; value: string; tone?: "red" }) {
+function Field({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "red" }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>

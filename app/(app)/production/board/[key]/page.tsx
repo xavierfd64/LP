@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Settings, BarChart3, Boxes } from "lucide-react";
+import { Settings, BarChart3 } from "lucide-react";
 import { requireRole } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { Button } from "@/components/ui/button";
 import { getProductionData, READY_COLUMN } from "@/lib/production-board";
+import { renderStageIcon } from "@/lib/production-icons";
 import { AddJobDialog } from "@/components/production/add-job-dialog";
 import { FocusedBoard } from "../../kanban-board";
 
@@ -51,7 +52,7 @@ export default async function ProductionBoardPage({ params }: PageProps<"/produc
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-600">
-            <Boxes className="h-5 w-5" />
+            {renderStageIcon(board.label, "h-5 w-5")}
           </span>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{board.label}</h1>

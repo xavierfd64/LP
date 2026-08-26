@@ -13,6 +13,11 @@
 /** Synthetic trailing column every board gets — a Job Order lands here once its workflow's last real stage is completed. Not a WorkflowStage row, so its `order` is always `stages.length + 1` and it's never a valid `expectedTargetStageOrder` target (that uses `null` instead — see completeCurrentStage's doc comment). */
 export const READY_COLUMN = "Ready for Fulfillment";
 
+/** Matches Prisma's JobOrderPriority enum (LOW/MEDIUM/HIGH) — kept as a plain string union here since this file must stay Prisma-free (see the doc comment above). */
+export type JobOrderPriority = "LOW" | "MEDIUM" | "HIGH";
+
+export const PRIORITY_LABELS: Record<JobOrderPriority, string> = { LOW: "Low", MEDIUM: "Medium", HIGH: "High" };
+
 export type KanbanJobOrder = {
   id: string;
   joNumber: string;
@@ -24,6 +29,7 @@ export type KanbanJobOrder = {
   readyAt: string | null;
   overdue: boolean;
   status: string;
+  priority: JobOrderPriority;
   orderId: string;
   orderNumber: string;
   customerName: string;
@@ -36,6 +42,8 @@ export type KanbanJobOrder = {
   currentLogStatus: string | null;
   assignedStaffId: string | null;
   assignedStaffName: string | null;
+  /** Optional job-function label (User.title, e.g. "Printer / Operator") — null when the account has none set, never fabricated from the system Role. */
+  assignedStaffTitle: string | null;
   updatedAt: string;
 };
 

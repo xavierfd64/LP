@@ -15,10 +15,31 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { nextJoNumber } from "@/lib/numbering";
 
-export async function markStageInProgressAction(stageLogId: string) {
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Start the job's current stage (READY -> IN_PROGRESS stage-log status —
+ * the "Start {stage}" button). Previously this redirected to /production
+ * on success (`redirect("/production")`), which was the actual root cause
+ * of the reported "Next Stage sometimes returns to the Overview, sometimes
+ * doesn't" inconsistency: a freshly-opened stage log starts READY and used
+ * this redirecting action, while every other stage transition
+ * (moveStageAction, revertStageAction, returnToPreviousStageAction) was
+ * already non-redirecting and stayed on the focused board — the
+ * difference was purely which action a given card's current log status
+ * happened to route through, not anything about the workflow itself.
+ * Matches those other actions' shape exactly so the board can call it the
+ * same way (client onClick + router.refresh(), no page navigation).
+ */
+export async function startStageAction(stageLogId: string): Promise<ActionResult> {
   const user = await requirePermission("PRODUCTION_UPDATE_STAGE", ["PRODUCTION"]);
-  await setStageLogStatus(stageLogId, "IN_PROGRESS", user.id);
-  redirect(`/production`);
+  try {
+    await setStageLogStatus(stageLogId, "IN_PROGRESS", user.id);
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof RuleViolation) return { ok: false, error: e.message };
+    throw e;
+  }
 }
 
 export async function completeStageAction(jobOrderId: string, stageLogId: string, formData: FormData) {
@@ -76,8 +97,6 @@ export async function revertStageAction(undo: StageChangeUndo): Promise<RevertSt
     throw e;
   }
 }
-
-export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
  * "Return to Previous Process" (Production UI job card/side panel More
@@ -173,6 +192,7 @@ export type EligibleJobOrder = {
   quantity: number;
   deadline: string | null;
   overdue: boolean;
+  priority: "LOW" | "MEDIUM" | "HIGH";
 };
 
 /**
@@ -203,6 +223,7 @@ export async function getEligibleJobOrdersAction(serviceId?: string): Promise<El
     quantity: jo.quantity,
     deadline: jo.deadline ? jo.deadline.toISOString() : null,
     overdue: !!jo.deadline && jo.deadline.getTime() < now,
+    priority: jo.priority,
   }));
 }
 
@@ -228,6 +249,7 @@ export type JobOrderPanelData = {
   overdue: boolean;
   createdAt: string;
   status: string;
+  priority: "LOW" | "MEDIUM" | "HIGH";
   orderId: string;
   orderNumber: string;
   customerName: string;
@@ -235,6 +257,7 @@ export type JobOrderPanelData = {
   stages: { name: string; order: number; state: "done" | "current" | "upcoming"; isQCStage: boolean }[];
   assignedStaffId: string | null;
   assignedStaffName: string | null;
+  assignedStaffTitle: string | null;
   canReturnToPrevious: boolean;
   previousStageName: string | null;
   files: { id: string; filename: string; category: string; isApproved: boolean; uploadedByName: string; createdAt: string; path: string }[];
@@ -295,6 +318,7 @@ export async function getJobOrderPanelDataAction(jobOrderId: string): Promise<Jo
     overdue: !!jo.deadline && jo.deadline.getTime() < Date.now() && !isDone,
     createdAt: jo.createdAt.toISOString(),
     status: jo.status,
+    priority: jo.priority,
     orderId: jo.orderId,
     orderNumber: jo.order.orderNumber,
     customerName: jo.order.customer.name,
@@ -307,6 +331,7 @@ export async function getJobOrderPanelDataAction(jobOrderId: string): Promise<Jo
     })),
     assignedStaffId: currentLog?.assignedToId ?? null,
     assignedStaffName: currentLog?.assignedTo?.name ?? null,
+    assignedStaffTitle: currentLog?.assignedTo?.title ?? null,
     canReturnToPrevious,
     previousStageName: previous?.name ?? null,
     files: jo.files.map((f) => ({

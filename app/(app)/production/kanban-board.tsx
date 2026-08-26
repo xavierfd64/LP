@@ -25,14 +25,19 @@ import {
   ArrowRightLeft,
   ArrowLeft,
   Ban,
+  Loader2,
+  Calendar,
+  Boxes,
 } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+import { PriorityFlag } from "@/components/ui/priority-flag";
+import { renderStageIcon } from "@/lib/production-icons";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import {
-  markStageInProgressAction,
+  startStageAction,
   moveStageAction,
   revertStageAction,
   returnToPreviousStageAction,
@@ -45,7 +50,7 @@ import { READY_COLUMN, type KanbanJobOrder, type ServiceBoard } from "@/lib/prod
 import { openTransactionInChatAction } from "@/app/actions/messages";
 import { MessengerDispatchDialog } from "@/components/production/messenger-dispatch-dialog";
 import { MoveConfirmDialog, type MoveConfirmRequest } from "@/components/production/move-confirm-dialog";
-import { JobDetailsPanel } from "@/components/production/job-details-panel";
+import { JobDetailsPanel, type Tab as PanelTab } from "@/components/production/job-details-panel";
 import { ProductionMobileNav } from "@/components/production/production-mobile-nav";
 
 export { READY_COLUMN };
@@ -61,6 +66,7 @@ const READY_TONE = { header: "bg-slate-100 text-slate-800 border-slate-200", bad
 function toneFor(colName: string, index: number) {
   return colName === READY_COLUMN ? READY_TONE : STAGE_TONES[index % STAGE_TONES.length];
 }
+
 
 type ViewMode = "kanban" | "list";
 type UndoState = { jobOrderId: string; joNumber: string; fromStage: string; toStage: string; undo: StageChangeUndo };
@@ -124,6 +130,11 @@ export function FocusedBoard({
   const [pendingDrop, setPendingDrop] = useState<{ jo: KanbanJobOrder; targetOrder: number | null } | null>(null);
 
   const [panelJobOrderId, setPanelJobOrderId] = useState<string | null>(null);
+  const [panelTab, setPanelTab] = useState<PanelTab | undefined>(undefined);
+  function openPanel(id: string, tab?: PanelTab) {
+    setPanelJobOrderId(id);
+    setPanelTab(tab);
+  }
 
   useEffect(() => {
     // Desktop gets real side-by-side drag-and-drop; tablet/mobile show one
@@ -305,7 +316,9 @@ export function FocusedBoard({
               const count = board.jobOrders.filter((j) => j.column === col.name).length;
               return (
                 <div key={col.name} className={cn("rounded-lg border p-3", tone.header)}>
-                  <p className="text-xs font-semibold uppercase tracking-wide">{col.name}</p>
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide">
+                    {renderStageIcon(col.name, "h-3.5 w-3.5")} {col.name}
+                  </p>
                   <p className="mt-1 text-2xl font-bold">
                     {count} <span className="text-xs font-medium">job{count === 1 ? "" : "s"}</span>
                   </p>
@@ -329,7 +342,7 @@ export function FocusedBoard({
           No production workflow is assigned to this service yet.
         </div>
       ) : viewMode === "list" ? (
-        <ListView items={filteredBoard.jobOrders.map((j) => ({ ...j, boardLabel: board.label }))} onOpenPanel={setPanelJobOrderId} />
+        <ListView items={filteredBoard.jobOrders.map((j) => ({ ...j, boardLabel: board.label }))} onOpenPanel={openPanel} />
       ) : (
         <SingleBoard
           board={filteredBoard}
@@ -340,7 +353,7 @@ export function FocusedBoard({
           canDrag={canDrag}
           onRequestMove={requestMove}
           onRequestReturn={requestReturn}
-          onOpenPanel={setPanelJobOrderId}
+          onOpenPanel={openPanel}
           onDropError={setDragError}
         />
       )}
@@ -379,7 +392,8 @@ export function FocusedBoard({
 
       <JobDetailsPanel
         jobOrderId={panelJobOrderId}
-        onClose={() => setPanelJobOrderId(null)}
+        initialTab={panelTab}
+        onClose={() => { setPanelJobOrderId(null); setPanelTab(undefined); }}
         onRequestMove={requestMoveFromPanel}
         onRequestReturn={requestReturnFromPanel}
         onChanged={() => router.refresh()}
@@ -390,7 +404,7 @@ export function FocusedBoard({
   );
 }
 
-function ListView({ items, onOpenPanel }: { items: (KanbanJobOrder & { boardLabel: string })[]; onOpenPanel: (id: string) => void }) {
+function ListView({ items, onOpenPanel }: { items: (KanbanJobOrder & { boardLabel: string })[]; onOpenPanel: (id: string, tab?: PanelTab) => void }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
       <Table>
@@ -399,6 +413,7 @@ function ListView({ items, onOpenPanel }: { items: (KanbanJobOrder & { boardLabe
             <TH>Job Order</TH>
             <TH>Customer</TH>
             <TH>Qty</TH>
+            <TH>Priority</TH>
             <TH>Stage</TH>
             <TH>Progress</TH>
             <TH>Due</TH>
@@ -417,6 +432,9 @@ function ListView({ items, onOpenPanel }: { items: (KanbanJobOrder & { boardLabe
               <TD>{jo.customerName}</TD>
               <TD>{jo.quantity}</TD>
               <TD>
+                <PriorityFlag priority={jo.priority} />
+              </TD>
+              <TD>
                 <StatusBadge status={jo.status} />
               </TD>
               <TD>
@@ -430,17 +448,15 @@ function ListView({ items, onOpenPanel }: { items: (KanbanJobOrder & { boardLabe
               <TD className={cn(jo.overdue && "font-medium text-red-600")}>{jo.deadline ? formatDate(jo.deadline) : "—"}</TD>
               <TD>{jo.assignedStaffName ?? "Unassigned"}</TD>
               <TD>
-                <Link href={`/job-orders/${jo.id}`}>
-                  <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs">
-                    Details
-                  </Button>
-                </Link>
+                <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => onOpenPanel(jo.id)}>
+                  Details
+                </Button>
               </TD>
             </TR>
           ))}
           {items.length === 0 && (
             <TR>
-              <TD colSpan={8} className="py-8 text-center text-slate-400">
+              <TD colSpan={9} className="py-8 text-center text-slate-400">
                 No production jobs match this view.
               </TD>
             </TR>
@@ -478,7 +494,7 @@ function SingleBoard({
   canDrag: boolean;
   onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
   onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
-  onOpenPanel: (id: string) => void;
+  onOpenPanel: (id: string, tab?: PanelTab) => void;
   onDropError: (msg: string | null) => void;
 }) {
   const [activeStage, setActiveStage] = useState(board.columns[0]?.name ?? "");
@@ -545,6 +561,7 @@ function SingleBoard({
                   activeStage === col.name ? tone.header : "text-slate-500 hover:bg-slate-50"
                 )}
               >
+                {renderStageIcon(col.name, "h-3.5 w-3.5")}
                 {col.name}
                 <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-semibold", activeStage === col.name ? tone.badge : "bg-slate-100 text-slate-500")}>{count}</span>
               </button>
@@ -635,7 +652,7 @@ function StageColumn({
   onDropCard: (jo: KanbanJobOrder) => void;
   onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
   onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
-  onOpenPanel: (id: string) => void;
+  onOpenPanel: (id: string, tab?: PanelTab) => void;
   className?: string;
   fullWidth?: boolean;
 }) {
@@ -668,7 +685,9 @@ function StageColumn({
       }}
     >
       <div className={cn("flex items-center justify-between rounded-t-lg border-b p-3", tone.header)}>
-        <h3 className="text-sm font-semibold uppercase tracking-wide">{colName}</h3>
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide">
+          {renderStageIcon(colName, "h-4 w-4")} {colName}
+        </h3>
         <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", tone.badge)}>{items.length}</span>
       </div>
       <div className={cn("space-y-2 overflow-y-auto p-2", fullWidth ? "max-h-none" : "max-h-[70vh]")}>
@@ -736,11 +755,12 @@ function JobOrderCard({
   onDragEnd: () => void;
   onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
   onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
-  onOpenPanel: (id: string) => void;
+  onOpenPanel: (id: string, tab?: PanelTab) => void;
 }) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
-  const markIP = jo.currentLogId ? markStageInProgressAction.bind(null, jo.currentLogId) : undefined;
+  const [starting, setStarting] = useState(false);
   // Same precondition the "Next" button already required — a card only
   // becomes draggable once its current stage is actually in progress.
   // READY (not started yet) and QC cards keep their existing dedicated
@@ -761,6 +781,20 @@ function JobOrderCard({
     setDuplicating(true);
     await duplicateJobOrderAction(jo.id);
     setDuplicating(false);
+  }
+
+  // Starts the job's current stage (READY -> IN_PROGRESS). Deliberately
+  // the same client-call + router.refresh() shape every other stage
+  // action on this card already uses — see startStageAction's own doc
+  // comment for why: this used to be a plain <form action={...}> Server
+  // Action that redirected to /production on success, which was the root
+  // cause of "Next Stage sometimes leaves the board, sometimes doesn't."
+  async function handleStart() {
+    if (!jo.currentLogId || starting) return;
+    setStarting(true);
+    await startStageAction(jo.currentLogId);
+    setStarting(false);
+    router.refresh();
   }
 
   return (
@@ -792,10 +826,10 @@ function JobOrderCard({
                   <Link href={`/job-orders/${jo.id}`} className="flex items-center gap-2 px-3 py-1.5 text-slate-700 hover:bg-slate-50">
                     <Eye className="h-3.5 w-3.5" /> View Job Order
                   </Link>
-                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id, "Customer Form"); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
                     <ClipboardList className="h-3.5 w-3.5" /> View Customer Form
                   </button>
-                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id, "Files"); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
                     <Paperclip className="h-3.5 w-3.5" /> View Files &amp; Attachments
                   </button>
                   <button type="button" onClick={() => { setMenuOpen(false); handleChat(); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
@@ -804,7 +838,7 @@ function JobOrderCard({
                   <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
                     <UserCog className="h-3.5 w-3.5" /> Reassign
                   </button>
-                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id, "History"); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
                     <History className="h-3.5 w-3.5" /> View Production History
                   </button>
                   {canUpdateStage && (
@@ -853,17 +887,21 @@ function JobOrderCard({
         <p className="truncate text-xs font-medium text-slate-500">{jo.productType}</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-        <span>Qty: {jo.quantity} pcs</span>
-        <span>·</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+        <span className="flex items-center gap-1">
+          <Boxes className="h-3.5 w-3.5 text-slate-400" /> {jo.quantity} pcs
+        </span>
         {isReadyColumn ? (
-          <span>Completed: {jo.readyAt ? formatDate(jo.readyAt) : "—"}</span>
+          <span className="flex items-center gap-1">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" /> Completed: {jo.readyAt ? formatDate(jo.readyAt) : "—"}
+          </span>
         ) : (
           <span className={cn("flex items-center gap-1", jo.overdue && "font-medium text-red-600")}>
-            {jo.overdue && <AlertTriangle className="h-3 w-3" />}
+            {jo.overdue ? <AlertTriangle className="h-3.5 w-3.5" /> : <Calendar className="h-3.5 w-3.5 text-slate-400" />}
             {jo.overdue ? "Overdue" : "Due"}: {jo.deadline ? formatDate(jo.deadline) : "—"}
           </span>
         )}
+        <PriorityFlag priority={jo.priority} />
       </div>
 
       {jo.specs.length > 0 && (
@@ -888,19 +926,20 @@ function JobOrderCard({
       )}
 
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-[10px] font-semibold text-brand-700">{initials(jo.assignedStaffName)}</span>
-          <span className="truncate text-xs text-slate-500">{jo.assignedStaffName ?? "Unassigned"}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[10px] font-semibold text-brand-700">{initials(jo.assignedStaffName)}</span>
+          <span className="truncate text-xs text-slate-500">
+            {jo.assignedStaffName ?? "Unassigned"}
+            {jo.assignedStaffTitle && <span className="text-slate-400"> · {jo.assignedStaffTitle}</span>}
+          </span>
         </div>
         {jo.courier && <p className="shrink-0 text-xs text-slate-400">Courier: {jo.courier}</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
-        <Link href={`/job-orders/${jo.id}`}>
-          <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs">
-            Details
-          </Button>
-        </Link>
+        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => onOpenPanel(jo.id)}>
+          Details
+        </Button>
         <Link href={`/job-orders/${jo.id}/print`} target="_blank">
           <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" aria-label="View document">
             <FileText className="h-3.5 w-3.5" />
@@ -915,23 +954,21 @@ function JobOrderCard({
           {jo.status === "QC" ? (
             <Link href={`/job-orders/${jo.id}`}>
               <Button type="button" size="sm" className="h-7 px-2 text-xs">
-                Mark as Ready
+                Mark as Ready <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
           ) : jo.status === "READY" ? (
             <Link href={`/job-orders/${jo.id}`}>
               <Button type="button" size="sm" className="h-7 px-2 text-xs">
-                Mark as Completed
+                Mark as Completed <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
           ) : jo.currentLogStatus === "READY" ? (
-            canUpdateStage &&
-            markIP && (
-              <form action={markIP}>
-                <Button type="submit" size="sm" className="h-7 px-2 text-xs">
-                  Start {jo.column}
-                </Button>
-              </form>
+            canUpdateStage && (
+              <Button type="button" size="sm" className="h-7 px-2 text-xs" onClick={handleStart} disabled={starting}>
+                {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                Start {jo.column}
+              </Button>
             )
           ) : jo.currentLogStatus === "IN_PROGRESS" ? (
             canMarkStageComplete && (
@@ -946,7 +983,9 @@ function JobOrderCard({
                     Start {nextCol.name} <ChevronRight className="h-3.5 w-3.5" />
                   </>
                 ) : (
-                  "Mark as Ready"
+                  <>
+                    Mark as Ready <ChevronRight className="h-3.5 w-3.5" />
+                  </>
                 )}
               </Button>
             )
