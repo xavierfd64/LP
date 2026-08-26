@@ -16,19 +16,39 @@ import {
   LayoutGrid,
   List as ListIcon,
   SlidersHorizontal,
+  Eye,
+  ClipboardList,
+  Paperclip,
+  History,
+  UserCog,
+  Copy,
+  ArrowRightLeft,
+  ArrowLeft,
+  Ban,
 } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
-import { markStageInProgressAction, moveStageAction, revertStageAction, type MoveStageResult } from "@/app/actions/production";
+import {
+  markStageInProgressAction,
+  moveStageAction,
+  revertStageAction,
+  returnToPreviousStageAction,
+  duplicateJobOrderAction,
+  type MoveStageResult,
+  type JobOrderPanelData,
+} from "@/app/actions/production";
 import type { StageChangeUndo } from "@/lib/workflow";
+import { READY_COLUMN, type KanbanJobOrder, type ServiceBoard } from "@/lib/production-board-types";
 import { openTransactionInChatAction } from "@/app/actions/messages";
 import { MessengerDispatchDialog } from "@/components/production/messenger-dispatch-dialog";
+import { MoveConfirmDialog, type MoveConfirmRequest } from "@/components/production/move-confirm-dialog";
+import { JobDetailsPanel } from "@/components/production/job-details-panel";
+import { ProductionMobileNav } from "@/components/production/production-mobile-nav";
 
-/** Synthetic trailing column every board gets — a Job Order lands here once its workflow's last real stage is completed. Not a WorkflowStage row, so its `order` is always `stages.length + 1` and it's never a valid `expectedTargetStageOrder` target (that uses `null` instead — see completeCurrentStage's doc comment). */
-export const READY_COLUMN = "Ready for Fulfillment";
+export { READY_COLUMN };
 
 /** Colored header treatment per stage, cycling through a fixed palette by column position — a stage's real name is never assumed (services have different workflows), so this keys off position, not a hardcoded "Design/Printing/..." name list. The synthetic Ready column always gets the dedicated "ready" tone regardless of position. */
 const STAGE_TONES = [
@@ -42,38 +62,8 @@ function toneFor(colName: string, index: number) {
   return colName === READY_COLUMN ? READY_TONE : STAGE_TONES[index % STAGE_TONES.length];
 }
 
-export type KanbanJobOrder = {
-  id: string;
-  joNumber: string;
-  productType: string;
-  quantity: number;
-  specs: [string, string][];
-  deadline: string | null;
-  /** When this job actually reached the Ready column (from its stage-log history) — only meaningful/populated for Ready-column cards. */
-  readyAt: string | null;
-  overdue: boolean;
-  status: string;
-  orderNumber: string;
-  customerName: string;
-  amount: number | null;
-  courier: string | null;
-  column: string;
-  /** How far through this job's own workflow it has traveled (0-100), derived from real stage position — never a fabricated per-card estimate. */
-  progressPct: number;
-  currentLogId: string | null;
-  currentLogStatus: string | null;
-  assignedStaffName: string | null;
-};
-
-export type ServiceBoard = {
-  key: string;
-  label: string;
-  columns: { name: string; order: number }[];
-  jobOrders: KanbanJobOrder[];
-};
-
-type UndoState = { jobOrderId: string; joNumber: string; fromStage: string; toStage: string; undo: StageChangeUndo };
 type ViewMode = "kanban" | "list";
+type UndoState = { jobOrderId: string; joNumber: string; fromStage: string; toStage: string; undo: StageChangeUndo };
 
 function initials(name: string | null) {
   if (!name) return "?";
@@ -82,39 +72,42 @@ function initials(name: string | null) {
 }
 
 /**
- * Production Kanban (Aug 19 1st update; Aug 22 3rd update visual redesign).
- * One `ServiceBoard` per active Service, each with its own real workflow's
- * columns — "All Services" stacks every board rather than merging them
- * into one fake universal column set (spec item 12). This grouping is
- * deliberately unchanged by the visual redesign: the reference
- * illustration shows one merged 5-column board spanning every service,
- * but building that would mean combining job orders across workflows that
- * don't actually share a stage sequence — a real behavior change, not a
- * restyle, and the user asked to keep the existing per-service separation
- * (just restyled) rather than take on that risk.
+ * Focused per-service production board (Production UI implementation,
+ * illustration 2) — the client-side engine behind
+ * /production/board/[key]. Historically (Aug 19/22 updates) this same file
+ * exported a `KanbanBoard` that stacked *every* active service's board on
+ * one page with a service-picker dropdown standing in for real navigation;
+ * that conflated illustrations 1 and 2 into a single view. Splitting
+ * Overview (service summary + "Open Board" links, app/(app)/production/
+ * page.tsx) from this focused single-board view is what actually
+ * implements the two distinct illustrated screens — this component now
+ * owns exactly one `board`, reached by its own URL.
  *
- * Desktop/tablet (≥640px, matching this app's existing sm: breakpoint)
- * supports drag-and-drop between a job's current stage and the one
- * immediately after it in its own workflow; phones keep the existing
- * button controls. The ≥640px gate is a viewport-capability check
- * (matchMedia), not user-agent sniffing, mirroring how every other
- * responsive decision in this app is already made.
+ * Owns the one shared MoveConfirmDialog and JobDetailsPanel instance for
+ * everything on this board — every move/return, whether triggered by a
+ * card's primary button, its More Actions menu, drag-and-drop, or the side
+ * panel's Next Actions, funnels through the same confirm-then-call path
+ * (spec item 3: "Visual movement alone is not enough. The system must save
+ * the stage change correctly").
  */
-export function KanbanBoard({
-  boards,
+export function FocusedBoard({
+  board,
   canUpdateStage,
   canMarkStageComplete,
   canDispatchMessenger,
-  canManageOrders,
+  canAddJob,
+  canSeeSettings,
+  canSeeReports,
 }: {
-  boards: ServiceBoard[];
+  board: ServiceBoard;
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
   canDispatchMessenger: boolean;
-  canManageOrders: boolean;
+  canAddJob: boolean;
+  canSeeSettings: boolean;
+  canSeeReports: boolean;
 }) {
   const router = useRouter();
-  const [serviceKey, setServiceKey] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
@@ -125,8 +118,19 @@ export function KanbanBoard({
   const [undoState, setUndoState] = useState<UndoState | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
 
+  const [moveRequest, setMoveRequest] = useState<MoveConfirmRequest | null>(null);
+  const [moveSubmitting, setMoveSubmitting] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const [pendingDrop, setPendingDrop] = useState<{ jo: KanbanJobOrder; targetOrder: number | null } | null>(null);
+
+  const [panelJobOrderId, setPanelJobOrderId] = useState<string | null>(null);
+
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 640px)");
+    // Desktop gets real side-by-side drag-and-drop; tablet/mobile show one
+    // stage at a time (spec item 6/7 — never a squeezed multi-column
+    // layout below desktop width), so drag only makes sense at the
+    // desktop tier.
+    const mq = window.matchMedia("(min-width: 1024px)");
     const update = () => setCanDrag(mq.matches);
     update();
     mq.addEventListener("change", update);
@@ -139,26 +143,16 @@ export function KanbanBoard({
     return () => clearTimeout(id);
   }, [undoState]);
 
-  const allColumnNames = useMemo(() => {
-    const names = new Set<string>();
-    boards.forEach((b) => b.columns.forEach((c) => names.add(c.name)));
-    return Array.from(names);
-  }, [boards]);
-
   const allAssignees = useMemo(() => {
     const names = new Set<string>();
-    boards.forEach((b) => b.jobOrders.forEach((j) => j.assignedStaffName && names.add(j.assignedStaffName)));
+    board.jobOrders.forEach((j) => j.assignedStaffName && names.add(j.assignedStaffName));
     return Array.from(names).sort();
-  }, [boards]);
+  }, [board]);
 
   const q = query.trim().toLowerCase();
   function matches(j: KanbanJobOrder) {
     if (q) {
-      const hit =
-        j.joNumber.toLowerCase().includes(q) ||
-        j.customerName.toLowerCase().includes(q) ||
-        j.productType.toLowerCase().includes(q) ||
-        j.orderNumber.toLowerCase().includes(q);
+      const hit = j.joNumber.toLowerCase().includes(q) || j.customerName.toLowerCase().includes(q) || j.productType.toLowerCase().includes(q) || j.orderNumber.toLowerCase().includes(q);
       if (!hit) return false;
     }
     if (statusFilter && j.column !== statusFilter) return false;
@@ -167,25 +161,82 @@ export function KanbanBoard({
     return true;
   }
 
-  const visibleBoards = useMemo(() => {
-    const selected = serviceKey ? boards.filter((b) => b.key === serviceKey) : boards.filter((b) => b.jobOrders.length > 0);
-    return selected.map((b) => ({ ...b, jobOrders: b.jobOrders.filter(matches) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boards, serviceKey, q, statusFilter, assignedFilter, overdueOnly]);
+  const filteredBoard: ServiceBoard = useMemo(() => ({ ...board, jobOrders: board.jobOrders.filter(matches) }), [board, q, statusFilter, assignedFilter, overdueOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const flatItems = useMemo(() => visibleBoards.flatMap((b) => b.jobOrders.map((j) => ({ ...j, boardLabel: b.label }))), [visibleBoards]);
+  function requestMove(jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) {
+    setMoveError(null);
+    setPendingDrop({ jo, targetOrder });
+    setMoveRequest({ kind: "move", jobOrderId: jo.id, joNumber: jo.joNumber, customerName: jo.customerName, quantity: jo.quantity, fromStage: jo.column, toStage: toStageName });
+  }
 
-  async function handleMove(jo: KanbanJobOrder, board: ServiceBoard, targetOrder: number | null) {
-    if (!jo.currentLogId) return;
-    setDragError(null);
+  function requestReturn(jo: KanbanJobOrder, previousStageName: string) {
+    setMoveError(null);
+    setPendingDrop({ jo, targetOrder: null });
+    setMoveRequest({ kind: "return", jobOrderId: jo.id, joNumber: jo.joNumber, customerName: jo.customerName, quantity: jo.quantity, fromStage: jo.column, toStage: previousStageName });
+  }
+
+  function requestMoveFromPanel(data: JobOrderPanelData, toStageName: string) {
+    setPanelJobOrderId(null);
+    setMoveError(null);
+    setPendingDrop(null);
+    const current = data.stages.find((s) => s.state === "current");
+    setMoveRequest({ kind: "move", jobOrderId: data.id, joNumber: data.joNumber, customerName: data.customerName, quantity: data.quantity, fromStage: current?.name ?? "Current stage", toStage: toStageName });
+  }
+
+  function requestReturnFromPanel(data: JobOrderPanelData) {
+    setPanelJobOrderId(null);
+    setMoveError(null);
+    setPendingDrop(null);
+    const current = data.stages.find((s) => s.state === "current");
+    setMoveRequest({ kind: "return", jobOrderId: data.id, joNumber: data.joNumber, customerName: data.customerName, quantity: data.quantity, fromStage: current?.name ?? "Current stage", toStage: data.previousStageName ?? "Previous stage" });
+  }
+
+  async function handleConfirmMove(reason?: string) {
+    if (!moveRequest) return;
+    setMoveSubmitting(true);
+    setMoveError(null);
+
+    if (moveRequest.kind === "return") {
+      const result = await returnToPreviousStageAction(moveRequest.jobOrderId, reason ?? "");
+      setMoveSubmitting(false);
+      if (!result.ok) {
+        setMoveError(result.error);
+        return;
+      }
+      setMoveRequest(null);
+      router.refresh();
+      return;
+    }
+
+    // Forward move — prefer the exact stage log / target order captured by
+    // the caller (drag-and-drop or a card/panel button already resolved
+    // this from real board data); fall back to re-resolving from the
+    // board's own current job list if the request came from the panel
+    // (which only knows the destination stage's *name*, not its order).
+    const jo = pendingDrop?.jo ?? board.jobOrders.find((j) => j.id === moveRequest.jobOrderId);
+    if (!jo || !jo.currentLogId) {
+      setMoveSubmitting(false);
+      setMoveError("This job order can't be moved right now.");
+      return;
+    }
+    let targetOrder: number | null;
+    if (pendingDrop) {
+      targetOrder = pendingDrop.targetOrder;
+    } else {
+      const targetCol = board.columns.find((c) => c.name === moveRequest.toStage);
+      targetOrder = targetCol && targetCol.name !== READY_COLUMN ? targetCol.order : null;
+    }
     const result: MoveStageResult = await moveStageAction(jo.id, jo.currentLogId, targetOrder);
+    setMoveSubmitting(false);
     if (!result.ok) {
-      setDragError(result.error);
+      setMoveError(result.error);
       return;
     }
     if (!result.undo.wasReworkCompletion) {
       setUndoState({ jobOrderId: jo.id, joNumber: jo.joNumber, fromStage: result.undo.fromStageName, toStage: result.undo.toStageName, undo: result.undo });
     }
+    setMoveRequest(null);
+    setPendingDrop(null);
     router.refresh();
   }
 
@@ -206,26 +257,13 @@ export function KanbanBoard({
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative flex-1 sm:min-w-[220px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search job order, customer, service..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-8"
-            />
+            <Input placeholder="Search job orders, customers, products..." value={query} onChange={(e) => setQuery(e.target.value)} className="pl-8" />
           </div>
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="sm:w-40">
             <option value="">All Status</option>
-            {allColumnNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </Select>
-          <Select value={serviceKey} onChange={(e) => setServiceKey(e.target.value)} className="sm:w-44">
-            <option value="">All Services</option>
-            {boards.map((b) => (
-              <option key={b.key} value={b.key}>
-                {b.label}
+            {board.columns.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
               </option>
             ))}
           </Select>
@@ -242,20 +280,10 @@ export function KanbanBoard({
           </Button>
 
           <div className="ml-auto flex items-center gap-1 rounded-md border border-slate-200 p-0.5">
-            <button
-              type="button"
-              onClick={() => setViewMode("kanban")}
-              aria-label="Kanban view"
-              className={cn("rounded p-1.5", viewMode === "kanban" ? "bg-slate-900 text-white" : "text-slate-400 hover:bg-slate-100")}
-            >
+            <button type="button" onClick={() => setViewMode("kanban")} aria-label="Kanban view" className={cn("rounded p-1.5", viewMode === "kanban" ? "bg-slate-900 text-white" : "text-slate-400 hover:bg-slate-100")}>
               <LayoutGrid className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              aria-label="List view"
-              className={cn("rounded p-1.5", viewMode === "list" ? "bg-slate-900 text-white" : "text-slate-400 hover:bg-slate-100")}
-            >
+            <button type="button" onClick={() => setViewMode("list")} aria-label="List view" className={cn("rounded p-1.5", viewMode === "list" ? "bg-slate-900 text-white" : "text-slate-400 hover:bg-slate-100")}>
               <ListIcon className="h-4 w-4" />
             </button>
           </div>
@@ -277,38 +305,29 @@ export function KanbanBoard({
         </div>
       )}
 
-      {visibleBoards.every((b) => b.jobOrders.length === 0) && (
-        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-slate-200 py-10 text-center">
-          <Package className="h-6 w-6 text-slate-300" />
-          <p className="text-sm text-slate-400">No production jobs match this view.</p>
+      {board.columns.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
+          No production workflow is assigned to this service yet.
         </div>
-      )}
-
-      {viewMode === "list" ? (
-        <ListView items={flatItems} />
+      ) : viewMode === "list" ? (
+        <ListView items={filteredBoard.jobOrders.map((j) => ({ ...j, boardLabel: board.label }))} onOpenPanel={setPanelJobOrderId} />
       ) : (
-        <>
-          {visibleBoards.map((board) => (
-            <div key={board.key} className="space-y-2">
-              {!serviceKey && visibleBoards.length > 1 && (
-                <h2 className="text-sm font-semibold text-slate-900">{board.label}</h2>
-              )}
-              <SingleBoard
-                board={board}
-                canUpdateStage={canUpdateStage}
-                canMarkStageComplete={canMarkStageComplete}
-                canDispatchMessenger={canDispatchMessenger}
-                canManageOrders={canManageOrders}
-                canDrag={canDrag}
-                onMove={handleMove}
-              />
-            </div>
-          ))}
-        </>
+        <SingleBoard
+          board={filteredBoard}
+          canUpdateStage={canUpdateStage}
+          canMarkStageComplete={canMarkStageComplete}
+          canDispatchMessenger={canDispatchMessenger}
+          canAddJob={canAddJob}
+          canDrag={canDrag}
+          onRequestMove={requestMove}
+          onRequestReturn={requestReturn}
+          onOpenPanel={setPanelJobOrderId}
+          onDropError={setDragError}
+        />
       )}
 
-      <p className="hidden items-center gap-1.5 text-xs text-slate-400 sm:flex">
-        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-brand-400" /> Drag and drop to move job orders
+      <p className="hidden items-center gap-1.5 text-xs text-slate-400 lg:flex">
+        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-brand-400" /> Drag and drop, or use the primary button on each job to move it forward
       </p>
 
       {undoState && (
@@ -317,11 +336,7 @@ export function KanbanBoard({
             <span>
               {undoState.joNumber}: {undoState.fromStage} → {undoState.toStage}
             </span>
-            <button
-              type="button"
-              onClick={handleUndo}
-              className="flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 font-medium hover:bg-white/20"
-            >
+            <button type="button" onClick={handleUndo} className="flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 font-medium hover:bg-white/20">
               <Undo2 className="h-3.5 w-3.5" /> Undo
             </button>
             <button type="button" onClick={() => setUndoState(null)} aria-label="Dismiss" className="text-white/60 hover:text-white">
@@ -330,11 +345,33 @@ export function KanbanBoard({
           </div>
         </div>
       )}
+
+      <MoveConfirmDialog
+        request={moveRequest}
+        submitting={moveSubmitting}
+        error={moveError}
+        onCancel={() => {
+          setMoveRequest(null);
+          setPendingDrop(null);
+          setMoveError(null);
+        }}
+        onConfirm={handleConfirmMove}
+      />
+
+      <JobDetailsPanel
+        jobOrderId={panelJobOrderId}
+        onClose={() => setPanelJobOrderId(null)}
+        onRequestMove={requestMoveFromPanel}
+        onRequestReturn={requestReturnFromPanel}
+        onChanged={() => router.refresh()}
+      />
+
+      <ProductionMobileNav canSeeSettings={canSeeSettings} canSeeReports={canSeeReports} />
     </div>
   );
 }
 
-function ListView({ items }: { items: (KanbanJobOrder & { boardLabel: string })[] }) {
+function ListView({ items, onOpenPanel }: { items: (KanbanJobOrder & { boardLabel: string })[]; onOpenPanel: (id: string) => void }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
       <Table>
@@ -342,7 +379,6 @@ function ListView({ items }: { items: (KanbanJobOrder & { boardLabel: string })[
           <TR>
             <TH>Job Order</TH>
             <TH>Customer</TH>
-            <TH>Service</TH>
             <TH>Qty</TH>
             <TH>Stage</TH>
             <TH>Progress</TH>
@@ -355,12 +391,11 @@ function ListView({ items }: { items: (KanbanJobOrder & { boardLabel: string })[
           {items.map((jo) => (
             <TR key={jo.id}>
               <TD>
-                <Link href={`/job-orders/${jo.id}`} className="font-medium text-slate-900 underline decoration-slate-300 hover:decoration-slate-900">
+                <button type="button" onClick={() => onOpenPanel(jo.id)} className="font-medium text-slate-900 underline decoration-slate-300 hover:decoration-slate-900">
                   {jo.joNumber}
-                </Link>
+                </button>
               </TD>
               <TD>{jo.customerName}</TD>
-              <TD>{jo.boardLabel}</TD>
               <TD>{jo.quantity}</TD>
               <TD>
                 <StatusBadge status={jo.status} />
@@ -386,7 +421,7 @@ function ListView({ items }: { items: (KanbanJobOrder & { boardLabel: string })[
           ))}
           {items.length === 0 && (
             <TR>
-              <TD colSpan={9} className="py-8 text-center text-slate-400">
+              <TD colSpan={8} className="py-8 text-center text-slate-400">
                 No production jobs match this view.
               </TD>
             </TR>
@@ -397,42 +432,63 @@ function ListView({ items }: { items: (KanbanJobOrder & { boardLabel: string })[
   );
 }
 
+/** The one column immediately after `fromColumn` in this board's own workflow — the only valid drag target, enforcing Rule #4 (no skipping) visually before the server enforces it again authoritatively. */
+function nextColumnName(board: ServiceBoard, fromColumn: string): string | null {
+  const idx = board.columns.findIndex((c) => c.name === fromColumn);
+  if (idx === -1) return null;
+  return board.columns[idx + 1]?.name ?? null;
+}
+
 function SingleBoard({
   board,
   canUpdateStage,
   canMarkStageComplete,
   canDispatchMessenger,
-  canManageOrders,
+  canAddJob,
   canDrag,
-  onMove,
+  onRequestMove,
+  onRequestReturn,
+  onOpenPanel,
+  onDropError,
 }: {
   board: ServiceBoard;
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
   canDispatchMessenger: boolean;
-  canManageOrders: boolean;
+  canAddJob: boolean;
   canDrag: boolean;
-  onMove: (jo: KanbanJobOrder, board: ServiceBoard, targetOrder: number | null) => void;
+  onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
+  onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
+  onOpenPanel: (id: string) => void;
+  onDropError: (msg: string | null) => void;
 }) {
-  const [mobileStage, setMobileStage] = useState(board.columns[0]?.name ?? "");
+  const [activeStage, setActiveStage] = useState(board.columns[0]?.name ?? "");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!board.columns.some((c) => c.name === activeStage) && board.columns[0]) setActiveStage(board.columns[0].name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board.columns.map((c) => c.name).join("|")]);
 
   const draggingJo = board.jobOrders.find((j) => j.id === draggingId) ?? null;
   const validTargetName = draggingJo ? nextColumnName(board, draggingJo.column) : null;
 
-  if (board.columns.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
-        No production workflow is assigned to this service yet.
-      </div>
-    );
-  }
+  const commonColumnProps = {
+    board,
+    canUpdateStage,
+    canMarkStageComplete,
+    canDispatchMessenger,
+    canAddJob,
+    onRequestMove,
+    onRequestReturn,
+    onOpenPanel,
+  };
 
   return (
     <>
-      {/* Mobile: one stage at a time via a selector, existing button controls — no drag. */}
+      {/* Mobile (<640px): one stage at a time via a dropdown selector — never a squeezed multi-column layout (spec item 7). */}
       <div className="sm:hidden">
-        <Select value={mobileStage} onChange={(e) => setMobileStage(e.target.value)}>
+        <Select value={activeStage} onChange={(e) => setActiveStage(e.target.value)}>
           {board.columns.map((col) => (
             <option key={col.name} value={col.name}>
               {col.name} ({board.jobOrders.filter((j) => j.column === col.name).length})
@@ -440,37 +496,67 @@ function SingleBoard({
           ))}
         </Select>
         <StageColumn
-          board={board}
-          colName={mobileStage}
-          colIndex={board.columns.findIndex((c) => c.name === mobileStage)}
-          items={board.jobOrders.filter((j) => j.column === mobileStage)}
-          canUpdateStage={canUpdateStage}
-          canMarkStageComplete={canMarkStageComplete}
-          canDispatchMessenger={canDispatchMessenger}
-          canManageOrders={canManageOrders}
+          {...commonColumnProps}
+          colName={activeStage}
+          colIndex={board.columns.findIndex((c) => c.name === activeStage)}
+          items={board.jobOrders.filter((j) => j.column === activeStage)}
           canDrag={false}
           isValidDropTarget={false}
           isDragActive={false}
           onDragStartCard={() => {}}
           onDragEndCard={() => {}}
           onDropCard={() => {}}
-          onMove={onMove}
           className="mt-3"
         />
       </div>
 
-      <div className="hidden gap-4 sm:flex sm:overflow-x-auto sm:pb-2">
+      {/* Tablet (640-1023px): horizontal stage tabs, one stage's jobs shown full-width — not the desktop's cramped side-by-side columns (spec item 6). */}
+      <div className="hidden sm:block lg:hidden">
+        <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1">
+          {board.columns.map((col, i) => {
+            const tone = toneFor(col.name, i);
+            const count = board.jobOrders.filter((j) => j.column === col.name).length;
+            return (
+              <button
+                key={col.name}
+                type="button"
+                onClick={() => setActiveStage(col.name)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium",
+                  activeStage === col.name ? tone.header : "text-slate-500 hover:bg-slate-50"
+                )}
+              >
+                {col.name}
+                <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-semibold", activeStage === col.name ? tone.badge : "bg-slate-100 text-slate-500")}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+        <StageColumn
+          {...commonColumnProps}
+          colName={activeStage}
+          colIndex={board.columns.findIndex((c) => c.name === activeStage)}
+          items={board.jobOrders.filter((j) => j.column === activeStage)}
+          canDrag={false}
+          isValidDropTarget={false}
+          isDragActive={false}
+          onDragStartCard={() => {}}
+          onDragEndCard={() => {}}
+          onDropCard={() => {}}
+          className="mt-3"
+          fullWidth
+        />
+      </div>
+
+      {/* Desktop (≥1024px): real side-by-side columns with drag-and-drop. */}
+      <div className="hidden gap-4 lg:flex lg:overflow-x-auto lg:pb-2">
         {board.columns.map((col, i) => (
           <StageColumn
             key={col.name}
-            board={board}
+            {...commonColumnProps}
             colName={col.name}
             colIndex={i}
             items={board.jobOrders.filter((j) => j.column === col.name)}
-            canUpdateStage={canUpdateStage}
-            canMarkStageComplete={canMarkStageComplete}
-            canDispatchMessenger={canDispatchMessenger}
-            canManageOrders={canManageOrders}
             canDrag={canDrag}
             isValidDropTarget={canDrag && validTargetName === col.name}
             isDragActive={!!draggingJo}
@@ -479,24 +565,18 @@ function SingleBoard({
             onDropCard={(jo) => {
               if (validTargetName === col.name) {
                 const targetCol = board.columns.find((c) => c.name === col.name)!;
-                onMove(jo, board, targetCol.name === READY_COLUMN ? null : targetCol.order);
+                onRequestMove(jo, targetCol.name === READY_COLUMN ? null : targetCol.order, targetCol.name);
+              } else {
+                onDropError("That stage isn't the next step in this job order's workflow.");
               }
               setDraggingId(null);
             }}
-            onMove={onMove}
-            className="w-72 shrink-0 sm:w-80"
+            className="w-72 shrink-0 lg:w-80"
           />
         ))}
       </div>
     </>
   );
-}
-
-/** The one column immediately after `fromColumn` in this board's own workflow — the only valid drag target, enforcing Rule #4 (no skipping) visually before the server enforces it again authoritatively. */
-function nextColumnName(board: ServiceBoard, fromColumn: string): string | null {
-  const idx = board.columns.findIndex((c) => c.name === fromColumn);
-  if (idx === -1) return null;
-  return board.columns[idx + 1]?.name ?? null;
 }
 
 function StageColumn({
@@ -507,15 +587,18 @@ function StageColumn({
   canUpdateStage,
   canMarkStageComplete,
   canDispatchMessenger,
-  canManageOrders,
+  canAddJob,
   canDrag,
   isValidDropTarget,
   isDragActive,
   onDragStartCard,
   onDragEndCard,
   onDropCard,
-  onMove,
+  onRequestMove,
+  onRequestReturn,
+  onOpenPanel,
   className,
+  fullWidth,
 }: {
   board: ServiceBoard;
   colName: string;
@@ -524,15 +607,18 @@ function StageColumn({
   canUpdateStage: boolean;
   canMarkStageComplete: boolean;
   canDispatchMessenger: boolean;
-  canManageOrders: boolean;
+  canAddJob: boolean;
   canDrag: boolean;
   isValidDropTarget: boolean;
   isDragActive: boolean;
   onDragStartCard: (id: string) => void;
   onDragEndCard: () => void;
   onDropCard: (jo: KanbanJobOrder) => void;
-  onMove: (jo: KanbanJobOrder, board: ServiceBoard, targetOrder: number | null) => void;
+  onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
+  onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
+  onOpenPanel: (id: string) => void;
   className?: string;
+  fullWidth?: boolean;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const tone = toneFor(colName, colIndex);
@@ -541,6 +627,7 @@ function StageColumn({
     <div
       className={cn(
         "rounded-lg border bg-slate-50 transition-colors",
+        fullWidth && "w-full",
         isDragActive && isValidDropTarget && (dragOver ? "border-brand-500 bg-brand-50 ring-2 ring-brand-300" : "border-brand-300"),
         isDragActive && !isValidDropTarget && "opacity-50",
         !isDragActive && "border-slate-200",
@@ -565,7 +652,7 @@ function StageColumn({
         <h3 className="text-sm font-semibold uppercase tracking-wide">{colName}</h3>
         <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", tone.badge)}>{items.length}</span>
       </div>
-      <div className="max-h-[70vh] space-y-2 overflow-y-auto p-2">
+      <div className={cn("space-y-2 overflow-y-auto p-2", fullWidth ? "max-h-none" : "max-h-[70vh]")}>
         {items.map((jo) => (
           <JobOrderCard
             key={jo.id}
@@ -577,23 +664,30 @@ function StageColumn({
             canDrag={canDrag}
             onDragStart={onDragStartCard}
             onDragEnd={onDragEndCard}
-            onMove={onMove}
+            onRequestMove={onRequestMove}
+            onRequestReturn={onRequestReturn}
+            onOpenPanel={onOpenPanel}
           />
         ))}
         {items.length === 0 && (
           <div className="flex flex-col items-center gap-1 rounded-md border border-dashed border-slate-200 py-8 text-center">
             <Package className="h-5 w-5 text-slate-300" />
-            <p className="text-xs text-slate-400">No jobs in this queue</p>
+            <p className="text-xs text-slate-400">No jobs in this stage</p>
           </div>
         )}
       </div>
-      {canManageOrders && (
+      {canAddJob && colName !== READY_COLUMN && (
         <div className="border-t border-slate-200 p-2">
-          <Link href="/orders">
-            <Button type="button" variant="outline" size="sm" className="w-full text-xs">
-              + Add Job to {colName === READY_COLUMN ? "Ready" : colName}
-            </Button>
-          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              const stage = board.columns.find((c) => c.name === colName);
+              window.dispatchEvent(new CustomEvent("production:add-job", { detail: { serviceId: board.serviceId ?? undefined, stageOrder: stage?.order } }));
+            }}
+            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            + Add Job to {colName}
+          </button>
         </div>
       )}
     </div>
@@ -609,7 +703,9 @@ function JobOrderCard({
   canDrag,
   onDragStart,
   onDragEnd,
-  onMove,
+  onRequestMove,
+  onRequestReturn,
+  onOpenPanel,
 }: {
   jo: KanbanJobOrder;
   board: ServiceBoard;
@@ -619,25 +715,33 @@ function JobOrderCard({
   canDrag: boolean;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
-  onMove: (jo: KanbanJobOrder, board: ServiceBoard, targetOrder: number | null) => void;
+  onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
+  onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
+  onOpenPanel: (id: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const markIP = jo.currentLogId ? markStageInProgressAction.bind(null, jo.currentLogId) : undefined;
   // Same precondition the "Next" button already required — a card only
   // becomes draggable once its current stage is actually in progress.
   // READY (not started yet) and QC cards keep their existing dedicated
   // controls instead (Start Stage / Go to QC) rather than a plain drag.
   const isDraggable = canDrag && jo.currentLogStatus === "IN_PROGRESS" && canMarkStageComplete;
-  const nextCol = board.columns[board.columns.findIndex((c) => c.name === jo.column) + 1];
+  const colIndex = board.columns.findIndex((c) => c.name === jo.column);
+  const nextCol = board.columns[colIndex + 1];
+  const prevCol = colIndex > 0 ? board.columns[colIndex - 1] : null;
   const isReadyColumn = jo.column === READY_COLUMN;
 
   async function handleChat() {
     const { conversationId } = await openTransactionInChatAction("JOB_ORDER", jo.id);
-    window.dispatchEvent(
-      new CustomEvent("chatbox:open-reference", {
-        detail: { conversationId, refType: "JOB_ORDER", refId: jo.id, refLabel: jo.joNumber },
-      })
-    );
+    window.dispatchEvent(new CustomEvent("chatbox:open-reference", { detail: { conversationId, refType: "JOB_ORDER", refId: jo.id, refLabel: jo.joNumber } }));
+  }
+
+  async function handleDuplicate() {
+    setMenuOpen(false);
+    setDuplicating(true);
+    await duplicateJobOrderAction(jo.id);
+    setDuplicating(false);
   }
 
   return (
@@ -650,16 +754,12 @@ function JobOrderCard({
         onDragStart(jo.id);
       }}
       onDragEnd={onDragEnd}
-      className={cn(
-        "space-y-2 rounded-lg border bg-white p-3 shadow-sm",
-        jo.overdue ? "border-red-300" : "border-slate-200",
-        isDraggable && "cursor-grab active:cursor-grabbing"
-      )}
+      className={cn("space-y-2 rounded-lg border bg-white p-3 shadow-sm", jo.overdue ? "border-red-300" : "border-slate-200", isDraggable && "cursor-grab active:cursor-grabbing")}
     >
       <div className="flex items-start justify-between gap-2">
-        <Link href={`/job-orders/${jo.id}`} className="text-sm font-bold text-slate-900 underline decoration-slate-300 hover:decoration-slate-900">
+        <button type="button" onClick={() => onOpenPanel(jo.id)} className="text-sm font-bold text-slate-900 underline decoration-slate-300 hover:decoration-slate-900">
           {jo.joNumber}
-        </Link>
+        </button>
         <div className="flex shrink-0 items-center gap-1">
           <StatusBadge status={jo.status} />
           <div className="relative">
@@ -669,13 +769,59 @@ function JobOrderCard({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 z-20 mt-1 w-40 rounded-md border border-slate-200 bg-white py-1 text-xs shadow-lg">
-                  <Link href={`/job-orders/${jo.id}`} className="block px-3 py-1.5 text-slate-700 hover:bg-slate-50">
-                    View Details
+                <div className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-slate-200 bg-white py-1 text-xs shadow-lg">
+                  <Link href={`/job-orders/${jo.id}`} className="flex items-center gap-2 px-3 py-1.5 text-slate-700 hover:bg-slate-50">
+                    <Eye className="h-3.5 w-3.5" /> View Job Order
                   </Link>
-                  <Link href={`/job-orders/${jo.id}/print`} target="_blank" className="block px-3 py-1.5 text-slate-700 hover:bg-slate-50">
-                    View Document
-                  </Link>
+                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                    <ClipboardList className="h-3.5 w-3.5" /> View Customer Form
+                  </button>
+                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                    <Paperclip className="h-3.5 w-3.5" /> View Files &amp; Attachments
+                  </button>
+                  <button type="button" onClick={() => { setMenuOpen(false); handleChat(); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                    <MessageCircle className="h-3.5 w-3.5" /> Send Message
+                  </button>
+                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                    <UserCog className="h-3.5 w-3.5" /> Reassign
+                  </button>
+                  <button type="button" onClick={() => { setMenuOpen(false); onOpenPanel(jo.id); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                    <History className="h-3.5 w-3.5" /> View Production History
+                  </button>
+                  {canUpdateStage && (
+                    <button type="button" onClick={handleDuplicate} disabled={duplicating} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                      <Copy className="h-3.5 w-3.5" /> {duplicating ? "Duplicating…" : "Duplicate Job"}
+                    </button>
+                  )}
+                  {!isReadyColumn && jo.status !== "QC" && canMarkStageComplete && nextCol && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onRequestMove(jo, nextCol.name === READY_COLUMN ? null : nextCol.order, nextCol.name);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50"
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5" /> Move to Another Stage
+                    </button>
+                  )}
+                  {!isReadyColumn && canUpdateStage && prevCol && jo.currentLogStatus !== "COMPLETED" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onRequestReturn(jo, prevCol.name);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" /> Return to Previous Stage
+                    </button>
+                  )}
+                  <div className="mt-1 border-t border-slate-100 pt-1">
+                    <Link href={`/orders/${jo.orderId}`} className="flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50">
+                      <Ban className="h-3.5 w-3.5" /> Cancel / Void Job
+                    </Link>
+                  </div>
                 </div>
               </>
             )}
@@ -724,9 +870,7 @@ function JobOrderCard({
 
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-[10px] font-semibold text-brand-700">
-            {initials(jo.assignedStaffName)}
-          </span>
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-[10px] font-semibold text-brand-700">{initials(jo.assignedStaffName)}</span>
           <span className="truncate text-xs text-slate-500">{jo.assignedStaffName ?? "Unassigned"}</span>
         </div>
         {jo.courier && <p className="shrink-0 text-xs text-slate-400">Courier: {jo.courier}</p>}
@@ -776,7 +920,7 @@ function JobOrderCard({
                 type="button"
                 size="sm"
                 className="h-7 px-2 text-xs"
-                onClick={() => onMove(jo, board, nextCol && nextCol.name !== READY_COLUMN ? nextCol.order : null)}
+                onClick={() => onRequestMove(jo, nextCol && nextCol.name !== READY_COLUMN ? nextCol.order : null, nextCol ? nextCol.name : READY_COLUMN)}
               >
                 {nextCol && nextCol.name !== READY_COLUMN ? (
                   <>

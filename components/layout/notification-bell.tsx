@@ -47,6 +47,18 @@ export function NotificationBell({
     return () => window.removeEventListener("realtime:notification", onNotification);
   }, []);
 
+  // The Production module's mobile bottom nav (illustration 6) has its own
+  // "Notifications" tab rather than duplicating this dropdown's logic —
+  // it just asks this existing bell to open, the same cross-component
+  // event pattern the chat widget already uses ("chatbox:open").
+  useEffect(() => {
+    function onOpen() {
+      setOpen(true);
+    }
+    window.addEventListener("production:open-notifications", onOpen);
+    return () => window.removeEventListener("production:open-notifications", onOpen);
+  }, []);
+
   function handleMarkAllRead() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setUnreadCount(0);

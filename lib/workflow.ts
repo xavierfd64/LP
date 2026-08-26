@@ -65,21 +65,42 @@ export async function getTemplateStages(templateId: string) {
 /**
  * Move a JobOrder from ON_HOLD into production: creates the first stage log
  * (READY) and flips status to IN_PROGRESS. Enforces Rule #1.
+ *
+ * `options.initialStageOrder` (Production UI Add Job dialog, spec item 4:
+ * "Select the initial process/stage") lets the caller start the job later
+ * than the workflow's first stage — e.g. a job whose design was already
+ * done outside the system. Defaults to the first stage, matching the
+ * original unconditional behavior. `options.assigneeId` pre-assigns the
+ * opening stage log (spec item 5: "Assign staff when required or
+ * supported") without implicitly starting it — the log is still created
+ * READY, exactly as before, so "Start {stage}" remains the explicit action
+ * that flips it to IN_PROGRESS.
  */
-export async function startProduction(jobOrderId: string, actorId: string | null) {
+export async function startProduction(
+  jobOrderId: string,
+  actorId: string | null,
+  options?: { initialStageOrder?: number; assigneeId?: string | null }
+) {
   const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
   if (jo.status !== "ON_HOLD") throw new RuleViolation("Job order is not ON_HOLD.");
 
   await assertCanStartProduction(jo.orderId);
 
   const stages = await getTemplateStages(jo.workflowTemplateId);
-  const first = stages[0];
-  if (!first) throw new RuleViolation("Workflow template has no stages.");
+  const first =
+    options?.initialStageOrder != null ? stages.find((s) => s.order === options.initialStageOrder) : stages[0];
+  if (!first) {
+    throw new RuleViolation(
+      options?.initialStageOrder != null ? "That initial stage isn't part of this job's workflow." : "Workflow template has no stages."
+    );
+  }
+
+  const initialStatus: "IN_PROGRESS" | "QC" = first.isQCStage ? "QC" : "IN_PROGRESS";
 
   await prisma.$transaction([
     prisma.jobOrder.update({
       where: { id: jobOrderId },
-      data: { status: "IN_PROGRESS", currentStageOrder: first.order },
+      data: { status: initialStatus, currentStageOrder: first.order },
     }),
     prisma.jobOrderStageLog.create({
       data: {
@@ -87,6 +108,7 @@ export async function startProduction(jobOrderId: string, actorId: string | null
         stageName: first.name,
         stageOrder: first.order,
         status: "READY",
+        assignedToId: options?.assigneeId ?? undefined,
       },
     }),
   ]);
@@ -303,6 +325,71 @@ export async function revertStageChange(undo: StageChangeUndo, actorId: string |
   await logAudit(actorId, "STAGE_CHANGE_REVERTED", "JobOrder", jobOrderId, {
     from: undo.toStageName,
     to: undo.fromStageName,
+  });
+}
+
+/**
+ * General-purpose "Return to Previous Process" (spec item 9B — distinct
+ * from `revertStageChange` above, which only ever undoes the *one* move the
+ * caller just made and requires that exact in-memory token). This instead
+ * works from the job order's persisted, current state at any time: it
+ * always targets the immediately preceding stage in the job's own
+ * workflow, requires a reason (business-rule requirement per spec item 9B),
+ * and refuses whenever that would be unsafe —
+ *   - the job is READY/RELEASED/COMPLETED (locked/completed, spec item 9B
+ *     "Do not allow undo if... the job is completed/locked"),
+ *   - there is no earlier stage to return to (already at the first stage),
+ *   - the job was never actually logged at that earlier stage (e.g. it was
+ *     started mid-workflow via the Add Job dialog's initial-stage picker —
+ *     "the previous stage cannot be returned to"),
+ *   - the current stage log has already been completed (nothing in-flight
+ *     to return).
+ * The re-opened previous stage log always comes back IN_PROGRESS (matching
+ * what "returning" a job implies — work resumes there, it doesn't sit
+ * READY/unclaimed) and keeps its original assignee.
+ */
+export async function returnToPreviousStage(jobOrderId: string, actorId: string, reason: string) {
+  if (!reason.trim()) throw new RuleViolation("A reason is required to return a job to a previous stage.");
+
+  const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
+  if (jo.status === "READY" || jo.status === "RELEASED" || jo.status === "COMPLETED") {
+    throw new RuleViolation("This job order is completed/locked and can't be returned to a previous stage.");
+  }
+
+  const stages = await getTemplateStages(jo.workflowTemplateId);
+  const currentIdx = stages.findIndex((s) => s.order === jo.currentStageOrder);
+  const previous = stages[currentIdx - 1];
+  if (!previous) throw new RuleViolation("There is no previous stage to return to.");
+
+  const currentLog = await prisma.jobOrderStageLog.findFirst({
+    where: { jobOrderId, stageOrder: jo.currentStageOrder, status: { not: "COMPLETED" } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!currentLog) throw new RuleViolation("This stage has already progressed and can't be returned.");
+
+  const previousLog = await prisma.jobOrderStageLog.findFirst({
+    where: { jobOrderId, stageOrder: previous.order, status: "COMPLETED" },
+    orderBy: { completedAt: "desc" },
+  });
+  if (!previousLog) throw new RuleViolation("This job order was never at the previous stage and can't be returned there.");
+
+  await prisma.$transaction([
+    prisma.jobOrderStageLog.delete({ where: { id: currentLog.id } }),
+    prisma.jobOrderStageLog.update({
+      where: { id: previousLog.id },
+      data: { status: "IN_PROGRESS", completedAt: null, notes: reason },
+    }),
+    prisma.jobOrder.update({
+      where: { id: jobOrderId },
+      data: { status: "IN_PROGRESS", currentStageOrder: previous.order },
+    }),
+  ]);
+
+  const { logAudit } = await import("@/lib/audit");
+  await logAudit(actorId, "STAGE_RETURNED", "JobOrder", jobOrderId, {
+    from: currentLog.stageName,
+    to: previous.name,
+    reason,
   });
 }
 
