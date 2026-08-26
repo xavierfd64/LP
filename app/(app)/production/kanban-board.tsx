@@ -358,9 +358,11 @@ export function FocusedBoard({
         />
       )}
 
-      <p className="hidden items-center gap-1.5 text-xs text-slate-400 lg:flex">
-        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-brand-400" /> Drag and drop, or use the primary button on each job to move it forward
-      </p>
+      {canUpdateStage && (
+        <p className="hidden items-center gap-1.5 text-xs text-slate-400 lg:flex">
+          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-brand-400" /> Drag and drop, or use the primary button on each job to move it forward
+        </p>
+      )}
 
       {undoState && (
         <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
