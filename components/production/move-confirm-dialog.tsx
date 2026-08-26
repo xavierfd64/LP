@@ -41,8 +41,16 @@ export function MoveConfirmDialog({
   const isReturn = request.kind === "return";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={onCancel}>
-      <div className="w-full max-w-md rounded-lg bg-white shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+    // Mobile gets a bottom-anchored sheet (illustration 8's own "MOBILE
+    // (Bottom Sheet)" responsive example) rather than the AddJobDialog's
+    // full-height-screen pattern — this dialog's content is short, and
+    // stretching it to fill the viewport left a large empty gap above the
+    // footer that looked broken rather than intentional.
+    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onCancel}>
+      <div
+        className="flex max-h-[85vh] w-full flex-col rounded-t-xl bg-white shadow-xl sm:max-w-md sm:rounded-lg"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-5 py-4">
           <div className="flex items-center gap-2">
             {isReturn ? <ArrowLeft className="h-5 w-5 text-amber-600" /> : <ArrowRight className="h-5 w-5 text-success-600" />}
@@ -53,7 +61,7 @@ export function MoveConfirmDialog({
           </button>
         </div>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-md border border-slate-200 p-2.5">
               <p className="text-[11px] uppercase tracking-wide text-slate-400">Current Process</p>

@@ -296,6 +296,25 @@ export function FocusedBoard({
         )}
       </div>
 
+      {board.columns.length > 1 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {board.columns
+            .filter((c) => c.name !== READY_COLUMN)
+            .map((col, i) => {
+              const tone = toneFor(col.name, i);
+              const count = board.jobOrders.filter((j) => j.column === col.name).length;
+              return (
+                <div key={col.name} className={cn("rounded-lg border p-3", tone.header)}>
+                  <p className="text-xs font-semibold uppercase tracking-wide">{col.name}</p>
+                  <p className="mt-1 text-2xl font-bold">
+                    {count} <span className="text-xs font-medium">job{count === 1 ? "" : "s"}</span>
+                  </p>
+                </div>
+              );
+            })}
+        </div>
+      )}
+
       {dragError && (
         <div className="flex items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           <span>{dragError}</span>
