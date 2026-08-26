@@ -10,7 +10,7 @@ import { publishProductionUpdate } from "@/lib/production-realtime";
 
 /** Shared side effects for the moment an Order finishes its whole lifecycle (3rd Update item 4) — reused by both the automatic path below (every job order reached COMPLETED via a fulfillment terminal event) and the manual "Mark Order as Completed" action, so the notification/rewards/real-time behavior is identical either way. */
 async function completeOrder(orderId: string) {
-  const order = await prisma.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } });
+  const order = await prisma.order.update({ where: { id: orderId }, data: { status: "COMPLETED", completedAt: new Date() } });
   await notifyCustomer(
     order.customerId,
     "ORDER_COMPLETED",
@@ -54,7 +54,10 @@ export async function markOrderCompletedAction(orderId: string) {
     );
   }
 
-  await prisma.jobOrder.updateMany({ where: { orderId, status: { not: "COMPLETED" } }, data: { status: "COMPLETED" } });
+  await prisma.jobOrder.updateMany({
+    where: { orderId, status: { not: "COMPLETED" } },
+    data: { status: "COMPLETED", completedAt: new Date() },
+  });
   await completeOrder(orderId);
   await logAudit(user.id, "ORDER_COMPLETED", "Order", orderId, { manual: true });
 
@@ -137,7 +140,7 @@ export async function advanceDeliveryAction(fulfillmentId: string, jobOrderId: s
   }
 
   if (next === "DELIVERED") {
-    const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+    const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED", completedAt: new Date() } });
     await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
     const order = await prisma.order.findUniqueOrThrow({ where: { id: f.orderId } });
     await notifyCustomer(order.customerId, "FULFILLMENT_DELIVERED", `Your order has been delivered.`, `/orders/${order.id}`);
@@ -180,7 +183,7 @@ export async function markPickedUpAction(fulfillmentId: string, jobOrderId: stri
     where: { id: fulfillmentId },
     data: { status: "RECEIVED", completedAt: new Date() },
   });
-  const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+  const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED", completedAt: new Date() } });
   await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: "RECEIVED" });
   await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
   {
@@ -205,7 +208,7 @@ export async function markInstalledAction(fulfillmentId: string, jobOrderId: str
     where: { id: fulfillmentId },
     data: { status: "INSTALLED", completedAt: new Date() },
   });
-  const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED" } });
+  const jo = await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "COMPLETED", completedAt: new Date() } });
   await logAudit(user.id, "FULFILLMENT_STATUS_UPDATED", "Fulfillment", fulfillmentId, { status: "INSTALLED" });
   await logAudit(user.id, "JOB_ORDER_COMPLETED", "JobOrder", jobOrderId, {});
   {

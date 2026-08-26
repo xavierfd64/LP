@@ -569,6 +569,13 @@ model Order {
   cancelledBy         User?    @relation("OrderCancelledBy", fields: [cancelledById], references: [id])
   cancelReason        String?
   statusBeforeCancel  OrderStatus?
+  // Set exactly once, the moment status first becomes COMPLETED (3rd
+  // Update item 4/audit item "completion timestamp saved") — deliberately
+  // separate from `updatedAt`, which any later unrelated edit (a note, a
+  // cascading customer-record change) would otherwise bump, silently
+  // making a long-completed order look freshly completed to any
+  // date-filtered "completed today/this period" query.
+  completedAt      DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -809,6 +816,10 @@ model JobOrder {
   priority      JobOrderPriority @default(MEDIUM)
   deadline      DateTime?
   productionInstructions String?
+  // Set exactly once, the moment status first becomes COMPLETED — see
+  // Order.completedAt's doc comment for why this is kept separate from
+  // `updatedAt`.
+  completedAt   DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 

@@ -190,6 +190,10 @@ export default async function OrderDetailPage({
         </Alert>
       )}
 
+      {order.status === "COMPLETED" && order.completedAt && (
+        <Alert tone="success">Completed on {formatDateTime(order.completedAt)}.</Alert>
+      )}
+
       {isStaffLike && canCancel && (
         <div className="flex flex-wrap gap-2">
           {order.status !== "CANCELLED" && order.status !== "COMPLETED" && <CancelOrderForm orderId={order.id} />}

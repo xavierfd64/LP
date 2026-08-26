@@ -39,9 +39,9 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
       orderBy: { deadline: "asc" },
     }),
     prisma.jobOrder.findMany({
-      where: { status: "COMPLETED", updatedAt: { gte: startOfToday() } },
+      where: { status: "COMPLETED", completedAt: { gte: startOfToday() } },
       include: { order: { include: { customer: true } } },
-      orderBy: { updatedAt: "desc" },
+      orderBy: { completedAt: "desc" },
       take: 25,
     }),
   ]);

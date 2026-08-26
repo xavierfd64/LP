@@ -34,8 +34,16 @@ export async function getPrimaryKpis() {
     prisma.inquiry.count({ where: { status: "NEW", createdAt: { gte: today } } }),
   ]);
 
+  // Outstanding balance/receivables must include COMPLETED orders that
+  // still carry an unpaid amount (e.g. a government/business account
+  // released and completed under an authorized payment-bypass exception,
+  // 3rd Update item "Government/Business Payment Bypass" — the order
+  // finishing production must never make its receivable silently
+  // disappear from what staff are shown). Only CANCELLED is excluded,
+  // matching lib/soa.ts's findCustomersWithOutstandingBalance — the one
+  // other place in the app that already computes this correctly.
   const openOrdersWithBalance = await prisma.order.findMany({
-    where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
+    where: { status: { not: "CANCELLED" } },
     include: { payments: { where: { status: "CONFIRMED" } } },
   });
   const outstandingBalance = openOrdersWithBalance.reduce((sum, o) => {
@@ -75,8 +83,11 @@ export type NeedsAttentionItem = { label: string; count: number; href: string; t
  */
 export async function getOverduePaymentsCount(): Promise<number> {
   const today = startOfToday();
+  // Same receivables reasoning as getPrimaryKpis' outstandingBalance above —
+  // a COMPLETED order past its due date with an unpaid balance is still an
+  // overdue payment staff need to collect.
   const overdueOrders = await prisma.order.findMany({
-    where: { status: { notIn: ["COMPLETED", "CANCELLED"] }, dueDate: { lt: today } },
+    where: { status: { not: "CANCELLED" }, dueDate: { lt: today } },
     select: { id: true, totalAmount: true, payments: { where: { status: "CONFIRMED" }, select: { amount: true } } },
   });
   return overdueOrders.filter((o) => Number(o.totalAmount) - o.payments.reduce((s, p) => s + Number(p.amount), 0) > 0).length;
@@ -87,8 +98,11 @@ export async function getNeedsAttention(): Promise<NeedsAttentionItem[]> {
   const today = startOfToday();
 
   const [openOrdersRaw, quotationsAwaiting, delayedJobOrders, lowStockCount, overduePaymentsCount] = await Promise.all([
+    // Feeds ordersAwaitingPayment below (a receivables check, not an
+    // "active orders" one) — a COMPLETED order with an unpaid balance
+    // must still surface here so staff know to collect it.
     prisma.order.findMany({
-      where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
+      where: { status: { not: "CANCELLED" } },
       select: { id: true, totalAmount: true, payments: { where: { status: "CONFIRMED" }, select: { amount: true } } },
     }),
     prisma.quotation.count({ where: { status: "SENT" } }),

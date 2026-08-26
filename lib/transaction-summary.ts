@@ -135,7 +135,7 @@ export async function computeTransactionSummary(range: PeriodRange): Promise<Tra
       _sum: { amount: true },
     }),
     prisma.order.count({ where: { status: "CANCELLED", updatedAt: { gte: start, lt: end } } }),
-    prisma.order.count({ where: { status: "COMPLETED", updatedAt: { gte: start, lt: end } } }),
+    prisma.order.count({ where: { status: "COMPLETED", completedAt: { gte: start, lt: end } } }),
     prisma.order.groupBy({ by: ["status"], where: createdInRange, _count: { _all: true } }),
     prisma.payment.groupBy({
       by: ["method"],
@@ -144,8 +144,13 @@ export async function computeTransactionSummary(range: PeriodRange): Promise<Tra
     }),
   ]);
 
+  // A COMPLETED order can still carry an unpaid balance (e.g. released
+  // under an authorized payment-bypass exception) — only CANCELLED is
+  // excluded from receivables, matching lib/soa.ts's
+  // findCustomersWithOutstandingBalance and lib/dashboard-data.ts's
+  // getPrimaryKpis.
   const outstandingBalance = ordersInRange
-    .filter((o) => o.status !== "CANCELLED" && o.status !== "COMPLETED")
+    .filter((o) => o.status !== "CANCELLED")
     .reduce((sum, o) => {
       const confirmed = o.payments.reduce((s, p) => s + Number(p.amount), 0);
       return sum + Math.max(Number(o.totalAmount) - confirmed, 0);

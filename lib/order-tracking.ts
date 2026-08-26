@@ -91,7 +91,7 @@ export function buildOrderTimeline(order: OrderTrackingSnapshot): TimelineStep[]
   steps.push({
     label: "Completed",
     state: order.status === "COMPLETED" ? "done" : "upcoming",
-    date: order.status === "COMPLETED" ? order.updatedAt : null,
+    date: order.status === "COMPLETED" ? order.completedAt : null,
   });
 
   return steps;
