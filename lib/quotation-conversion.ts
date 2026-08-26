@@ -3,11 +3,13 @@ import { nextOrderNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
 import { paymentSummary } from "@/lib/workflow";
+import { publishProductionUpdate } from "@/lib/production-realtime";
 
 /**
  * The Master Transaction / Order reference the spec asks for is not a new
- * entity — `Order` already carries an `ORD-2026-NNNN` number and already
- * links Quotation -> JobOrder[] -> Payment[] -> Fulfillment[]. This module
+ * entity — `Order` already carries an `ORD-YYYY-MMDD-NNNN` number (the same
+ * transaction identity as its source Quotation, see lib/numbering.ts) and
+ * already links Quotation -> JobOrder[] -> Payment[] -> Fulfillment[]. This module
  * only adds the *automatic* creation of that Order (and its first Job
  * Order) on quotation approval, replacing what used to be two separate
  * manual clicks ("Create Order", then "+ Add Job Order") with zero
@@ -39,7 +41,8 @@ export async function convertApprovedQuotationToOrder(
   });
 
   const isQualifiedForTerms = quotation.customer.isQualifiedForTerms;
-  const orderNumber = await nextOrderNumber();
+  // Unified document identity (3rd Update item 5) — same date+sequence digits as the Quotation, ORD- in place of QUO-.
+  const orderNumber = await nextOrderNumber(quotation.quoteNumber);
 
   const order = await prisma.order.create({
     data: {
@@ -112,8 +115,12 @@ export async function autoCreateJobOrderForOrder(orderId: string, trigger: strin
       return { created: false as const, reason: "NO_PRODUCTION_FLOW" as const };
     }
 
+    // Retains the parent Order's transaction identity rather than a
+    // separate JO-001-style sequence (3rd Update item 6) — see
+    // lib/numbering.ts's nextJoNumber, whose exact same logic this inlines
+    // since it must run inside this transaction's row lock.
     const count = await tx.jobOrder.count({ where: { orderId } });
-    const joNumber = `JO-${String(count + 1).padStart(3, "0")}`;
+    const joNumber = count === 0 ? order.orderNumber : `${order.orderNumber}-${count + 1}`;
 
     const jo = await tx.jobOrder.create({
       data: {
@@ -157,6 +164,7 @@ export async function autoCreateJobOrderForOrder(orderId: string, trigger: strin
       `Your order has been approved and is now being processed. Job order ${result.joNumber} has been created.`,
       `/orders/${orderId}`
     );
+    await publishProductionUpdate();
     return { created: true, jobOrderId: result.jobOrderId, joNumber: result.joNumber };
   }
   return { created: false, reason: result.reason };

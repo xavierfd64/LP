@@ -26,6 +26,8 @@ export function RealtimeProvider() {
         window.dispatchEvent(new CustomEvent("realtime:message", { detail: data }));
       } else if (data.type === "notification") {
         window.dispatchEvent(new CustomEvent("realtime:notification", { detail: data }));
+      } else if (data.type === "production") {
+        window.dispatchEvent(new CustomEvent("realtime:production"));
       }
     };
 

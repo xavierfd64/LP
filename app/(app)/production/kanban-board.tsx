@@ -52,6 +52,7 @@ import { MessengerDispatchDialog } from "@/components/production/messenger-dispa
 import { MoveConfirmDialog, type MoveConfirmRequest } from "@/components/production/move-confirm-dialog";
 import { JobDetailsPanel, type Tab as PanelTab } from "@/components/production/job-details-panel";
 import { ProductionMobileNav } from "@/components/production/production-mobile-nav";
+import { ProductionRealtimeListener } from "@/components/production/production-realtime-listener";
 
 export { READY_COLUMN };
 
@@ -264,6 +265,7 @@ export function FocusedBoard({
 
   return (
     <div className="space-y-4">
+      <ProductionRealtimeListener />
       <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative flex-1 sm:min-w-[220px]">

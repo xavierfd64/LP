@@ -14,6 +14,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { nextJoNumber } from "@/lib/numbering";
+import { publishProductionUpdate } from "@/lib/production-realtime";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -35,6 +36,7 @@ export async function startStageAction(stageLogId: string): Promise<ActionResult
   const user = await requirePermission("PRODUCTION_UPDATE_STAGE", ["PRODUCTION"]);
   try {
     await setStageLogStatus(stageLogId, "IN_PROGRESS", user.id);
+    await publishProductionUpdate();
     return { ok: true };
   } catch (e) {
     if (e instanceof RuleViolation) return { ok: false, error: e.message };
@@ -55,6 +57,7 @@ export async function completeStageAction(jobOrderId: string, stageLogId: string
     throw e;
   }
 
+  await publishProductionUpdate();
   redirect(`/production`);
 }
 
@@ -78,6 +81,7 @@ export async function moveStageAction(
   const user = await requirePermission("PRODUCTION_MARK_STAGE_COMPLETE", ["PRODUCTION"]);
   try {
     const undo = await completeCurrentStage(jobOrderId, stageLogId, user.id, notes, expectedTargetStageOrder);
+    await publishProductionUpdate();
     return { ok: true, undo };
   } catch (e) {
     if (e instanceof RuleViolation) return { ok: false, error: e.message };
@@ -91,6 +95,7 @@ export async function revertStageAction(undo: StageChangeUndo): Promise<RevertSt
   const user = await requirePermission("PRODUCTION_MARK_STAGE_COMPLETE", ["PRODUCTION"]);
   try {
     await revertStageChange(undo, user.id);
+    await publishProductionUpdate();
     return { ok: true };
   } catch (e) {
     if (e instanceof RuleViolation) return { ok: false, error: e.message };
@@ -110,6 +115,7 @@ export async function returnToPreviousStageAction(jobOrderId: string, reason: st
   const user = await requirePermission("PRODUCTION_MARK_STAGE_COMPLETE", ["PRODUCTION"]);
   try {
     await returnToPreviousStage(jobOrderId, user.id, reason);
+    await publishProductionUpdate();
     return { ok: true };
   } catch (e) {
     if (e instanceof RuleViolation) return { ok: false, error: e.message };
@@ -145,6 +151,7 @@ export async function reassignStageAction(jobOrderId: string, assigneeId: string
 
   await prisma.jobOrderStageLog.update({ where: { id: currentLog.id }, data: { assignedToId: assigneeId } });
   await logAudit(user.id, "STAGE_REASSIGNED", "JobOrder", jobOrderId, { stage: currentLog.stageName, assigneeId });
+  await publishProductionUpdate();
   return { ok: true };
 }
 
@@ -179,6 +186,7 @@ export async function duplicateJobOrderAction(jobOrderId: string): Promise<Actio
   });
 
   await logAudit(user.id, "JOB_ORDER_DUPLICATED", "JobOrder", duplicate.id, { fromJobOrderId: jobOrderId, joNumber });
+  await publishProductionUpdate();
   return { ok: true };
 }
 
@@ -397,5 +405,6 @@ export async function addJobToProductionAction(input: AddJobToProductionInput): 
     if (e instanceof RuleViolation) return { ok: false, error: e.message };
     throw e;
   }
+  await publishProductionUpdate();
   return { ok: true };
 }

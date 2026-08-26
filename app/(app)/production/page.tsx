@@ -11,6 +11,7 @@ import { CompletedTodayCard } from "./completed-today-card";
 import { ServiceOverviewList } from "./service-overview-list";
 import { AddJobDialog, type AddJobServiceOption } from "@/components/production/add-job-dialog";
 import { ProductionMobileNav } from "@/components/production/production-mobile-nav";
+import { ProductionRealtimeListener } from "@/components/production/production-realtime-listener";
 
 /**
  * Production Overview (Production UI implementation, illustration 1) — the
@@ -40,6 +41,7 @@ export default async function ProductionOverviewPage({ searchParams }: PageProps
 
   return (
     <div className="space-y-6 pb-24 md:pb-0">
+      <ProductionRealtimeListener />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600">

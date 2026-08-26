@@ -51,7 +51,7 @@ export function ReferenceLookupForm() {
             id="reference"
             value={reference}
             onChange={(e) => setReference(e.target.value)}
-            placeholder="e.g. ORD-2026-0007, QUO-2026-0007, JO-001"
+            placeholder="e.g. ORD-2026-0826-0007, QUO-2026-0826-0007"
             required
           />
         </div>

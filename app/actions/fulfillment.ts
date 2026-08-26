@@ -6,20 +6,59 @@ import { requirePermission } from "@/lib/permissions-guard";
 import { logAudit } from "@/lib/audit";
 import { saveUploadedFile, UploadRejectedError } from "@/lib/upload";
 import { notifyCustomer } from "@/lib/notifications";
+import { publishProductionUpdate } from "@/lib/production-realtime";
+
+/** Shared side effects for the moment an Order finishes its whole lifecycle (3rd Update item 4) — reused by both the automatic path below (every job order reached COMPLETED via a fulfillment terminal event) and the manual "Mark Order as Completed" action, so the notification/rewards/real-time behavior is identical either way. */
+async function completeOrder(orderId: string) {
+  const order = await prisma.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } });
+  await notifyCustomer(
+    order.customerId,
+    "ORDER_COMPLETED",
+    `Your order ${order.orderNumber} is complete. Thank you!`,
+    `/orders/${orderId}`
+  );
+  const { onOrderCompleted } = await import("@/lib/rewards");
+  await onOrderCompleted(orderId);
+  await publishProductionUpdate();
+  return order;
+}
 
 async function maybeCompleteOrder(orderId: string) {
   const jobOrders = await prisma.jobOrder.findMany({ where: { orderId } });
   if (jobOrders.length > 0 && jobOrders.every((j) => j.status === "COMPLETED")) {
-    const order = await prisma.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } });
-    await notifyCustomer(
-      order.customerId,
-      "ORDER_COMPLETED",
-      `Your order ${order.orderNumber} is complete. Thank you!`,
-      `/orders/${orderId}`
-    );
-    const { onOrderCompleted } = await import("@/lib/rewards");
-    await onOrderCompleted(orderId);
+    await completeOrder(orderId);
   }
+}
+
+/**
+ * Manual escape hatch for orders that reach the end of production but never
+ * go through the formal Fulfillment sub-flow (e.g. an informal walk-in
+ * pickup) — without this, such an order stays stuck at OPEN/FULFILLING
+ * forever even though it's genuinely done (3rd Update item 4). Requires
+ * every job order on the order to have at least reached RELEASED, so this
+ * can't be used to skip past production/QC — it only closes out an order
+ * production has already finished releasing.
+ */
+export async function markOrderCompletedAction(orderId: string) {
+  const user = await requirePermission("ORDER_MODIFY");
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { jobOrders: true } });
+
+  if (order.status === "COMPLETED") redirect(`/orders/${orderId}`);
+  if (order.status === "CANCELLED") {
+    redirect(`/orders/${orderId}?error=${encodeURIComponent("A cancelled order cannot be marked as completed.")}`);
+  }
+  const notReady = order.jobOrders.find((jo) => jo.status !== "RELEASED" && jo.status !== "COMPLETED");
+  if (notReady) {
+    redirect(
+      `/orders/${orderId}?error=${encodeURIComponent(`Job order ${notReady.joNumber} must be released before the order can be completed.`)}`
+    );
+  }
+
+  await prisma.jobOrder.updateMany({ where: { orderId, status: { not: "COMPLETED" } }, data: { status: "COMPLETED" } });
+  await completeOrder(orderId);
+  await logAudit(user.id, "ORDER_COMPLETED", "Order", orderId, { manual: true });
+
+  redirect(`/orders/${orderId}`);
 }
 
 export async function createFulfillmentAction(jobOrderId: string, formData: FormData) {
@@ -70,6 +109,7 @@ export async function createFulfillmentAction(jobOrderId: string, formData: Form
     `Your order ${jo.joNumber} is now being fulfilled via ${method.toLowerCase()}.`,
     `/job-orders/${jobOrderId}`
   );
+  await publishProductionUpdate();
 
   redirect(`/job-orders/${jobOrderId}`);
 }
@@ -109,6 +149,7 @@ export async function advanceDeliveryAction(fulfillmentId: string, jobOrderId: s
     );
     await maybeCompleteOrder(f.orderId);
   }
+  await publishProductionUpdate();
 
   redirect(`/job-orders/${jobOrderId}`);
 }
@@ -153,6 +194,7 @@ export async function markPickedUpAction(fulfillmentId: string, jobOrderId: stri
     );
   }
   await maybeCompleteOrder(f.orderId);
+  await publishProductionUpdate();
 
   redirect(`/job-orders/${jobOrderId}`);
 }
@@ -177,6 +219,7 @@ export async function markInstalledAction(fulfillmentId: string, jobOrderId: str
     );
   }
   await maybeCompleteOrder(f.orderId);
+  await publishProductionUpdate();
 
   redirect(`/job-orders/${jobOrderId}`);
 }

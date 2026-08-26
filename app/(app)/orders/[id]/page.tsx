@@ -15,6 +15,7 @@ import { AddJobOrderForm } from "./add-jo-form";
 import { startProductionAction, restoreOrderAction } from "@/app/actions/orders";
 import { CancelOrderForm } from "./cancel-order-form";
 import { releaseJobOrderAction, sendBalanceReminderAction } from "@/app/actions/payments";
+import { markOrderCompletedAction } from "@/app/actions/fulfillment";
 import { PaymentProofForm } from "./payment-proof-form";
 import { ReleaseExceptionForm } from "./release-exception-form";
 import { ApplyVoucherForm } from "./apply-voucher-form";
@@ -199,6 +200,23 @@ export default async function OrderDetailPage({
               </Button>
             </form>
           )}
+          {/* 3rd Update item 4: manual escape hatch for an order that finished
+              production and release but never went through (or finished) the
+              formal Fulfillment sub-flow — without this it stays stuck at
+              OPEN/FULFILLING forever even though it's genuinely done. Only
+              offered once every job order has at least been released, so it
+              can't be used to skip production/QC. */}
+          {canModifyOrder &&
+            order.status !== "CANCELLED" &&
+            order.status !== "COMPLETED" &&
+            order.jobOrders.length > 0 &&
+            order.jobOrders.every((jo) => jo.status === "RELEASED" || jo.status === "COMPLETED") && (
+              <form action={markOrderCompletedAction.bind(null, order.id)}>
+                <Button type="submit" size="sm">
+                  Mark Order as Completed
+                </Button>
+              </form>
+            )}
         </div>
       )}
 

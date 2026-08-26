@@ -43,26 +43,31 @@ export async function createOrderAction(_prevState: string | undefined, formData
     return "Approved-terms orders require who authorized the exception.";
   }
 
-  const orderNumber = await nextOrderNumber();
-
   // Cost snapshot (Aug 20 4th update, Part D item 26/34) — taken once, right
   // now, from the linked Quotation's line items as they cost out at this
   // exact moment. A Service's BOM changing tomorrow must never silently
   // rewrite what this Order's production cost was at creation time, so
   // this is stored, not recomputed live on every future page view.
   let costSnapshot: { totalCost: number; fullyConfigured: boolean } | null = null;
+  let sourceQuoteNumber: string | undefined;
   if (data.quotationId) {
     const quotation = await prisma.quotation.findUnique({
       where: { id: data.quotationId },
       include: { lineItems: true },
     });
     if (quotation) {
+      sourceQuoteNumber = quotation.quoteNumber;
       const estimate = await estimateCostForLines(
         quotation.lineItems.map((li) => ({ serviceId: li.serviceId, qty: li.qty, sellingAmount: Number(li.unitPrice) * li.qty }))
       );
       costSnapshot = { totalCost: estimate.totalCost, fullyConfigured: estimate.fullyConfigured };
     }
   }
+
+  // Unified document identity (3rd Update item 5): an Order created from an
+  // approved Quotation keeps that Quotation's exact date+sequence digits
+  // (just ORD- in place of QUO-) rather than drawing a new number.
+  const orderNumber = await nextOrderNumber(sourceQuoteNumber);
 
   const order = await prisma.order.create({
     data: {

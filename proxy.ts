@@ -4,9 +4,11 @@ import { authConfig } from "@/lib/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
-// "/" is the public tracking landing page for anonymous visitors — it
-// handles its own redirect to the right dashboard once signed in (see
-// app/page.tsx), so it must not be gated here.
+// "/" is listed here even though it never actually renders for an
+// unauthenticated visitor — app/page.tsx redirects to /login itself (3rd
+// Update, item 1) or to the right dashboard once signed in — so this entry
+// just lets that page's own auth() call run instead of the middleware
+// redirecting first with no callbackUrl.
 // "/track" (exact, no token) is the public, session-free "track by
 // reference number" page the /login page's Track Order button links to —
 // distinct from "/" (which redirects an authenticated visitor to their

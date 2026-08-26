@@ -11,6 +11,7 @@ import { saveUploadedFile, UploadRejectedError } from "@/lib/upload";
 import { assertCanRelease, paymentSummary, RuleViolation } from "@/lib/workflow";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
 import { autoCreateJobOrderForOrder } from "@/lib/quotation-conversion";
+import { publishProductionUpdate } from "@/lib/production-realtime";
 
 /**
  * Reuses the exact same payment/business rule this app has always used to
@@ -307,6 +308,7 @@ export async function releaseJobOrderAction(jobOrderId: string) {
 
   await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "RELEASED" } });
   await logAudit(user.id, "JOB_ORDER_RELEASED", "JobOrder", jobOrderId, {});
+  await publishProductionUpdate();
 
   redirect(`/job-orders/${jobOrderId}`);
 }

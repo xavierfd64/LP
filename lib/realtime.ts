@@ -43,7 +43,19 @@ export type RealtimeNotificationEvent = {
   };
 };
 
-export type RealtimeEvent = RealtimeMessageEvent | RealtimeNotificationEvent;
+/**
+ * A Production job order changed (stage move, return, start, add, reassign,
+ * completion) — 3rd Update item 2/3. Deliberately carries no payload beyond
+ * "something changed": every recipient already has its own board/dashboard
+ * data loaded, so this is just the signal to refetch it (see
+ * components/production/production-realtime-listener.tsx), not a diff to
+ * apply — far simpler than keeping every client's local state in sync
+ * field-by-field, and correct by construction since it always re-reads the
+ * same server data every other view reads.
+ */
+export type RealtimeProductionEvent = { type: "production" };
+
+export type RealtimeEvent = RealtimeMessageEvent | RealtimeNotificationEvent | RealtimeProductionEvent;
 
 // Route Handlers and Server Actions compile into separate module graphs
 // (visible even within a single Node process, especially under Turbopack
