@@ -231,7 +231,7 @@ export function FloatingChatWidget({ currentUserId, role }: { currentUserId: str
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-40 sm:inset-auto sm:bottom-24 sm:right-6">
+        <div className="fixed inset-x-0 top-0 z-50 h-[100dvh] sm:inset-auto sm:bottom-24 sm:right-6 sm:h-auto sm:z-40">
           <div className="flex h-full w-full flex-col bg-white shadow-2xl sm:h-[34rem] sm:w-96 sm:rounded-lg sm:border sm:border-slate-200">
             <div className="flex items-center justify-between bg-brand-600 px-4 py-3 text-white sm:rounded-t-lg">
               {view === "thread" ? (
@@ -331,7 +331,7 @@ export function FloatingChatWidget({ currentUserId, role }: { currentUserId: str
         type="button"
         onClick={handleToggle}
         aria-label={open ? "Minimize chat" : "Open chat"}
-        className="fixed bottom-4 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg transition-transform hover:scale-105 sm:bottom-6 sm:right-6"
+        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg transition-transform hover:scale-105 sm:bottom-6 sm:right-6"
       >
         <MessageCircle className="h-6 w-6" />
         {totalUnread > 0 && (

@@ -63,8 +63,8 @@ export function ReceivableDetailsModal({ customerId, canMessage }: { customerId:
       </Button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
-          <div className="flex h-full w-full flex-col bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:max-w-4xl sm:rounded-lg">
+        <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
+          <div className="flex h-full w-full flex-col bg-white shadow-xl sm:h-auto sm:max-h-[90dvh] sm:max-w-4xl sm:rounded-lg">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold uppercase tracking-wide text-brand-700">Receivable Details</p>

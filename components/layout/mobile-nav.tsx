@@ -37,8 +37,8 @@ export function MobileNav({
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setOpen(false)} />
+        <div className="fixed inset-x-0 top-0 h-[100dvh] z-50">
+          <div className="fixed inset-x-0 top-0 h-[100dvh] bg-black/40" onClick={() => setOpen(false)} />
           <aside className="fixed inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col overflow-y-auto border-r border-[var(--color-sidebar-border)] bg-[var(--color-sidebar-bg)] px-3 py-4 shadow-xl">
             <div className="mb-6 flex items-center justify-between px-2">
               <div className="flex min-w-0 items-center gap-2">

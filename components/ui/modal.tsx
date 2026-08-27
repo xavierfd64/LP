@@ -24,9 +24,9 @@ export function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
       <div
-        className={cn("flex max-h-[90vh] w-full flex-col rounded-lg bg-white shadow-xl", maxWidthClassName)}
+        className={cn("flex max-h-[90dvh] w-full flex-col rounded-lg bg-white shadow-xl", maxWidthClassName)}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {children}

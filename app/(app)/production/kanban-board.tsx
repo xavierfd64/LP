@@ -732,7 +732,7 @@ function StageColumn({
         </h3>
         <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", tone.badge)}>{items.length}</span>
       </div>
-      <div className={cn("space-y-2 overflow-y-auto p-2", fullWidth ? "max-h-none" : "max-h-[70vh]")}>
+      <div className={cn("space-y-2 overflow-y-auto p-2", fullWidth ? "max-h-none" : "max-h-[70dvh]")}>
         {items.map((jo) => (
           <JobOrderCard
             key={jo.id}
@@ -869,7 +869,7 @@ function JobOrderCard({
             </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="fixed inset-x-0 top-0 h-[100dvh] z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-slate-200 bg-white py-1 text-xs shadow-lg">
                   <Link href={`/job-orders/${jo.id}`} className="flex items-center gap-2 px-3 py-1.5 text-slate-700 hover:bg-slate-50">
                     <Eye className="h-3.5 w-3.5" /> View Job Order

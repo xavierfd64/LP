@@ -45,7 +45,7 @@ export function CostComponentFormModal({ serviceId, component }: { serviceId: st
       {open &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4">
+          <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4">
             <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-base font-semibold text-slate-900">{component ? "Edit Direct Production Cost" : "Add Direct Production Cost"}</h3>

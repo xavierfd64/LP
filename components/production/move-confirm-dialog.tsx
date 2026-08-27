@@ -53,9 +53,9 @@ export function MoveConfirmDialog({
     // full-height-screen pattern — this dialog's content is short, and
     // stretching it to fill the viewport left a large empty gap above the
     // footer that looked broken rather than intentional.
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onCancel}>
+    <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onCancel}>
       <div
-        className="flex max-h-[85vh] w-full flex-col rounded-t-xl bg-white shadow-xl sm:max-w-md sm:rounded-lg"
+        className="flex max-h-[85dvh] w-full flex-col rounded-t-xl bg-white shadow-xl sm:max-w-md sm:rounded-lg"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {blocked ? (

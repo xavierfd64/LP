@@ -189,9 +189,9 @@ export function AddJobDialog({
       </Button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4" onMouseDown={close}>
+        <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4" onMouseDown={close}>
           <div
-            className="flex h-full w-full flex-col bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-lg"
+            className="flex h-full w-full flex-col bg-white shadow-xl sm:h-auto sm:max-h-[90dvh] sm:max-w-3xl sm:rounded-lg"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-5 py-4">

@@ -152,7 +152,7 @@ export function JobDetailsPanel({
   const isAtQcStage = data?.status === "QC";
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onMouseDown={onClose}>
+    <div className="fixed inset-x-0 top-0 h-[100dvh] z-40 flex justify-end bg-black/30" onMouseDown={onClose}>
       <div className="flex h-full w-full max-w-md flex-col bg-white shadow-2xl sm:max-w-lg" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-5 py-4">
           <div className="min-w-0">

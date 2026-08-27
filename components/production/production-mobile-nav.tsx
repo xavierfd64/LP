@@ -35,8 +35,8 @@ export function ProductionMobileNav({ canSeeSettings, canSeeReports }: { canSeeS
   return (
     <>
       {moreOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setMoreOpen(false)} />
+        <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 md:hidden">
+          <div className="fixed inset-x-0 top-0 h-[100dvh] bg-black/40" onClick={() => setMoreOpen(false)} />
           <div className="fixed inset-x-0 bottom-0 rounded-t-xl border-t border-slate-200 bg-white p-3 pb-6 shadow-xl">
             <div className="mb-2 flex items-center justify-between px-1">
               <p className="text-sm font-semibold text-slate-900">More</p>

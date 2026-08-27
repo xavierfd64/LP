@@ -167,8 +167,8 @@ function QuickAddServiceModal({
   // this can be opened from inside a ServicePicker that's itself inside an
   // outer transaction <form>, and a nested <form> silently breaks submission.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
+    <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-md max-h-[85dvh] overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-base font-semibold text-slate-900">New Service</h3>
           <button type="button" onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Close">
