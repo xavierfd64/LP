@@ -213,12 +213,12 @@ export function QuickAddCustomerModal({
             <Input id="qa-name" name="name" required defaultValue={initialName} />
           </div>
           <div>
-            <Label htmlFor="qa-address">Address *</Label>
-            <Textarea id="qa-address" name="address" required rows={2} />
+            <Label htmlFor="qa-address">Address (optional)</Label>
+            <Textarea id="qa-address" name="address" rows={2} />
           </div>
           <div>
-            <Label htmlFor="qa-contact">Contact Number *</Label>
-            <Input id="qa-contact" name="contactNumber" required />
+            <Label htmlFor="qa-contact">Contact Number (optional)</Label>
+            <Input id="qa-contact" name="contactNumber" />
           </div>
           <div>
             <Label htmlFor="qa-email">Email (optional)</Label>

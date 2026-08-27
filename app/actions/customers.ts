@@ -73,8 +73,8 @@ export async function searchCustomersForTransactionAction(query: string): Promis
 
 const quickAddSchema = z.object({
   name: z.string().min(2, "Complete name is required."),
-  address: z.string().min(3, "Address is required."),
-  contactNumber: z.string().min(5, "Contact number is required."),
+  address: z.string().optional(),
+  contactNumber: z.string().optional(),
   email: z.union([z.string().email("Enter a valid email."), z.literal("")]).optional(),
   facebookUrl: z.string().optional(),
 });
@@ -113,8 +113,8 @@ export async function quickAddCustomerAction(formData: FormData): Promise<QuickA
     data: {
       displayId,
       name,
-      address,
-      contactNumber,
+      address: address || undefined,
+      contactNumber: contactNumber || undefined,
       email: email || undefined,
       facebookUrl: facebookUrl || undefined,
     },
