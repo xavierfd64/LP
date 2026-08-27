@@ -9,7 +9,7 @@ import { getCurrentCustomer } from "@/lib/current-customer";
 import { nextQuoteNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
 import { notifyCustomer, notifyStaff } from "@/lib/notifications";
-import { ACTIVE_QUOTATION_STATUSES } from "@/lib/quotation-status";
+import { ACTIVE_QUOTATION_STATUSES, FORCE_APPROVABLE_STATUSES } from "@/lib/quotation-status";
 import { convertApprovedQuotation } from "@/lib/quotation-conversion";
 import { calculatePricing } from "@/lib/pricing";
 
@@ -482,35 +482,65 @@ export async function restoreQuotationAction(quotationId: string) {
 }
 
 const forceApproveSchema = z.object({
-  reason: z.string().min(3, "Enter a reason for the rush approval."),
+  // .trim() runs before .min(3), so a whitespace-only reason ("   ") is
+  // reduced to an empty string and correctly rejected — a bare .min(3)
+  // would have let 3+ spaces through as if they were a real reason.
+  reason: z.string().trim().min(3, "Enter a reason for the approval."),
 });
 
-/** Staff/admin bypass of customer approval for rush jobs — always audit-logged with a reason, distinct from a genuine customer click. */
-export async function forceApproveQuotationAction(quotationId: string, _prevState: string | undefined, formData: FormData) {
-  const user = await requirePermission("QUOTATION_APPROVE_REJECT");
+/**
+ * Shared core for "approve on the customer's behalf" — used by both the
+ * full quotation page's ForceApproveForm and the Quotation Details popup's
+ * Approve button (quotation-detail-modal.tsx / approve-on-behalf-dialog.tsx).
+ * One place writes approvedByStaffId/approvalBypassReason, logs the audit
+ * entry, and drives the quotation through the exact same downstream
+ * conversion (Order/Job Order creation, payment gates) a genuine customer
+ * approval uses — never a second, divergent approval path.
+ */
+async function forceApproveQuotationCore(quotationId: string, actorId: string, reason: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } });
 
-  if (quotation.status !== "SENT") {
-    return "Only a sent quotation can be force-approved.";
+  if (!FORCE_APPROVABLE_STATUSES.includes(quotation.status as (typeof FORCE_APPROVABLE_STATUSES)[number])) {
+    return { ok: false, error: "This quotation can no longer be approved on the customer's behalf." };
   }
 
-  const parsed = forceApproveSchema.safeParse({ reason: formData.get("reason") });
-  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+  const parsed = forceApproveSchema.safeParse({ reason });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
   await prisma.quotation.update({
     where: { id: quotationId },
-    data: { status: "APPROVED", approvedByStaffId: user.id, approvalBypassReason: parsed.data.reason },
+    data: { status: "APPROVED", approvedByStaffId: actorId, approvalBypassReason: parsed.data.reason },
   });
 
-  await logAudit(user.id, "QUOTATION_FORCE_APPROVED", "Quotation", quotationId, { reason: parsed.data.reason });
+  await logAudit(actorId, "QUOTATION_FORCE_APPROVED", "Quotation", quotationId, { reason: parsed.data.reason });
   await notifyCustomer(
     quotation.customerId,
     "QUOTATION_FORCE_APPROVED",
-    `Quotation ${quotation.quoteNumber} was approved on your behalf for rush processing.`,
+    `Quotation ${quotation.quoteNumber} was approved on your behalf: ${parsed.data.reason}`,
     `/quotations/${quotationId}`
   );
 
-  await convertApprovedQuotation(quotationId, user.id);
+  await convertApprovedQuotation(quotationId, actorId);
+  return { ok: true };
+}
 
+/** Staff/admin bypass of customer approval, from the full quotation page's ForceApproveForm — always audit-logged with a reason, distinct from a genuine customer click. */
+export async function forceApproveQuotationAction(quotationId: string, _prevState: string | undefined, formData: FormData) {
+  const user = await requirePermission("QUOTATION_APPROVE_REJECT");
+  const result = await forceApproveQuotationCore(quotationId, user.id, String(formData.get("reason") ?? ""));
+  if (!result.ok) return result.error;
   redirect(`/quotations/${quotationId}`);
+}
+
+/**
+ * Same bypass as forceApproveQuotationAction, but non-redirecting — for the
+ * Approve on Behalf of Customer dialog opened from the Quotation Details
+ * popup (must stay inside the popup, never navigate away). Re-validates
+ * authorization, quotation status, and the reason itself server-side —
+ * never trusts that the Approve button was only shown to an authorized
+ * user, so a direct call from an unauthorized account is rejected here too.
+ */
+export async function forceApproveQuotationFromModalAction(quotationId: string, reason: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requirePermission("QUOTATION_APPROVE_REJECT");
+  return forceApproveQuotationCore(quotationId, user.id, reason);
 }

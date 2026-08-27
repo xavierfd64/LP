@@ -12,6 +12,7 @@ import { getQuotationDetailAction, type QuotationDetailResult } from "@/app/acti
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { RecordPaymentDialog } from "@/app/(app)/orders/[id]/record-payment-dialog";
 import { PaymentExemptionDialog } from "@/components/production/payment-exemption-dialog";
+import { ApproveOnBehalfDialog } from "./approve-on-behalf-dialog";
 
 type Detail = Extract<QuotationDetailResult, { ok: true }>["data"];
 
@@ -86,6 +87,12 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
               </section>
             )}
 
+            {detail.approvedByStaffName && (
+              <Alert tone="warning">
+                Approved on the customer&apos;s behalf by {detail.approvedByStaffName}: {detail.approvalBypassReason}
+              </Alert>
+            )}
+
             {detail.hasOrder && detail.orderId && (
               <Alert tone="success">
                 Already converted to order —{" "}
@@ -112,6 +119,7 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
             </Button>
           </Link>
         )}
+        {detail?.canForceApprove && <ApproveOnBehalfDialog quotationId={detail.id} onApproved={loadDetail} />}
         {detail?.canConvertToOrder && (
           <Link href={`/orders/new?quotationId=${detail.id}`}>
             <Button type="button">Convert to Order</Button>

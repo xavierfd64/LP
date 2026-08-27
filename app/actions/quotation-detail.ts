@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { paymentSummary } from "@/lib/workflow";
+import { FORCE_APPROVABLE_STATUSES } from "@/lib/quotation-status";
 
 /**
  * Backs the Quotation Details modal (Aug 22 UI redesign update 2, Part 6)
@@ -46,6 +47,10 @@ export type QuotationDetailResult =
         fullyPaid: boolean;
         canRecordPayment: boolean;
         canGrantPaymentExemption: boolean;
+        /** Approve on Behalf of Customer (Aug 27 final update) — only offered while the quotation is still awaiting a decision AND the viewer holds QUOTATION_APPROVE_REJECT. */
+        canForceApprove: boolean;
+        approvedByStaffName: string | null;
+        approvalBypassReason: string | null;
       };
     }
   | { ok: false; error: string };
@@ -56,7 +61,7 @@ export async function getQuotationDetailAction(id: string): Promise<QuotationDet
 
   const quotation = await prisma.quotation.findUnique({
     where: { id },
-    include: { customer: true, lineItems: true, orders: true, createdBy: true },
+    include: { customer: true, lineItems: true, orders: true, createdBy: true, approvedByStaff: true },
   });
   if (!quotation) return { ok: false, error: "Quotation not found." };
 
@@ -87,6 +92,10 @@ export async function getQuotationDetailAction(id: string): Promise<QuotationDet
   // since both are "override a payment/production control on this Order"
   // actions. No new Permission is introduced for this.
   const canGrantPaymentExemption = isStaffLike && (user.role === "ADMIN" || (await can(user, "ORDER_MODIFY")));
+  const canForceApprove =
+    isStaffLike &&
+    (user.role === "ADMIN" || (await can(user, "QUOTATION_APPROVE_REJECT"))) &&
+    FORCE_APPROVABLE_STATUSES.includes(quotation.status as (typeof FORCE_APPROVABLE_STATUSES)[number]);
 
   return {
     ok: true,
@@ -123,6 +132,9 @@ export async function getQuotationDetailAction(id: string): Promise<QuotationDet
       fullyPaid,
       canRecordPayment: !!order && canRecordPayment && !fullyPaid,
       canGrantPaymentExemption: !!order && canGrantPaymentExemption && !fullyPaid,
+      canForceApprove,
+      approvedByStaffName: quotation.approvedByStaff?.name ?? null,
+      approvalBypassReason: quotation.approvalBypassReason,
     },
   };
 }
