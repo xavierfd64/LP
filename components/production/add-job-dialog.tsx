@@ -195,7 +195,7 @@ export function AddJobDialog({
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-5 py-4">
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-base font-bold text-slate-900">Add Job to Production</h2>
                 <p className="text-xs text-slate-500">Create a new job and add it to the workflow.</p>
               </div>

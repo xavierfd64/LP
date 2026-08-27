@@ -95,8 +95,8 @@ export function ReadyForFulfillmentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-lg bg-white shadow-xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
           <h2 className="text-sm font-semibold text-slate-900">
             {data?.status === "RELEASED" ? "Complete Order" : "Release for Fulfillment"}
           </h2>
@@ -105,7 +105,7 @@ export function ReadyForFulfillmentModal({
           </button>
         </div>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {loading && <p className="py-6 text-center text-sm text-slate-400">Loading…</p>}
           {!loading && !data && <p className="py-6 text-center text-sm text-slate-400">Job order not found.</p>}
           {error && <Alert tone="error">{error}</Alert>}

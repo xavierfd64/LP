@@ -30,8 +30,8 @@ export function RecordPaymentDialog({
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-lg bg-white shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
               <h2 className="text-sm font-semibold text-slate-900">Record a Payment</h2>
               <button
                 type="button"
@@ -43,7 +43,7 @@ export function RecordPaymentDialog({
               </button>
             </div>
 
-            <form action={formAction} className="max-h-[80vh] space-y-4 overflow-y-auto px-5 py-4">
+            <form action={formAction} className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               <input type="hidden" name="orderId" value={orderId} />
               {error && <Alert tone="error">{error}</Alert>}
 

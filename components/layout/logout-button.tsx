@@ -1,3 +1,4 @@
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -19,8 +20,12 @@ import { Button } from "@/components/ui/button";
 export function LogoutButton() {
   return (
     <form action="/api/logout" method="POST">
-      <Button type="submit" variant="outline" size="sm">
-        Sign out
+      {/* Icon-only below sm: (the header row is already full on ~320px
+          screens with the nav toggle, notification bell, and this button —
+          the full "Sign out" label reappears once there's room). */}
+      <Button type="submit" variant="outline" size="sm" className="px-2 sm:px-3" aria-label="Sign out">
+        <LogOut className="h-4 w-4 sm:hidden" />
+        <span className="hidden sm:inline">Sign out</span>
       </Button>
     </form>
   );

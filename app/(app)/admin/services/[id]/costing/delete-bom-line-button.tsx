@@ -20,7 +20,7 @@ export function DeleteBomLineButton({ kind, id, label }: { kind: "material" | "c
         typeof document !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-            <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
+            <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-base font-semibold text-slate-900">Remove {kind === "material" ? "Material" : "Cost"}?</h3>
                 <button type="button" onClick={() => setOpen(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Close">

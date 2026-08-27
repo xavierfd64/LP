@@ -91,9 +91,9 @@ export function MoveConfirmDialog({
         ) : (
           <>
             <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-5 py-4">
-              <div className="flex items-center gap-2">
-                {isReturn ? <ArrowLeft className="h-5 w-5 text-amber-600" /> : <ArrowRight className="h-5 w-5 text-success-600" />}
-                <h2 className="text-base font-bold text-slate-900">{isReturn ? "Return to Previous Process" : "Move to Next Process"}</h2>
+              <div className="flex min-w-0 items-center gap-2">
+                {isReturn ? <ArrowLeft className="h-5 w-5 shrink-0 text-amber-600" /> : <ArrowRight className="h-5 w-5 shrink-0 text-success-600" />}
+                <h2 className="min-w-0 text-base font-bold text-slate-900">{isReturn ? "Return to Previous Process" : "Move to Next Process"}</h2>
               </div>
               <button type="button" onClick={onCancel} className="shrink-0 text-slate-400 hover:text-slate-700" aria-label="Close">
                 ✕

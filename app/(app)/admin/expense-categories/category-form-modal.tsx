@@ -37,7 +37,7 @@ export function CategoryFormModal({ category }: { category?: Category }) {
         typeof document !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-            <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+            <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-base font-semibold text-slate-900">
                   {category ? "Edit Expense Category" : "Add Expense Category"}

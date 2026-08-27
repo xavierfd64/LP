@@ -160,8 +160,8 @@ export function MessengerDispatchDialog({ jobOrderId, joNumber }: { jobOrderId: 
         <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
           <div className="flex h-full w-full flex-col bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-lg">
             <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-5 py-4">
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge tone="slate">FACEBOOK MESSENGER DISPATCH</Badge>
                   <Badge tone="red">Live Production Status Update</Badge>
                 </div>
