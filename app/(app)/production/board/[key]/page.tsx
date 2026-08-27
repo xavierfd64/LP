@@ -103,6 +103,7 @@ export default async function ProductionBoardPage({ params }: PageProps<"/produc
         canAddJob={canAddJob}
         canSeeSettings={canSeeSettings}
         canSeeReports={canSeeReports}
+        currentUserName={user.name ?? "You"}
       />
     </div>
   );

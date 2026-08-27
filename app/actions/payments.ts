@@ -263,6 +263,26 @@ const releaseExceptionSchema = z.object({
   releaseExceptionReason: z.string().min(1, "Enter a reason."),
 });
 
+async function grantReleaseException(
+  actorId: string,
+  input: { orderId: string; releaseExceptionBy: string; releaseExceptionReason: string }
+) {
+  await prisma.order.update({
+    where: { id: input.orderId },
+    data: {
+      releaseException: true,
+      releaseExceptionBy: input.releaseExceptionBy,
+      releaseExceptionReason: input.releaseExceptionReason,
+    },
+  });
+
+  await logAudit(actorId, "RELEASE_EXCEPTION_GRANTED", "Order", input.orderId, {
+    releaseExceptionBy: input.releaseExceptionBy,
+    releaseExceptionReason: input.releaseExceptionReason,
+  });
+  await publishProductionUpdate();
+}
+
 export async function grantReleaseExceptionAction(_prevState: string | undefined, formData: FormData) {
   const user = await requirePermission("ORDER_MODIFY");
   const parsed = releaseExceptionSchema.safeParse({
@@ -272,45 +292,122 @@ export async function grantReleaseExceptionAction(_prevState: string | undefined
   });
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
-  await prisma.order.update({
-    where: { id: parsed.data.orderId },
-    data: {
-      releaseException: true,
-      releaseExceptionBy: parsed.data.releaseExceptionBy,
-      releaseExceptionReason: parsed.data.releaseExceptionReason,
-    },
-  });
-
-  await logAudit(user.id, "RELEASE_EXCEPTION_GRANTED", "Order", parsed.data.orderId, {
-    releaseExceptionBy: parsed.data.releaseExceptionBy,
-    releaseExceptionReason: parsed.data.releaseExceptionReason,
-  });
+  await grantReleaseException(user.id, parsed.data);
 
   redirect(`/orders/${parsed.data.orderId}`);
 }
 
-export async function releaseJobOrderAction(jobOrderId: string) {
+/** Non-redirecting counterpart for the Ready for Fulfillment card's blocked-release popup (1st Update item 3). */
+export async function grantReleaseExceptionFromBoardAction(
+  orderId: string,
+  releaseExceptionBy: string,
+  releaseExceptionReason: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requirePermission("ORDER_MODIFY");
+  const parsed = releaseExceptionSchema.safeParse({ orderId, releaseExceptionBy, releaseExceptionReason });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  await grantReleaseException(user.id, parsed.data);
+  return { ok: true };
+}
+
+async function releaseJobOrder(jobOrderId: string, actorId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const jo = await prisma.jobOrder.findUniqueOrThrow({ where: { id: jobOrderId } });
 
   if (jo.status !== "READY") {
-    redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent("Job order must be READY (passed QC/packing) before release.")}`);
+    return { ok: false, error: "Job order must be READY (passed QC/packing) before release." };
   }
 
   try {
     await assertCanRelease(jo.orderId);
   } catch (e) {
-    if (e instanceof RuleViolation) {
-      redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent(e.message)}`);
-    }
+    if (e instanceof RuleViolation) return { ok: false, error: e.message };
     throw e;
   }
 
   await prisma.jobOrder.update({ where: { id: jobOrderId }, data: { status: "RELEASED" } });
-  await logAudit(user.id, "JOB_ORDER_RELEASED", "JobOrder", jobOrderId, {});
+  await logAudit(actorId, "JOB_ORDER_RELEASED", "JobOrder", jobOrderId, {});
   await publishProductionUpdate();
+  return { ok: true };
+}
 
+export async function releaseJobOrderAction(jobOrderId: string) {
+  const user = await requirePermission("ORDER_MODIFY");
+  const result = await releaseJobOrder(jobOrderId, user.id);
+  if (!result.ok) redirect(`/job-orders/${jobOrderId}?error=${encodeURIComponent(result.error)}`);
   redirect(`/job-orders/${jobOrderId}`);
+}
+
+/**
+ * Non-redirecting counterpart for the Ready for Fulfillment card's popup
+ * (1st Update item 3) — the same release logic as releaseJobOrderAction,
+ * just returning a result instead of navigating away, so the popup can
+ * show a blocked-state dialog in place (mirroring MoveConfirmDialog) and
+ * stay on the Production board on success.
+ */
+export async function releaseJobOrderFromBoardAction(jobOrderId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requirePermission("ORDER_MODIFY");
+  return releaseJobOrder(jobOrderId, user.id);
+}
+
+const paymentExemptionSchema = z.object({
+  orderId: z.string().min(1),
+  exemptedBy: z.string().min(1, "Enter who authorized the exemption."),
+  reason: z.string().min(1, "Enter a reason."),
+});
+
+/**
+ * Payment Exemption (1st Update item 4) — lets an authorized staff member
+ * waive the required partial payment for a trusted customer (government
+ * project, big company, other approved business account) directly from the
+ * Quotation View popup, without falsely recording a payment. Reuses the
+ * exact same paymentTermType/termsApprovedBy/termsReason mechanism that
+ * already exists for Customer.isQualifiedForTerms (lib/quotation-conversion.ts)
+ * — this is just a manual, staff-triggered grant of that same "approved
+ * terms" state on a case-by-case basis, not a new data-model concept. It
+ * never touches Payment records or the order's confirmed/paid totals, so
+ * the balance stays a truthful receivable — only production/operational
+ * eligibility is unblocked (same as autoCreateJobOrderIfPaymentSatisfied's
+ * existing hasApprovedTerms bypass).
+ */
+async function grantPaymentExemption(
+  actorId: string,
+  input: { orderId: string; exemptedBy: string; reason: string }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const order = await prisma.order.findUnique({ where: { id: input.orderId } });
+  if (!order) return { ok: false, error: "Order not found." };
+
+  const summary = await paymentSummary(input.orderId);
+  if (summary.fullyPaid) return { ok: false, error: "This order is already fully paid — no exemption is needed." };
+
+  await prisma.order.update({
+    where: { id: input.orderId },
+    data: {
+      paymentTermType: "APPROVED_TERMS",
+      termsApprovedBy: input.exemptedBy,
+      termsReason: input.reason,
+    },
+  });
+
+  await logAudit(actorId, "PAYMENT_EXEMPTION_GRANTED", "Order", input.orderId, {
+    exemptedBy: input.exemptedBy,
+    reason: input.reason,
+  });
+  await autoCreateJobOrderIfPaymentSatisfied(input.orderId, actorId);
+  await publishProductionUpdate();
+  return { ok: true };
+}
+
+export async function grantPaymentExemptionAction(
+  orderId: string,
+  exemptedBy: string,
+  reason: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requirePermission("ORDER_MODIFY");
+  const parsed = paymentExemptionSchema.safeParse({ orderId, exemptedBy, reason });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  return grantPaymentExemption(user.id, parsed.data);
 }
 
 export async function sendBalanceReminderAction(orderId: string) {

@@ -29,7 +29,11 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
       orderBy: { name: "asc" },
     }),
     prisma.jobOrder.findMany({
-      where: { status: { in: ["IN_PROGRESS", "REWORK", "QC", "READY"] }, order: { status: { not: "CANCELLED" } } },
+      // RELEASED must still appear (in the Ready for Fulfillment column,
+      // 1st Update item 1/3) rather than vanishing from the board the
+      // instant it's released — a job order sat in this state before had
+      // no visible path to actual completion anywhere in Production.
+      where: { status: { in: ["IN_PROGRESS", "REWORK", "QC", "READY", "RELEASED"] }, order: { status: { not: "CANCELLED" } } },
       include: {
         order: { include: { customer: true, fulfillments: { orderBy: { createdAt: "desc" }, take: 1 } } },
         service: { include: { workflowTemplate: { include: { stages: { orderBy: { order: "asc" } } } } } },
@@ -78,7 +82,7 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
     const board = boardFor(key, label, jo.serviceId, stages);
 
     const currentLog = jo.stageLogs.find((l) => l.stageOrder === jo.currentStageOrder && l.status !== "COMPLETED");
-    const column = jo.status === "READY" ? READY_COLUMN : currentLog?.stageName ?? READY_COLUMN;
+    const column = jo.status === "READY" || jo.status === "RELEASED" ? READY_COLUMN : currentLog?.stageName ?? READY_COLUMN;
     const specs = (jo.specs as Record<string, string> | null) ?? null;
     const columnIndex = board.columns.findIndex((c) => c.name === column);
     const progressPct = board.columns.length > 1 && columnIndex >= 0 ? Math.round((columnIndex / (board.columns.length - 1)) * 100) : 0;
@@ -123,7 +127,7 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
     active: allItems.length,
     inProduction: allItems.filter((i) => i.status === "IN_PROGRESS" || i.status === "REWORK").length,
     inQc: allItems.filter((i) => i.status === "QC").length,
-    ready: allItems.filter((i) => i.status === "READY").length,
+    ready: allItems.filter((i) => i.status === "READY" || i.status === "RELEASED").length,
     overdue: allItems.filter((i) => i.overdue).length,
   };
 
@@ -132,7 +136,7 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
     joNumber: jo.joNumber,
     productType: jo.productType,
     customerName: jo.order.customer.name,
-    completedAt: jo.updatedAt.toISOString(),
+    completedAt: (jo.completedAt ?? jo.updatedAt).toISOString(),
   }));
 
   return { boards, stageCounts, completedTodayItems };

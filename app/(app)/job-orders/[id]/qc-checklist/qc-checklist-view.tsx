@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { formatDate, formatDateTime, cn } from "@/lib/utils";
-import { toggleFormItemQcCheckedAction, completeQcFromFormAction } from "@/app/actions/qc";
+import { toggleFormItemQcCheckedAction, completeQcFromFormAction, completeQcFromFormBoardAction } from "@/app/actions/qc";
 
 type Item = {
   id: string;
@@ -25,11 +25,16 @@ export function QcChecklistView({
   items: initialItems,
   currentUserName,
   errorMsg,
+  embedded = false,
+  onComplete,
 }: {
   jobOrder: { id: string; joNumber: string; productType: string; customerName: string; quantity: number; deadline: string | null; startedAt: string | null; assignedToName: string | null };
   items: Item[];
   currentUserName: string;
   errorMsg?: string;
+  /** Rendered inside the QC popup/modal (1st Update item 2) instead of the standalone /qc-checklist page — hides the page-style heading/Back link, and completion calls onComplete instead of navigating. */
+  embedded?: boolean;
+  onComplete?: (result: { ok: true } | { ok: false; error: string }) => void;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -37,6 +42,7 @@ export function QcChecklistView({
   const [statusFilter, setStatusFilter] = useState<"" | "checked" | "pending">("");
   const [pending, startTransition] = useTransition();
   const [completing, setCompleting] = useState(false);
+  const [localError, setLocalError] = useState<string | undefined>(errorMsg);
 
   const checkedCount = items.filter((i) => i.qcChecked).length;
   const totalCount = items.length;
@@ -83,6 +89,14 @@ export function QcChecklistView({
 
   async function handleComplete() {
     setCompleting(true);
+    if (onComplete) {
+      const result = await completeQcFromFormBoardAction(jobOrder.id, undefined);
+      setCompleting(false);
+      if (!result.ok) setLocalError(result.error);
+      else setLocalError(undefined);
+      onComplete(result);
+      return;
+    }
     const fd = new FormData();
     await completeQcFromFormAction(jobOrder.id, fd);
     setCompleting(false);
@@ -91,25 +105,27 @@ export function QcChecklistView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">QC Checklist</h1>
-          <p className="text-sm text-slate-500">Check and verify each item before marking the job as complete.</p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">QC Checklist</h1>
+            <p className="text-sm text-slate-500">Check and verify each item before marking the job as complete.</p>
+          </div>
+        )}
         <div className="flex gap-2">
-          <Link href={`/job-orders/${jobOrder.id}`}>
-            <Button type="button" variant="outline">
-              ← Back to Production
-            </Button>
-          </Link>
-          <form action={handleComplete}>
-            <Button type="submit" disabled={completing || checkedCount === 0}>
-              <Check className="h-4 w-4" /> {completing ? "Completing..." : "Complete QC"}
-            </Button>
-          </form>
+          {!embedded && (
+            <Link href={`/job-orders/${jobOrder.id}`}>
+              <Button type="button" variant="outline">
+                ← Back to Production
+              </Button>
+            </Link>
+          )}
+          <Button type="button" onClick={handleComplete} disabled={completing || checkedCount === 0}>
+            <Check className="h-4 w-4" /> {completing ? "Completing..." : "Complete QC"}
+          </Button>
         </div>
       </div>
 
-      {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
+      {localError && <Alert tone="error">{localError}</Alert>}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">

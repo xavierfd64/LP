@@ -53,6 +53,8 @@ import { MoveConfirmDialog, type MoveConfirmRequest } from "@/components/product
 import { JobDetailsPanel, type Tab as PanelTab } from "@/components/production/job-details-panel";
 import { ProductionMobileNav } from "@/components/production/production-mobile-nav";
 import { ProductionRealtimeListener } from "@/components/production/production-realtime-listener";
+import { QCModal } from "@/components/production/qc-modal";
+import { ReadyForFulfillmentModal } from "@/components/production/ready-for-fulfillment-modal";
 
 export { READY_COLUMN };
 
@@ -105,6 +107,7 @@ export function FocusedBoard({
   canAddJob,
   canSeeSettings,
   canSeeReports,
+  currentUserName,
 }: {
   board: ServiceBoard;
   canUpdateStage: boolean;
@@ -113,6 +116,7 @@ export function FocusedBoard({
   canAddJob: boolean;
   canSeeSettings: boolean;
   canSeeReports: boolean;
+  currentUserName: string;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -136,6 +140,9 @@ export function FocusedBoard({
     setPanelJobOrderId(id);
     setPanelTab(tab);
   }
+
+  const [qcModalJobOrderId, setQcModalJobOrderId] = useState<string | null>(null);
+  const [readyModalJobOrderId, setReadyModalJobOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     // Desktop gets real side-by-side drag-and-drop; tablet/mobile show one
@@ -356,6 +363,8 @@ export function FocusedBoard({
           onRequestMove={requestMove}
           onRequestReturn={requestReturn}
           onOpenPanel={openPanel}
+          onOpenQC={setQcModalJobOrderId}
+          onOpenReady={setReadyModalJobOrderId}
           onDropError={setDragError}
         />
       )}
@@ -401,6 +410,25 @@ export function FocusedBoard({
         onRequestMove={requestMoveFromPanel}
         onRequestReturn={requestReturnFromPanel}
         onChanged={() => router.refresh()}
+      />
+
+      <QCModal
+        jobOrderId={qcModalJobOrderId}
+        currentUserName={currentUserName}
+        onClose={() => setQcModalJobOrderId(null)}
+        onDone={() => {
+          setQcModalJobOrderId(null);
+          router.refresh();
+        }}
+      />
+
+      <ReadyForFulfillmentModal
+        jobOrderId={readyModalJobOrderId}
+        onClose={() => setReadyModalJobOrderId(null)}
+        onDone={() => {
+          setReadyModalJobOrderId(null);
+          router.refresh();
+        }}
       />
 
       <ProductionMobileNav canSeeSettings={canSeeSettings} canSeeReports={canSeeReports} />
@@ -488,6 +516,8 @@ function SingleBoard({
   onRequestMove,
   onRequestReturn,
   onOpenPanel,
+  onOpenQC,
+  onOpenReady,
   onDropError,
 }: {
   board: ServiceBoard;
@@ -499,6 +529,8 @@ function SingleBoard({
   onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
   onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
   onOpenPanel: (id: string, tab?: PanelTab) => void;
+  onOpenQC: (id: string) => void;
+  onOpenReady: (id: string) => void;
   onDropError: (msg: string | null) => void;
 }) {
   const [activeStage, setActiveStage] = useState(board.columns[0]?.name ?? "");
@@ -521,6 +553,8 @@ function SingleBoard({
     onRequestMove,
     onRequestReturn,
     onOpenPanel,
+    onOpenQC,
+    onOpenReady,
   };
 
   return (
@@ -637,6 +671,8 @@ function StageColumn({
   onRequestMove,
   onRequestReturn,
   onOpenPanel,
+  onOpenQC,
+  onOpenReady,
   className,
   fullWidth,
 }: {
@@ -657,6 +693,8 @@ function StageColumn({
   onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
   onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
   onOpenPanel: (id: string, tab?: PanelTab) => void;
+  onOpenQC: (id: string) => void;
+  onOpenReady: (id: string) => void;
   className?: string;
   fullWidth?: boolean;
 }) {
@@ -709,6 +747,8 @@ function StageColumn({
             onRequestMove={onRequestMove}
             onRequestReturn={onRequestReturn}
             onOpenPanel={onOpenPanel}
+            onOpenQC={onOpenQC}
+            onOpenReady={onOpenReady}
           />
         ))}
         {items.length === 0 && (
@@ -748,6 +788,8 @@ function JobOrderCard({
   onRequestMove,
   onRequestReturn,
   onOpenPanel,
+  onOpenQC,
+  onOpenReady,
 }: {
   jo: KanbanJobOrder;
   board: ServiceBoard;
@@ -760,6 +802,8 @@ function JobOrderCard({
   onRequestMove: (jo: KanbanJobOrder, targetOrder: number | null, toStageName: string) => void;
   onRequestReturn: (jo: KanbanJobOrder, previousStageName: string) => void;
   onOpenPanel: (id: string, tab?: PanelTab) => void;
+  onOpenQC: (id: string) => void;
+  onOpenReady: (id: string) => void;
 }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -956,17 +1000,13 @@ function JobOrderCard({
 
         <div className="ml-auto">
           {jo.status === "QC" ? (
-            <Link href={`/job-orders/${jo.id}`}>
-              <Button type="button" size="sm" className="h-7 px-2 text-xs">
-                Mark as Ready <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
-          ) : jo.status === "READY" ? (
-            <Link href={`/job-orders/${jo.id}`}>
-              <Button type="button" size="sm" className="h-7 px-2 text-xs">
-                Mark as Completed <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
+            <Button type="button" size="sm" className="h-7 px-2 text-xs" onClick={() => onOpenQC(jo.id)}>
+              Quality Control <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          ) : jo.status === "READY" || jo.status === "RELEASED" ? (
+            <Button type="button" size="sm" className="h-7 px-2 text-xs" onClick={() => onOpenReady(jo.id)}>
+              {jo.status === "RELEASED" ? "Complete Order" : "Release for Fulfillment"} <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
           ) : jo.currentLogStatus === "READY" ? (
             canUpdateStage && (
               <Button type="button" size="sm" className="h-7 px-2 text-xs" onClick={handleStart} disabled={starting}>

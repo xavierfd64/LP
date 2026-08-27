@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { nextJoNumber } from "@/lib/numbering";
 import { publishProductionUpdate } from "@/lib/production-realtime";
+import { paymentSummary } from "@/lib/workflow";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -407,4 +408,46 @@ export async function addJobToProductionAction(input: AddJobToProductionInput): 
   }
   await publishProductionUpdate();
   return { ok: true };
+}
+
+export type ReadyForFulfillmentData = {
+  jobOrderId: string;
+  joNumber: string;
+  orderId: string;
+  orderNumber: string;
+  status: "READY" | "RELEASED";
+  total: number;
+  confirmed: number;
+  requiredPartial: number;
+  fullyPaid: boolean;
+  hasApprovedTerms: boolean;
+  releaseException: boolean;
+};
+
+/**
+ * Backs the Ready for Fulfillment card's popup (1st Update item 3) — the
+ * same payment-summary figures the order page's Release button and
+ * Grant Release Exception form already read from lib/workflow.ts's
+ * paymentSummary, just surfaced to a job-order-scoped popup instead of
+ * requiring navigation to the order page to see them.
+ */
+export async function getReadyForFulfillmentDataAction(jobOrderId: string): Promise<ReadyForFulfillmentData | null> {
+  await requirePermission("ORDER_MODIFY");
+  const jo = await prisma.jobOrder.findUnique({ where: { id: jobOrderId }, include: { order: true } });
+  if (!jo || (jo.status !== "READY" && jo.status !== "RELEASED")) return null;
+
+  const s = await paymentSummary(jo.orderId);
+  return {
+    jobOrderId: jo.id,
+    joNumber: jo.joNumber,
+    orderId: jo.orderId,
+    orderNumber: jo.order.orderNumber,
+    status: jo.status,
+    total: s.total,
+    confirmed: s.confirmed,
+    requiredPartial: s.requiredPartial,
+    fullyPaid: s.fullyPaid,
+    hasApprovedTerms: s.hasApprovedTerms,
+    releaseException: jo.order.releaseException,
+  };
 }

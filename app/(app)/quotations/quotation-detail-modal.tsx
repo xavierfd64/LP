@@ -10,6 +10,8 @@ import { LineItemsView } from "@/components/documents/line-items-view";
 import { Alert } from "@/components/ui/alert";
 import { getQuotationDetailAction, type QuotationDetailResult } from "@/app/actions/quotation-detail";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { RecordPaymentDialog } from "@/app/(app)/orders/[id]/record-payment-dialog";
+import { PaymentExemptionDialog } from "@/components/production/payment-exemption-dialog";
 
 type Detail = Extract<QuotationDetailResult, { ok: true }>["data"];
 
@@ -28,12 +30,17 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  function loadDetail() {
     getQuotationDetailAction(quotationId).then((res) => {
       if (res.ok) setDetail(res.data);
       else setError(res.error);
       setLoading(false);
     });
+  }
+
+  useEffect(() => {
+    loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quotationId]);
 
   const totalsRows =
@@ -109,6 +116,23 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
           <Link href={`/orders/new?quotationId=${detail.id}`}>
             <Button type="button">Convert to Order</Button>
           </Link>
+        )}
+        {detail?.canGrantPaymentExemption && detail.orderId && detail.orderNumber && (
+          <PaymentExemptionDialog
+            orderId={detail.orderId}
+            orderNumber={detail.orderNumber}
+            customerName={detail.customerName}
+            balanceDue={Number(detail.balanceDue ?? 0)}
+            onGranted={loadDetail}
+          />
+        )}
+        {detail?.canRecordPayment && detail.orderId && detail.orderNumber && (
+          <RecordPaymentDialog
+            orderId={detail.orderId}
+            orderNumber={detail.orderNumber}
+            customerName={detail.customerName}
+            balanceDue={Number(detail.balanceDue ?? 0)}
+          />
         )}
       </ModalFooter>
     </Modal>

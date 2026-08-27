@@ -39,19 +39,14 @@ async function maybeCompleteOrder(orderId: string) {
  * can't be used to skip past production/QC — it only closes out an order
  * production has already finished releasing.
  */
-export async function markOrderCompletedAction(orderId: string) {
-  const user = await requirePermission("ORDER_MODIFY");
+async function markOrderCompleted(orderId: string, actorId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { jobOrders: true } });
 
-  if (order.status === "COMPLETED") redirect(`/orders/${orderId}`);
-  if (order.status === "CANCELLED") {
-    redirect(`/orders/${orderId}?error=${encodeURIComponent("A cancelled order cannot be marked as completed.")}`);
-  }
+  if (order.status === "COMPLETED") return { ok: true };
+  if (order.status === "CANCELLED") return { ok: false, error: "A cancelled order cannot be marked as completed." };
   const notReady = order.jobOrders.find((jo) => jo.status !== "RELEASED" && jo.status !== "COMPLETED");
   if (notReady) {
-    redirect(
-      `/orders/${orderId}?error=${encodeURIComponent(`Job order ${notReady.joNumber} must be released before the order can be completed.`)}`
-    );
+    return { ok: false, error: `Job order ${notReady.joNumber} must be released before the order can be completed.` };
   }
 
   await prisma.jobOrder.updateMany({
@@ -59,7 +54,24 @@ export async function markOrderCompletedAction(orderId: string) {
     data: { status: "COMPLETED", completedAt: new Date() },
   });
   await completeOrder(orderId);
-  await logAudit(user.id, "ORDER_COMPLETED", "Order", orderId, { manual: true });
+  await logAudit(actorId, "ORDER_COMPLETED", "Order", orderId, { manual: true });
+  return { ok: true };
+}
+
+/**
+ * Non-redirecting counterpart for the Ready for Fulfillment card's popup
+ * (1st Update item 3) — same completion logic as markOrderCompletedAction,
+ * just returning a result instead of navigating away.
+ */
+export async function markOrderCompletedFromBoardAction(orderId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requirePermission("ORDER_MODIFY");
+  return markOrderCompleted(orderId, user.id);
+}
+
+export async function markOrderCompletedAction(orderId: string) {
+  const user = await requirePermission("ORDER_MODIFY");
+  const result = await markOrderCompleted(orderId, user.id);
+  if (!result.ok) redirect(`/orders/${orderId}?error=${encodeURIComponent(result.error)}`);
 
   redirect(`/orders/${orderId}`);
 }

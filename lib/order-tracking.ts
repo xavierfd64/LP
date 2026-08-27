@@ -102,7 +102,7 @@ export function currentStageLabel(order: OrderTrackingSnapshot): string | null {
   const jo = order.jobOrders[0];
   if (!jo) return null;
   if (order.status === "COMPLETED") return "Completed";
-  if (jo.status === "READY") return "Ready for Fulfillment";
+  if (jo.status === "READY" || jo.status === "RELEASED") return "Ready for Fulfillment";
   const stage = jo.workflowTemplate.stages.find((s) => s.order === jo.currentStageOrder);
   return stage?.name ?? null;
 }

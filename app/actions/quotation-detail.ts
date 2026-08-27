@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
+import { paymentSummary } from "@/lib/workflow";
 
 /**
  * Backs the Quotation Details modal (Aug 22 UI redesign update 2, Part 6)
@@ -37,7 +38,14 @@ export type QuotationDetailResult =
         notes: string | null;
         hasOrder: boolean;
         orderId: string | null;
+        orderNumber: string | null;
         canConvertToOrder: boolean;
+        /** Order-side balance (1st Update item 4) — populated only once a real Order exists, so RECORD PAYMENT / PAYMENT EXEMPTION can be offered directly from this popup. */
+        balanceDue: string | null;
+        confirmedPaid: string | null;
+        fullyPaid: boolean;
+        canRecordPayment: boolean;
+        canGrantPaymentExemption: boolean;
       };
     }
   | { ok: false; error: string };
@@ -61,6 +69,24 @@ export async function getQuotationDetailAction(id: string): Promise<QuotationDet
 
   const canCreateOrder = user.role === "ADMIN" || (await can(user, "ORDER_CREATE"));
   const hasOrder = quotation.orders.length > 0;
+  const order = hasOrder ? quotation.orders[0] : null;
+
+  let balanceDue: string | null = null;
+  let confirmedPaid: string | null = null;
+  let fullyPaid = false;
+  if (order) {
+    const summary = await paymentSummary(order.id);
+    balanceDue = Math.max(summary.total - summary.confirmed, 0).toString();
+    confirmedPaid = summary.confirmed.toString();
+    fullyPaid = summary.fullyPaid;
+  }
+
+  const canRecordPayment = isStaffLike && (user.role === "ADMIN" || (await can(user, "PAYMENT_RECORD")));
+  // Reuses ORDER_MODIFY — the same permission that already gates granting a
+  // release exception (app/actions/payments.ts's grantReleaseExceptionAction),
+  // since both are "override a payment/production control on this Order"
+  // actions. No new Permission is introduced for this.
+  const canGrantPaymentExemption = isStaffLike && (user.role === "ADMIN" || (await can(user, "ORDER_MODIFY")));
 
   return {
     ok: true,
@@ -89,8 +115,14 @@ export async function getQuotationDetailAction(id: string): Promise<QuotationDet
       total: quotation.total.toString(),
       notes: quotation.notes,
       hasOrder,
-      orderId: hasOrder ? quotation.orders[0].id : null,
+      orderId: order?.id ?? null,
+      orderNumber: order?.orderNumber ?? null,
       canConvertToOrder: isStaffLike && canCreateOrder && quotation.status === "APPROVED" && !hasOrder,
+      balanceDue,
+      confirmedPaid,
+      fullyPaid,
+      canRecordPayment: !!order && canRecordPayment && !fullyPaid,
+      canGrantPaymentExemption: !!order && canGrantPaymentExemption && !fullyPaid,
     },
   };
 }
