@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
 import { ToggleActiveButton } from "./toggle-active-button";
+import { DeleteServiceButton } from "./delete-service-button";
 import { computeServiceCostingCoverage } from "@/lib/service-costing";
 
 export default async function ServicesPage() {
@@ -87,6 +88,7 @@ export default async function ServicesPage() {
                         Edit
                       </Link>
                       <ToggleActiveButton serviceId={s.id} active={s.active} />
+                      <DeleteServiceButton serviceId={s.id} serviceName={s.name} jobOrderCount={s._count.jobOrders} />
                     </>
                   )}
                 </TD>

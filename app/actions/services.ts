@@ -161,3 +161,25 @@ export async function toggleServiceActiveAction(serviceId: string) {
   await logAudit(user.id, "SERVICE_TOGGLED", "Service", serviceId, { active: !service.active });
   revalidatePath("/admin/services");
 }
+
+/**
+ * Permanent delete — a separate action from toggleServiceActiveAction
+ * (deactivate stays the reversible everyday action; this is the
+ * "permanently gone" one). Safe to run even for a Service already used on
+ * historical Inquiries/Quotations/Job Orders: every one of those models
+ * keeps its own denormalized snapshot of the service name (desiredProduct/
+ * productType) independent of the live Service row, and their serviceId
+ * foreign keys are all ON DELETE SET NULL (see the 20260819090000
+ * migration) — so deleting the Service row only detaches the live link,
+ * it never removes or corrupts the historical record itself. Only the
+ * Service's own configuration rows (BOM materials, cost components,
+ * pricing tiers) cascade-delete alongside it, which is correct: those are
+ * the Service's configuration, not anyone's transaction history.
+ */
+export async function deleteServiceAction(serviceId: string) {
+  const user = await requirePermission("SERVICE_MANAGE");
+  const service = await prisma.service.findUniqueOrThrow({ where: { id: serviceId } });
+  await prisma.service.delete({ where: { id: serviceId } });
+  await logAudit(user.id, "SERVICE_DELETED", "Service", serviceId, { name: service.name });
+  redirect(`/admin/services`);
+}

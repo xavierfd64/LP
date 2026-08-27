@@ -86,13 +86,22 @@ export function LineItemsEditor({ items, onChange }: { items: LineItem[]; onChan
   return (
     <div className="space-y-3">
       <input type="hidden" name="lineItemsJson" value={lineItemsJson} />
-      {/* Desktop/tablet: real table */}
-      <div className="hidden sm:block">
-        <Table>
+      {/* Desktop/tablet: real table. table-fixed so a long Service/Item
+          name can never inflate that column at the expense of the others
+          (table-layout:auto sizes columns off each cell's unwrapped
+          content width, ignoring truncate/ellipsis) — every column keeps
+          its declared width, and Service/Item's own content truncates
+          within it instead of stretching the column. Only shown at lg:+
+          (desktop) — below that (tablet included) the stacked-card layout
+          below is used instead, since a 6-7 column table with a fixed
+          Service/Item column genuinely doesn't fit a tablet-width content
+          area (sidebar included) without squeezing itself the same way. */}
+      <div className="hidden lg:block">
+        <Table className="table-fixed">
           <THead>
             <TR>
-              <TH className="min-w-[180px]">Service / Item</TH>
-              <TH className="min-w-[160px]">Description</TH>
+              <TH className="w-56">Service / Item</TH>
+              <TH>Description</TH>
               <TH className="w-20">Qty</TH>
               <TH className="w-24">Unit</TH>
               <TH className="w-28">Unit Price</TH>
@@ -104,7 +113,7 @@ export function LineItemsEditor({ items, onChange }: { items: LineItem[]; onChan
             {items.map((li, i) => (
               <TR key={i}>
                 <TD>
-                  <ServicePicker name={`serviceId-${i}`} initialService={toServiceResult(li)} onSelect={(s) => selectService(i, s)} />
+                  <ServicePicker name={`serviceId-${i}`} initialService={toServiceResult(li)} onSelect={(s) => selectService(i, s)} canAddService={false} />
                   {li.specFields && li.specFields.length > 0 && (
                     <div className="mt-2">
                       <SpecFieldsEditor name={`li-specs-${i}`} fields={li.specFields} initialSpecs={li.specs} onChange={(specs) => updateSpecs(i, specs)} />
@@ -165,10 +174,10 @@ export function LineItemsEditor({ items, onChange }: { items: LineItem[]; onChan
       </div>
 
       {/* Mobile: stacked cards, no horizontal scroll */}
-      <div className="space-y-3 sm:hidden">
+      <div className="space-y-3 lg:hidden">
         {items.map((li, i) => (
           <div key={i} className="space-y-2 rounded-lg border border-slate-200 p-3">
-            <ServicePicker name={`serviceId-m-${i}`} initialService={toServiceResult(li)} onSelect={(s) => selectService(i, s)} />
+            <ServicePicker name={`serviceId-m-${i}`} initialService={toServiceResult(li)} onSelect={(s) => selectService(i, s)} canAddService={false} />
             <div>
               <Label htmlFor={`li-desc-m-${i}`}>Description</Label>
               <Input id={`li-desc-m-${i}`} placeholder="Description" value={li.description} onChange={(e) => updateItem(i, "description", e.target.value)} />

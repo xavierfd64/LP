@@ -281,13 +281,33 @@ export async function editQuotationAction(quotationId: string, _prevState: strin
   if (!parsedItems.success) return parsedItems.message;
   if (parsedItems.data.length === 0) return "Please provide at least one valid line item.";
 
-  const total = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
+  // One consistent calculation flow, same as createQuotationAction: Line
+  // Items -> Subtotal -> Discount/Tax adjustments -> Grand Total. This form
+  // has no Discount %/Tax % inputs of its own (editing here only changes
+  // line items/validity/notes), so the *rate* this quotation was already
+  // using is derived from its last saved figures and reapplied to the
+  // freshly-computed subtotal — never left stale, and never silently
+  // dropped to a flat leftover amount that stops reflecting the same %.
+  const oldSubtotal = quotation.subtotal != null ? Number(quotation.subtotal) : Number(quotation.total) + Number(quotation.discountAmount) - Number(quotation.taxAmount);
+  const oldDiscountAmount = Number(quotation.discountAmount);
+  const oldAfterDiscount = oldSubtotal - oldDiscountAmount;
+  const discountRate = oldSubtotal > 0 ? oldDiscountAmount / oldSubtotal : 0;
+  const taxRate = oldAfterDiscount > 0 ? Number(quotation.taxAmount) / oldAfterDiscount : 0;
+
+  const subtotal = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
+  const discountAmount = subtotal * discountRate;
+  const afterDiscount = subtotal - discountAmount;
+  const taxAmount = afterDiscount * taxRate;
+  const total = afterDiscount + taxAmount;
 
   await prisma.$transaction([
     prisma.quotationLineItem.deleteMany({ where: { quotationId } }),
     prisma.quotation.update({
       where: { id: quotationId },
       data: {
+        subtotal,
+        discountAmount,
+        taxAmount,
         total,
         validUntil: validUntilRaw ? new Date(validUntilRaw) : undefined,
         notes: notesRaw,
