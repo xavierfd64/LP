@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Modal, ModalHeader, ModalBody, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ type Detail = Extract<QuotationDetailResult, { ok: true }>["data"];
  * does; "Convert to Order" is the existing /orders/new?quotationId= flow.
  */
 export function QuotationDetailModal({ quotationId, onClose }: { quotationId: string; onClose: () => void }) {
+  const router = useRouter();
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +39,21 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
       else setError(res.error);
       setLoading(false);
     });
+  }
+
+  /**
+   * Used after a mutation succeeds inside this popup (Approve, Payment
+   * Exemption) — refreshes both this popup's own detail (loadDetail) and
+   * the Quotations list/KPI cards behind it (router.refresh(), re-running
+   * the page's Server Components in place). Without the latter, the
+   * backend was correctly updated but the table row and counters behind
+   * the still-open popup kept showing the pre-approval state until the
+   * user manually navigated away and back — the exact stale-UI bug this
+   * corrective update targets, for the same user/tab that just acted.
+   */
+  function refreshAfterMutation() {
+    loadDetail();
+    router.refresh();
   }
 
   useEffect(() => {
@@ -119,7 +136,7 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
             </Button>
           </Link>
         )}
-        {detail?.canForceApprove && <ApproveOnBehalfDialog quotationId={detail.id} onApproved={loadDetail} />}
+        {detail?.canForceApprove && <ApproveOnBehalfDialog quotationId={detail.id} onApproved={refreshAfterMutation} />}
         {detail?.canConvertToOrder && (
           <Link href={`/orders/new?quotationId=${detail.id}`}>
             <Button type="button">Convert to Order</Button>
@@ -131,7 +148,7 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
             orderNumber={detail.orderNumber}
             customerName={detail.customerName}
             balanceDue={Number(detail.balanceDue ?? 0)}
-            onGranted={loadDetail}
+            onGranted={refreshAfterMutation}
           />
         )}
         {detail?.canRecordPayment && detail.orderId && detail.orderNumber && (

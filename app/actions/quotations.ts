@@ -519,6 +519,12 @@ async function forceApproveQuotationCore(quotationId: string, actorId: string, r
     `Quotation ${quotation.quoteNumber} was approved on your behalf: ${parsed.data.reason}`,
     `/quotations/${quotationId}`
   );
+  // Mirrors approveQuotationAction's own notifyStaff call for a genuine
+  // customer approval (system-wide sync corrective update, Aug 28) — so
+  // other Admin/Staff sessions with the Quotations list open pick up the
+  // status change live via the existing notification-triggered refresh,
+  // the same as they already do when a customer approves directly.
+  await notifyStaff("QUOTATION_APPROVED", `Quotation ${quotation.quoteNumber} was approved on the customer's behalf by staff.`, `/quotations/${quotationId}`);
 
   await convertApprovedQuotation(quotationId, actorId);
   return { ok: true };

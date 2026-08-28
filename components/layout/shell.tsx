@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { getStaffPermissions } from "@/lib/permissions-guard";
 import { RealtimeProvider } from "@/components/realtime/realtime-provider";
+import { RefreshOnNotification } from "@/components/realtime/refresh-on-notification";
 import { FloatingChatWidget } from "@/components/messaging/floating-chat-widget";
 import { getBusinessSettings } from "@/lib/business-settings";
 import { BrandLogo } from "@/components/branding/brand-logo";
@@ -45,6 +46,7 @@ export async function Shell({
   return (
     <div className="flex min-h-screen">
       <RealtimeProvider />
+      <RefreshOnNotification />
       <DesktopSidebar sections={sections} businessName={settings.businessName} tagline={settings.tagline} logoPath={settings.logoPath} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-3 py-3 sm:px-6">

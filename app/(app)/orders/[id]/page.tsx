@@ -30,6 +30,7 @@ import { DocumentShareManager } from "@/components/documents/document-share-mana
 import { findActiveShareLink } from "@/lib/document-sharing";
 import { InternalCostingPanel } from "@/components/documents/internal-costing-panel";
 import { estimateCostForLines, type AggregateCostEstimate } from "@/lib/service-cost";
+import { ProductionRealtimeListener } from "@/components/production/production-realtime-listener";
 
 export default async function OrderDetailPage({
   params,
@@ -162,6 +163,7 @@ export default async function OrderDetailPage({
 
   return (
     <div className="max-w-4xl space-y-6">
+      <ProductionRealtimeListener />
       <TransactionBrandHeader />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
