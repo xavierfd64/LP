@@ -5,12 +5,14 @@ import { LoginForm } from "./login-form";
 import { OAuthButtons, OrDivider } from "@/components/auth/oauth-buttons";
 import { availableOAuthProviders } from "@/lib/oauth-providers";
 import { friendlyAuthError } from "@/lib/auth-errors";
+import { getBusinessSettings } from "@/lib/business-settings";
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const sp = await searchParams;
   const rawError = typeof sp.error === "string" ? sp.error : undefined;
   const errorMsg = friendlyAuthError(rawError);
   const providers = await availableOAuthProviders();
+  const settings = await getBusinessSettings();
   // Set by proxy.ts when an unauthenticated visit to a protected page was
   // redirected here — carried through sign-in so the customer lands back
   // where they meant to go instead of always the dashboard (spec item 33).
@@ -26,7 +28,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
 
-      <LoginForm callbackUrl={callbackUrl} />
+      <LoginForm callbackUrl={callbackUrl} businessName={settings.businessName} tagline={settings.tagline} logoPath={settings.logoPath} />
 
       {(providers.google || providers.facebook) && (
         <>
