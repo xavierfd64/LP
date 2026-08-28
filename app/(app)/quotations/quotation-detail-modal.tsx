@@ -14,6 +14,7 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { RecordPaymentDialog } from "@/app/(app)/orders/[id]/record-payment-dialog";
 import { PaymentExemptionDialog } from "@/components/production/payment-exemption-dialog";
 import { ApproveOnBehalfDialog } from "./approve-on-behalf-dialog";
+import { QuotationSharePanel } from "./quotation-share-panel";
 
 type Detail = Extract<QuotationDetailResult, { ok: true }>["data"];
 
@@ -122,6 +123,14 @@ export function QuotationDetailModal({ quotationId, onClose }: { quotationId: st
             {!detail.hasOrder && !detail.canConvertToOrder && detail.status !== "APPROVED" && (
               <Alert tone="info">Convert to Order becomes available once this quotation is Approved.</Alert>
             )}
+
+            <QuotationSharePanel
+              quotationId={detail.id}
+              shareToken={detail.shareToken}
+              customerHasActivatedAccount={detail.customerHasActivatedAccount}
+              canSendToCustomerAccount={detail.canSendToCustomerAccount}
+              onSent={refreshAfterMutation}
+            />
           </>
         )}
       </ModalBody>

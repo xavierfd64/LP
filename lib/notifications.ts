@@ -51,6 +51,30 @@ export async function notifyUser(userId: string, type: string, message: string, 
   }
 }
 
+/**
+ * Same in-app bell/SSE notification as notifyUser, but deliberately never
+ * triggers the transactional email notifyUser always attempts (Update 2,
+ * "Send to Customer" — explicitly required to deliver only inside the
+ * customer's system account, never by email, regardless of the business's
+ * Email Settings for this event type). Use this instead of notifyUser only
+ * when an action's spec explicitly forbids the email side-effect; every
+ * other call site should keep using notifyUser/notifyCustomer as-is.
+ */
+export async function notifyUserInApp(userId: string, type: string, message: string, link?: string) {
+  const notification = await prisma.notification.create({ data: { userId, type, message, link } });
+  publishToUser(userId, {
+    type: "notification",
+    notification: {
+      id: notification.id,
+      type: notification.type,
+      message: notification.message,
+      link: notification.link,
+      read: notification.read,
+      createdAt: notification.createdAt.toISOString(),
+    },
+  });
+}
+
 /** Notifies every STAFF and ADMIN account (ops-facing events). */
 export async function notifyStaff(type: string, message: string, link?: string) {
   const users = await prisma.user.findMany({ where: { role: { in: ["STAFF", "ADMIN"] } }, select: { id: true } });

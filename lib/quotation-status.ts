@@ -14,3 +14,9 @@ export function isActiveQuotationStatus(status: string): boolean {
 // open" set. A DRAFT quotation is just as much awaiting approval as a SENT
 // one — sending is only a notification step, not a business-state gate.
 export const FORCE_APPROVABLE_STATUSES = ["DRAFT", "SENT", "REVISION_REQUESTED"] as const;
+
+// Statuses sendQuotationAction (and, since Update 2, the Quotation Details
+// popup's "Send to Customer") may transition to SENT from — matches
+// sendQuotationAction's own existing check exactly, shared here so the
+// popup's eligibility display and its server action can never drift apart.
+export const SENDABLE_QUOTATION_STATUSES = ["DRAFT", "REVISION_REQUESTED"] as const;

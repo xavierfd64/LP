@@ -8,8 +8,8 @@ import { requirePermission, can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { nextQuoteNumber } from "@/lib/numbering";
 import { logAudit } from "@/lib/audit";
-import { notifyCustomer, notifyStaff } from "@/lib/notifications";
-import { ACTIVE_QUOTATION_STATUSES, FORCE_APPROVABLE_STATUSES } from "@/lib/quotation-status";
+import { notifyCustomer, notifyStaff, notifyUserInApp } from "@/lib/notifications";
+import { ACTIVE_QUOTATION_STATUSES, FORCE_APPROVABLE_STATUSES, SENDABLE_QUOTATION_STATUSES } from "@/lib/quotation-status";
 import { convertApprovedQuotation } from "@/lib/quotation-conversion";
 import { calculatePricing } from "@/lib/pricing";
 
@@ -158,6 +158,42 @@ export async function sendQuotationAction(quotationId: string) {
   await logAudit(user.id, "QUOTATION_SENT", "Quotation", quotationId);
   await notifyCustomer(quotation.customerId, "QUOTATION_SENT", `Your quotation ${quotation.quoteNumber} is ready for review.`, `/quotations/${quotationId}`);
   redirect(`/quotations/${quotationId}`);
+}
+
+/**
+ * "Send to Customer" from the Quotation Details popup (Update 2) — the same
+ * DRAFT/REVISION_REQUESTED -> SENT transition sendQuotationAction already
+ * makes, but deliberately non-redirecting (stays in the popup) and
+ * deliberately in-app-only: it must deliver the quotation into the
+ * customer's own system account, never by email, regardless of the
+ * business's Email Settings — see lib/notifications.ts's notifyUserInApp.
+ * Re-validates everything server-side rather than trusting that the popup
+ * only showed this button for an eligible, activated-account customer:
+ * status must still be open, and the customer must still have a linked
+ * User account (an "activated account" in this app's existing terms — see
+ * components/customers/customer-picker.tsx's identical hasLogin framing).
+ */
+export async function sendQuotationToCustomerAccountAction(quotationId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requirePermission("QUOTATION_SEND");
+  const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId }, include: { customer: true } });
+
+  if (!SENDABLE_QUOTATION_STATUSES.includes(quotation.status as (typeof SENDABLE_QUOTATION_STATUSES)[number])) {
+    return { ok: false, error: "Only a draft or revision-requested quotation can be sent to the customer." };
+  }
+  if (!quotation.customer.userId) {
+    return { ok: false, error: "This customer does not have an activated account." };
+  }
+
+  await prisma.quotation.update({ where: { id: quotationId }, data: { status: "SENT" } });
+  await logAudit(user.id, "QUOTATION_SENT", "Quotation", quotationId, { toCustomerAccount: true });
+  await notifyUserInApp(
+    quotation.customer.userId,
+    "QUOTATION_SENT",
+    `Your quotation ${quotation.quoteNumber} is ready for review.`,
+    `/quotations/${quotationId}`
+  );
+
+  return { ok: true };
 }
 
 export async function approveQuotationAction(quotationId: string) {
