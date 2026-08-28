@@ -2,31 +2,39 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { FileText, Radar, Truck, Droplets, Printer as PrinterIcon, CheckCircle2, Lightbulb } from "lucide-react";
 import { BrandLogo } from "@/components/branding/brand-logo";
 import { cn } from "@/lib/utils";
 
-type StageDef = { label: string; sub: string; icon: typeof FileText; threshold: number };
+const ICON_BASE = "/branding/loading";
 
+type StageDef = { label: string; sub: string; icon: string; threshold: number };
+
+// The exact supplied step icons (Aug 29 asset-fidelity corrective update) —
+// never substituted for generic ones. Rendered inside a filled circle, so
+// each is forced to solid white via a CSS filter (brightness(0) invert(1))
+// rather than by editing the SVG file itself — the provided assets are red-
+// stroke-on-transparent line art, unmodified on disk; only how they're
+// *displayed* against a colored badge changes.
 const STAGES: StageDef[] = [
-  { label: "Preparing", sub: "Getting things ready", icon: FileText, threshold: 0 },
-  { label: "Processing", sub: "Processing data", icon: Droplets, threshold: 28 },
-  { label: "Printing", sub: "Printing documents", icon: PrinterIcon, threshold: 58 },
-  { label: "Finalizing", sub: "Almost done", icon: CheckCircle2, threshold: 88 },
+  { label: "Preparing", sub: "Getting things ready", icon: `${ICON_BASE}/icon-document.svg`, threshold: 0 },
+  { label: "Processing", sub: "Processing data", icon: `${ICON_BASE}/icon-processing.svg`, threshold: 28 },
+  { label: "Printing", sub: "Printing documents", icon: `${ICON_BASE}/icon-printer.svg`, threshold: 58 },
+  { label: "Finalizing", sub: "Almost done", icon: `${ICON_BASE}/icon-finalizing.svg`, threshold: 88 },
 ];
 
 /**
- * Login loading screen (Aug 28 corrective update) — visual reference is the
- * attached illustration; branding is never hard-coded. Mounted by
- * login-form.tsx only while useActionState's own `pending` is true, so its
- * lifetime is tied to the real signIn() -> "/" -> role-dashboard redirect
- * chain already in place (see app/actions/auth.ts, app/page.tsx) — no
- * separate timer decides when this disappears, only the real transition
- * finishing (this component unmounting). The internal progress percentage
- * is an honest "still working" indicator (creeps toward ~92%, easing off
- * the same way a real network-bound progress bar would, e.g. NProgress) —
- * it never claims 100%/completion on its own, and never delays the actual
- * redirect by even one tick.
+ * Login loading screen (Aug 28/29 corrective updates) — visual reference is
+ * the supplied reference_loading_desktop.png/reference_loading_mobile.png,
+ * built with the supplied printer/icon assets verbatim; branding is never
+ * hard-coded. Mounted by login-form.tsx only while useActionState's own
+ * `pending` is true, so its lifetime is tied to the real signIn() -> "/" ->
+ * role-dashboard redirect chain already in place (see app/actions/auth.ts,
+ * app/page.tsx) — no separate timer decides when this disappears, only the
+ * real transition finishing (this component unmounting). The internal
+ * progress percentage is an honest "still working" indicator (creeps toward
+ * ~92%, easing off the same way a real network-bound progress bar would,
+ * e.g. NProgress) — it never claims 100%/completion on its own, and never
+ * delays the actual redirect by even one tick.
  */
 export function LoginLoadingScreen({
   businessName,
@@ -55,12 +63,13 @@ export function LoginLoadingScreen({
 
   if (!mounted || typeof document === "undefined") return null;
 
+  const shown = Math.round(Math.min(progress, 100));
   const currentStageIndex = STAGES.reduce((idx, s, i) => (progress >= s.threshold ? i : idx), 0);
   const year = new Date().getFullYear();
 
   return createPortal(
     <div className="fixed inset-x-0 top-0 z-[100] flex h-[100dvh] items-center justify-center overflow-y-auto bg-slate-50 px-4 py-8 sm:px-6">
-      <div className="w-full max-w-lg space-y-5 text-center">
+      <div className="w-full max-w-2xl space-y-5 text-center">
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center gap-2.5">
             <BrandLogo src={logoPath} alt={businessName} size={40} rounded="rounded-xl" />
@@ -71,67 +80,45 @@ export function LoginLoadingScreen({
 
         <div className="flex items-center justify-center gap-2.5 text-xs font-medium text-slate-500 sm:gap-3 sm:text-sm">
           <span className="flex items-center gap-1.5">
-            <FileText className="h-3.5 w-3.5 text-brand-600 sm:h-4 sm:w-4" /> Print.
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${ICON_BASE}/icon-document.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Print.
           </span>
           <span className="text-slate-300">|</span>
           <span className="flex items-center gap-1.5">
-            <Radar className="h-3.5 w-3.5 text-brand-600 sm:h-4 sm:w-4" /> Track.
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${ICON_BASE}/icon-track.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Track.
           </span>
           <span className="text-slate-300">|</span>
           <span className="flex items-center gap-1.5">
-            <Truck className="h-3.5 w-3.5 text-brand-600 sm:h-4 sm:w-4" /> Deliver.
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${ICON_BASE}/icon-delivery.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Deliver.
           </span>
         </div>
         <div className="mx-auto h-px w-full max-w-xs bg-slate-200" />
 
-        <PrinterGraphic businessName={businessName} logoPath={logoPath} progress={progress} />
+        <PrinterGraphic businessName={businessName} logoPath={logoPath} />
 
         <div>
           <p className="text-base font-bold text-slate-900 sm:text-lg">Printing in progress…</p>
           <p className="mt-1 text-sm text-slate-500">Please wait while we prepare your workspace.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="mx-auto flex max-w-lg items-center gap-3">
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200">
             <div
               className="h-full rounded-full bg-brand-600 transition-[width] duration-150 ease-out"
-              style={{ width: `${Math.min(progress, 100)}%` }}
+              style={{ width: `${shown}%` }}
             />
           </div>
-          <span className="w-10 shrink-0 text-right text-sm font-medium text-slate-600 tabular-nums">
-            {Math.round(Math.min(progress, 100))}%
-          </span>
+          <span className="w-10 shrink-0 text-right text-sm font-medium text-slate-600 tabular-nums">{shown}%</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-2 gap-y-3 rounded-xl border border-slate-200 bg-white p-3 text-left sm:grid-cols-4 sm:p-4">
-          {STAGES.map((s, i) => {
-            const isActive = i === currentStageIndex;
-            const isDone = i < currentStageIndex;
-            const Icon = s.icon;
-            return (
-              <div key={s.label} className="flex items-center gap-2 sm:flex-col sm:items-center sm:gap-1.5 sm:text-center">
-                <span
-                  className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-                    isDone || isActive ? "bg-brand-600 text-white" : "bg-slate-200 text-slate-400"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className={cn("block truncate text-xs font-semibold", isActive || isDone ? "text-slate-900" : "text-slate-400")}>
-                    {s.label}
-                  </span>
-                  <span className="block truncate text-[11px] text-slate-400">{s.sub}</span>
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        <StageRow stages={STAGES} currentStageIndex={currentStageIndex} />
 
-        <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left sm:p-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-            <Lightbulb className="h-4 w-4" />
+        <div className="mx-auto flex max-w-lg items-start gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left sm:p-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${ICON_BASE}/icon-tip.svg`} alt="" className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900">Did you know?</p>
@@ -148,35 +135,112 @@ export function LoginLoadingScreen({
   );
 }
 
-function PrinterGraphic({ businessName, logoPath, progress }: { businessName: string; logoPath: string | null; progress: number }) {
+function StageIcon({ src, active }: { src: string; active: boolean }) {
   return (
-    // A fixed-height box that fully contains both layers itself (nothing
-    // escapes above/below it into the sections before/after) — the mini
-    // flyer sits in the top slice, the printer body in the bottom slice,
-    // with just enough overlap between them to read as "paper feeding out
-    // of the printer" rather than two unrelated shapes.
-    <div className="relative mx-auto h-44 w-full max-w-xs sm:h-52 sm:max-w-sm">
-      <div className="absolute top-0 left-1/2 z-0 w-36 -translate-x-1/2 rotate-[6deg] rounded-sm bg-white p-2 text-left shadow-md sm:w-44">
-        <div className="flex items-center gap-1.5">
-          <BrandLogo src={logoPath} alt={businessName} size={14} rounded="rounded-sm" />
-          <span className="truncate text-[10px] font-bold text-slate-900">{businessName}</span>
-        </div>
-        <p className="mt-1 text-[9px] font-semibold leading-tight text-slate-700">
-          High Quality
-          <br />
-          Print Solutions
-        </p>
-        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full bg-brand-500 transition-[width] duration-150" style={{ width: `${Math.min(progress, 100)}%` }} />
-        </div>
+    <span
+      className={cn(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors sm:h-9 sm:w-9",
+        active ? "bg-brand-600" : "bg-slate-300"
+      )}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="h-4 w-4" style={{ filter: "brightness(0) invert(1)" }} />
+    </span>
+  );
+}
+
+function StageRow({ stages, currentStageIndex }: { stages: StageDef[]; currentStageIndex: number }) {
+  return (
+    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-3.5 text-left sm:p-4">
+      {/* Tablet/desktop: one horizontal row with dotted connectors, matching
+          the desktop reference. */}
+      <div className="hidden sm:flex sm:items-start">
+        {stages.map((s, i) => {
+          const isActive = i <= currentStageIndex;
+          return (
+            <div key={s.label} className="flex flex-1 items-start">
+              <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
+                <StageIcon src={s.icon} active={isActive} />
+                <span className={cn("block truncate text-xs font-semibold", isActive ? "text-slate-900" : "text-slate-400")}>
+                  {s.label}
+                </span>
+                <span className="block truncate text-[11px] text-slate-400">{s.sub}</span>
+              </div>
+              {i < stages.length - 1 && <div className="mt-4 min-w-4 flex-1 border-t-2 border-dotted border-slate-300" />}
+            </div>
+          );
+        })}
       </div>
 
-      <div className="absolute bottom-0 left-1/2 z-10 flex h-20 w-full -translate-x-1/2 items-center justify-between rounded-2xl bg-slate-800 px-3.5 shadow-lg sm:h-24 sm:px-5">
-        <div className="h-7 w-9 rounded bg-slate-700 ring-1 ring-inset ring-slate-600 sm:h-9 sm:w-11" />
-        <div className="flex gap-1.5 sm:gap-2">
-          {["bg-white", "bg-pink-500", "bg-cyan-400", "bg-yellow-400"].map((c, i) => (
-            <span key={i} className={cn("h-8 w-2 rounded-sm sm:h-10 sm:w-2.5", c)} />
-          ))}
+      {/* Mobile: vertical list with a dotted connector — an intentionally
+          different layout from the desktop row, not just a shrink, matching
+          the compact mobile reference. */}
+      <div className="flex flex-col sm:hidden">
+        {stages.map((s, i) => {
+          const isActive = i <= currentStageIndex;
+          return (
+            <div key={s.label} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <StageIcon src={s.icon} active={isActive} />
+                {i < stages.length - 1 && <div className="my-1 w-0 flex-1 border-l-2 border-dotted border-slate-300" />}
+              </div>
+              <div className="min-w-0 pb-3">
+                <span className={cn("block text-sm font-semibold", isActive ? "text-slate-900" : "text-slate-400")}>{s.label}</span>
+                <span className="block text-xs text-slate-400">{s.sub}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The supplied printer-transparent.png used verbatim (never redrawn/
+ * substituted) for the machine body, ink cartridges, and decorative
+ * triangle/dot-pattern flourish. Only the sample "Let's Print / High
+ * Quality Print Solutions" mockup label baked into that image's paper area
+ * is patched over with a plain white panel carrying the real, dynamic
+ * logo + business name in the same position — the one part of this asset
+ * that is business identity, not decoration, and the spec is explicit that
+ * it must never stay hard-coded. Position/size are percentages of the
+ * image's own 861x348 box, measured directly against the source file, so
+ * the patch tracks the image exactly as it scales across breakpoints.
+ */
+function PrinterGraphic({ businessName, logoPath }: { businessName: string; logoPath: string | null }) {
+  return (
+    <div className="relative mx-auto w-full max-w-md sm:max-w-2xl">
+      <div className="relative w-full" style={{ aspectRatio: "861 / 348" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`${ICON_BASE}/printer-transparent.png`}
+          alt="Printer"
+          className="absolute inset-0 h-full w-full select-none object-contain"
+          draggable={false}
+        />
+        <div
+          className="absolute flex flex-col justify-center overflow-hidden bg-white"
+          style={{ left: "23%", top: "31%", width: "29%", height: "45%" }}
+        >
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {/* Two literal sizes rendered per breakpoint (BrandLogo's `size` is a
+                pixel number, not fluid) — same dual-render pattern already used
+                elsewhere in this app for a size that must track a breakpoint. */}
+            <span className="sm:hidden">
+              <BrandLogo src={logoPath} alt={businessName} size={9} rounded="rounded-sm" />
+            </span>
+            <span className="hidden sm:inline-block">
+              <BrandLogo src={logoPath} alt={businessName} size={16} rounded="rounded-sm" />
+            </span>
+            <span className="truncate text-[8px] font-bold text-slate-900 sm:text-xs">{businessName}</span>
+          </div>
+          <p className="mt-0.5 text-[7px] font-bold leading-tight text-slate-900 sm:mt-1 sm:text-[13px]">
+            High Quality
+            <br />
+            Print Solutions
+          </p>
+          <p className="mt-0.5 truncate text-[6px] text-slate-500 sm:text-[10px]">Great designs. Sharp results.</p>
         </div>
       </div>
     </div>

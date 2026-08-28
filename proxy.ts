@@ -111,5 +111,11 @@ export default auth((req) => {
 // but app/api/logout/route.ts's own explicit deletions can touch this
 // response's cookies.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|uploads|api/logout).*)"],
+  // branding/loading is excluded alongside the other static asset paths —
+  // the login loading screen's printer/icon assets (Aug 29 corrective
+  // update) must render during the window before the session cookie
+  // exists (the loading screen appears the instant the login form
+  // submits, ahead of the auth response), so they can never sit behind
+  // the auth() check the way the rest of the app correctly does.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|uploads|branding/loading|api/logout).*)"],
 };
