@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BrandLogo } from "@/components/branding/brand-logo";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,16 @@ const STAGES: StageDef[] = [
  * ~92%, easing off the same way a real network-bound progress bar would,
  * e.g. NProgress) — it never claims 100%/completion on its own, and never
  * delays the actual redirect by even one tick.
+ *
+ * Fit-to-viewport (Aug 29 corrective update #2): the composition's natural
+ * height can exceed common laptop viewports (1366x768 etc. once browser
+ * chrome is subtracted), which previously forced scrolling and pushed the
+ * stages/tip/footer below the fold. Rather than shrinking individual
+ * elements by guesswork, the whole block is measured and, only if it
+ * doesn't fit, uniformly scaled down as one unit — every proportion,
+ * spacing ratio, and the approved hierarchy stay exactly as designed, just
+ * smaller. On any viewport tall enough for the natural size, scale is 1 and
+ * nothing changes.
  */
 export function LoginLoadingScreen({
   businessName,
@@ -47,8 +57,22 @@ export function LoginLoadingScreen({
 }) {
   const [progress, setProgress] = useState(6);
   const [mounted, setMounted] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<{ scale: number; height: number | undefined }>({ scale: 1, height: undefined });
 
   useEffect(() => setMounted(true), []);
+
+  // Lock body scroll while this full-viewport overlay is up — the login
+  // form underneath stays mounted (just visually covered), and at narrow
+  // viewports its own natural height can exceed the screen, which would
+  // otherwise let the (invisible) page behind the overlay scroll.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -61,6 +85,32 @@ export function LoginLoadingScreen({
     return () => clearInterval(id);
   }, []);
 
+  useLayoutEffect(() => {
+    if (!mounted) return;
+    function recompute() {
+      const el = contentRef.current;
+      if (!el) return;
+      // scrollHeight always reflects the element's untransformed layout
+      // box — CSS transform is purely visual/compositing and never
+      // affects layout, so no reset-before-measure is needed (an earlier
+      // version imperatively reset el.style.transform here, which could
+      // race with React's own declarative write of the same property and
+      // leave it stuck once two recomputes landed on the same scale).
+      const natural = el.scrollHeight;
+      const available = window.innerHeight - 16;
+      const scale = Math.min(1, available / natural);
+      setFit({ scale, height: natural * scale });
+    }
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    if (contentRef.current) ro.observe(contentRef.current);
+    window.addEventListener("resize", recompute);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", recompute);
+    };
+  }, [mounted]);
+
   if (!mounted || typeof document === "undefined") return null;
 
   const shown = Math.round(Math.min(progress, 100));
@@ -68,67 +118,73 @@ export function LoginLoadingScreen({
   const year = new Date().getFullYear();
 
   return createPortal(
-    <div className="fixed inset-x-0 top-0 z-[100] flex h-[100dvh] items-center justify-center overflow-y-auto bg-slate-50 px-4 py-8 sm:px-6">
-      <div className="w-full max-w-2xl space-y-5 text-center">
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2.5">
-            <BrandLogo src={logoPath} alt={businessName} size={40} rounded="rounded-xl" />
-            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{businessName}</h1>
+    <div className="fixed inset-x-0 top-0 z-[100] flex h-[100dvh] items-center justify-center overflow-y-auto bg-slate-50 px-4 py-2 sm:px-6">
+      <div className="mx-auto w-full" style={{ maxWidth: "42rem", height: fit.height }}>
+        <div
+          ref={contentRef}
+          className="w-full space-y-4 text-center"
+          style={{ transform: `scale(${fit.scale})`, transformOrigin: "top center" }}
+        >
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex items-center gap-2.5">
+              <BrandLogo src={logoPath} alt={businessName} size={36} rounded="rounded-xl" />
+              <h1 className="text-lg font-bold text-slate-900 sm:text-2xl">{businessName}</h1>
+            </div>
+            <p className="text-sm text-slate-500">{tagline || "Business Management System"}</p>
           </div>
-          <p className="text-sm text-slate-500">{tagline || "Business Management System"}</p>
-        </div>
 
-        <div className="flex items-center justify-center gap-2.5 text-xs font-medium text-slate-500 sm:gap-3 sm:text-sm">
-          <span className="flex items-center gap-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${ICON_BASE}/icon-document.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Print.
-          </span>
-          <span className="text-slate-300">|</span>
-          <span className="flex items-center gap-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${ICON_BASE}/icon-track.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Track.
-          </span>
-          <span className="text-slate-300">|</span>
-          <span className="flex items-center gap-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${ICON_BASE}/icon-delivery.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Deliver.
-          </span>
-        </div>
-        <div className="mx-auto h-px w-full max-w-xs bg-slate-200" />
-
-        <PrinterGraphic businessName={businessName} logoPath={logoPath} />
-
-        <div>
-          <p className="text-base font-bold text-slate-900 sm:text-lg">Printing in progress…</p>
-          <p className="mt-1 text-sm text-slate-500">Please wait while we prepare your workspace.</p>
-        </div>
-
-        <div className="mx-auto flex max-w-lg items-center gap-3">
-          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full rounded-full bg-brand-600 transition-[width] duration-150 ease-out"
-              style={{ width: `${shown}%` }}
-            />
+          <div className="flex items-center justify-center gap-2.5 text-xs font-medium text-slate-500 sm:gap-3 sm:text-sm">
+            <span className="flex items-center gap-1.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${ICON_BASE}/icon-document.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Print.
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="flex items-center gap-1.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${ICON_BASE}/icon-track.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Track.
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="flex items-center gap-1.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${ICON_BASE}/icon-delivery.svg`} alt="" className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Deliver.
+            </span>
           </div>
-          <span className="w-10 shrink-0 text-right text-sm font-medium text-slate-600 tabular-nums">{shown}%</span>
-        </div>
+          <div className="mx-auto h-px w-full max-w-xs bg-slate-200" />
 
-        <StageRow stages={STAGES} currentStageIndex={currentStageIndex} />
+          <PrinterGraphic businessName={businessName} logoPath={logoPath} />
 
-        <div className="mx-auto flex max-w-lg items-start gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left sm:p-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${ICON_BASE}/icon-tip.svg`} alt="" className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-900">Did you know?</p>
-            <p className="text-sm text-slate-500">You can track your orders in real-time from the Production Board.</p>
+          <div>
+            <p className="text-base font-bold text-slate-900 sm:text-lg">Printing in progress…</p>
+            <p className="mt-1 text-sm text-slate-500">Please wait while we prepare your workspace.</p>
           </div>
-        </div>
 
-        <p className="text-xs text-slate-400">
-          © {year} {businessName}. All rights reserved.
-        </p>
+          <div className="mx-auto flex max-w-lg items-center gap-3">
+            <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-brand-600 transition-[width] duration-150 ease-out"
+                style={{ width: `${shown}%` }}
+              />
+            </div>
+            <span className="w-10 shrink-0 text-right text-sm font-medium text-slate-600 tabular-nums">{shown}%</span>
+          </div>
+
+          <StageRow stages={STAGES} currentStageIndex={currentStageIndex} />
+
+          <div className="mx-auto flex max-w-lg items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left sm:p-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${ICON_BASE}/icon-tip.svg`} alt="" className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900">Did you know?</p>
+              <p className="text-sm text-slate-500">You can track your orders in real-time from the Production Board.</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400">
+            © {year} {businessName}. All rights reserved.
+          </p>
+        </div>
       </div>
     </div>,
     document.body
@@ -151,7 +207,7 @@ function StageIcon({ src, active }: { src: string; active: boolean }) {
 
 function StageRow({ stages, currentStageIndex }: { stages: StageDef[]; currentStageIndex: number }) {
   return (
-    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-3.5 text-left sm:p-4">
+    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-3 text-left sm:p-4">
       {/* Tablet/desktop: one horizontal row with dotted connectors, matching
           the desktop reference. */}
       <div className="hidden sm:flex sm:items-start">
@@ -210,13 +266,38 @@ function StageRow({ stages, currentStageIndex }: { stages: StageDef[]; currentSt
  */
 function PrinterGraphic({ businessName, logoPath }: { businessName: string; logoPath: string | null }) {
   return (
-    <div className="relative mx-auto w-full max-w-md sm:max-w-2xl">
+    <div className="relative mx-auto w-full max-w-sm sm:max-w-xl">
       <div className="relative w-full" style={{ aspectRatio: "861 / 348" }}>
+        {/* Decorative dot-pattern flourish flanking the printer, matching
+            the approved reference composition — this is a background layer
+            behind the printer image, not part of the supplied PNG itself
+            (confirmed against the raw asset), so it's added here in pure
+            CSS rather than by editing/redrawing printer-transparent.png. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-[22%] opacity-70"
+          style={{
+            backgroundImage: "radial-gradient(circle, #E52323 1px, transparent 1.5px)",
+            backgroundSize: "9px 9px",
+            maskImage: "radial-gradient(ellipse 100% 75% at 100% 50%, black 0%, transparent 75%)",
+            WebkitMaskImage: "radial-gradient(ellipse 100% 75% at 100% 50%, black 0%, transparent 75%)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-[22%] opacity-70"
+          style={{
+            backgroundImage: "radial-gradient(circle, #E52323 1px, transparent 1.5px)",
+            backgroundSize: "9px 9px",
+            maskImage: "radial-gradient(ellipse 100% 75% at 0% 50%, black 0%, transparent 75%)",
+            WebkitMaskImage: "radial-gradient(ellipse 100% 75% at 0% 50%, black 0%, transparent 75%)",
+          }}
+        />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`${ICON_BASE}/printer-transparent.png`}
           alt="Printer"
-          className="absolute inset-0 h-full w-full select-none object-contain"
+          className="relative h-full w-full select-none object-contain"
           draggable={false}
         />
         <div
@@ -231,16 +312,16 @@ function PrinterGraphic({ businessName, logoPath }: { businessName: string; logo
               <BrandLogo src={logoPath} alt={businessName} size={9} rounded="rounded-sm" />
             </span>
             <span className="hidden sm:inline-block">
-              <BrandLogo src={logoPath} alt={businessName} size={16} rounded="rounded-sm" />
+              <BrandLogo src={logoPath} alt={businessName} size={14} rounded="rounded-sm" />
             </span>
-            <span className="truncate text-[8px] font-bold text-slate-900 sm:text-xs">{businessName}</span>
+            <span className="truncate text-[8px] font-bold text-slate-900 sm:text-[11px]">{businessName}</span>
           </div>
-          <p className="mt-0.5 text-[7px] font-bold leading-tight text-slate-900 sm:mt-1 sm:text-[13px]">
+          <p className="mt-0.5 text-[7px] font-bold leading-tight text-slate-900 sm:mt-1 sm:text-[12px]">
             High Quality
             <br />
             Print Solutions
           </p>
-          <p className="mt-0.5 truncate text-[6px] text-slate-500 sm:text-[10px]">Great designs. Sharp results.</p>
+          <p className="mt-0.5 truncate text-[6px] text-slate-500 sm:text-[9px]">Great designs. Sharp results.</p>
         </div>
       </div>
     </div>
