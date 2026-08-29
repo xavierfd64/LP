@@ -58,7 +58,7 @@ export type ServiceBoard = {
   key: string;
   label: string;
   serviceId: string | null;
-  columns: { name: string; order: number }[];
+  columns: { name: string; order: number; isDesignStage: boolean }[];
   jobOrders: KanbanJobOrder[];
 };
 

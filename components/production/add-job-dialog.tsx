@@ -11,6 +11,7 @@ import { cn, formatDate } from "@/lib/utils";
 import {
   getEligibleJobOrdersAction,
   getProductionStaffAction,
+  getEligibleAssigneesAction,
   addJobToProductionAction,
   type EligibleJobOrder,
   type ProductionStaffOption,
@@ -19,7 +20,7 @@ import {
 export type AddJobServiceOption = {
   id: string;
   name: string;
-  stages: { name: string; order: number }[];
+  stages: { name: string; order: number; isDesignStage: boolean }[];
 };
 
 /**
@@ -112,10 +113,17 @@ export function AddJobDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const selectedStageIsDesign = services.find((s) => s.id === serviceId)?.stages.find((s) => s.order === stageOrder)?.isDesignStage ?? false;
   useEffect(() => {
     if (!open) return;
-    getProductionStaffAction().then(setStaff);
-  }, [open]);
+    // The initial stage picked in step 4 determines who's a valid assignee
+    // in step 5 — Production staff for a normal stage, Graphic Artists when
+    // the job is starting directly at Design (that responsibility belongs
+    // to the Design module, never Production staff).
+    getEligibleAssigneesAction(selectedStageIsDesign).then(setStaff);
+    setAssigneeId("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, selectedStageIsDesign]);
 
   useEffect(() => {
     if (!open) return;

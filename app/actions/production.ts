@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requirePermission } from "@/lib/permissions-guard";
+import { requirePermission, can } from "@/lib/permissions-guard";
 import {
   setStageLogStatus,
   completeCurrentStage,
@@ -273,6 +273,34 @@ export async function getProductionStaffAction(): Promise<ProductionStaffOption[
   return users;
 }
 
+/**
+ * Step 5's assignable pool for the Add Job dialog, aware of what step 4
+ * actually picked: Production staff for a normal initial stage (same as
+ * getProductionStaffAction above), or active Graphic Artists (STAFF with
+ * DESIGN_VIEW) when the job is starting directly at the workflow's Design
+ * stage — that responsibility was never Production's, so the dropdown
+ * must not offer Production staff there, the same boundary
+ * addJobToProductionAction's own validation below enforces server-side.
+ * Gated on PRODUCTION_UPDATE_STAGE (not DESIGN_MANAGE) since this is
+ * "who can I hand this job to while adding it from Production," a real
+ * part of the permission the rest of this dialog already requires.
+ */
+export async function getEligibleAssigneesAction(isDesignStage: boolean): Promise<ProductionStaffOption[]> {
+  await requirePermission("PRODUCTION_UPDATE_STAGE", ["PRODUCTION"]);
+  if (isDesignStage) {
+    return prisma.user.findMany({
+      where: { role: "STAFF", active: true, staffPermissions: { some: { permission: "DESIGN_VIEW" } } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+  }
+  return prisma.user.findMany({
+    where: { role: "PRODUCTION", active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+}
+
 export type JobOrderPanelData = {
   id: string;
   joNumber: string;
@@ -418,9 +446,21 @@ export async function addJobToProductionAction(input: AddJobToProductionInput): 
   if (jo.status !== "ON_HOLD") return { ok: false, error: "This job order is already in production." };
 
   if (input.assigneeId) {
+    const initialStage = await prisma.workflowStage.findFirst({
+      where: { templateId: jo.workflowTemplateId, order: input.initialStageOrder },
+      select: { isDesignStage: true },
+    });
     const assignee = await prisma.user.findUnique({ where: { id: input.assigneeId } });
-    if (!assignee || !assignee.active || assignee.role !== "PRODUCTION") {
-      return { ok: false, error: "Please select a valid, active production staff member." };
+    const validAssignee = initialStage?.isDesignStage
+      ? assignee?.role === "STAFF" && (await can(assignee, "DESIGN_VIEW"))
+      : assignee?.role === "PRODUCTION";
+    if (!assignee || !assignee.active || !validAssignee) {
+      return {
+        ok: false,
+        error: initialStage?.isDesignStage
+          ? "Please select a valid, active Graphic Artist."
+          : "Please select a valid, active production staff member.",
+      };
     }
   }
 

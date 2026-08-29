@@ -53,12 +53,12 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
   const now = Date.now();
   const boardsByKey = new Map<string, ServiceBoard>();
 
-  function boardFor(key: string, label: string, serviceId: string | null, stages: { name: string; order: number }[]): ServiceBoard {
+  function boardFor(key: string, label: string, serviceId: string | null, stages: { name: string; order: number; isDesignStage: boolean }[]): ServiceBoard {
     let board = boardsByKey.get(key);
     if (!board) {
       const columns =
         stages.length > 0
-          ? [...stages.map((s) => ({ name: s.name, order: s.order })), { name: READY_COLUMN, order: stages.length + 1 }]
+          ? [...stages.map((s) => ({ name: s.name, order: s.order, isDesignStage: s.isDesignStage })), { name: READY_COLUMN, order: stages.length + 1, isDesignStage: false }]
           : [];
       board = { key, label, serviceId, columns, jobOrders: [] };
       boardsByKey.set(key, board);
