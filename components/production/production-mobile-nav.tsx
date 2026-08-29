@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Columns3, Plus, Bell, MoreHorizontal, X, Settings, BarChart3, LogOut } from "lucide-react";
+import { LayoutGrid, Columns3, Plus, Bell, MoreHorizontal, X, Settings, BarChart3, LogOut, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoutForm } from "@/components/layout/logout-form";
 
 /**
  * Production-only mobile bottom nav (illustration 6). Staff/Admin/
@@ -56,11 +57,18 @@ export function ProductionMobileNav({ canSeeSettings, canSeeReports }: { canSeeS
                 </Link>
               )}
             </div>
-            <form action="/api/logout" method="POST" className="mt-2">
-              <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-100 px-2 py-3 text-sm font-medium text-red-600 hover:bg-red-50">
-                <LogOut className="h-4 w-4" /> Sign Out
-              </button>
-            </form>
+            <LogoutForm className="mt-2">
+              {(pending) => (
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-100 px-2 py-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                >
+                  {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                  {pending ? "Signing out…" : "Sign Out"}
+                </button>
+              )}
+            </LogoutForm>
           </div>
         </div>
       )}
