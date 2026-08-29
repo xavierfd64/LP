@@ -19,6 +19,10 @@ export type PublicOrderTracking = {
   customerName: string;
   orderNumber: string;
   orderDate: string;
+  /** Set exactly once, the moment the order's status first becomes
+   * COMPLETED (Order.completedAt) — null while still in progress. Powers
+   * the public tracking page's "Completed" / "Total Duration" summary. */
+  completedAt: string | null;
   orderStatus: string;
   paymentStatus: "UNPAID" | "PARTIALLY_PAID" | "PAID";
   outstandingBalance: number | null;
@@ -73,6 +77,7 @@ export async function buildPublicSnapshot(order: OrderTrackingSnapshot): Promise
     customerName: order.customer.name,
     orderNumber: order.orderNumber,
     orderDate: order.createdAt.toISOString(),
+    completedAt: order.completedAt ? order.completedAt.toISOString() : null,
     orderStatus: order.status,
     paymentStatus,
     outstandingBalance: order.status === "CANCELLED" ? null : outstanding,

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getPublicOrderTrackingAction, type PublicOrderTracking } from "@/app/actions/public-tracking";
 import { TrackingSnapshotCard } from "@/components/tracking/tracking-snapshot-card";
+import { LinkUnavailable } from "./link-unavailable";
 
 const POLL_MS = 20000;
 
@@ -11,7 +13,8 @@ const POLL_MS = 20000;
  * unauthenticated long-lived connection isn't an appropriate surface to add
  * to the existing SSE infrastructure. 20s is frequent enough for a customer
  * checking progress without meaningfully increasing load. */
-export function TrackingView({ token, initial }: { token: string; initial: PublicOrderTracking }) {
+export function TrackingView({ token, initial, supportHref }: { token: string; initial: PublicOrderTracking; supportHref: string | null }) {
+  const router = useRouter();
   const [data, setData] = useState(initial);
   const [gone, setGone] = useState(false);
 
@@ -24,14 +27,10 @@ export function TrackingView({ token, initial }: { token: string; initial: Publi
     return () => clearInterval(id);
   }, [token]);
 
-  if (gone) {
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6 text-center">
-        <p className="font-medium text-slate-900">This tracking link is no longer available.</p>
-        <p className="mt-1 text-sm text-slate-500">Please contact us for assistance.</p>
-      </div>
-    );
-  }
+  if (gone) return <LinkUnavailable />;
 
-  return <TrackingSnapshotCard data={data} />;
+  // "Back" from a dedicated /track/[token] link has nowhere local to
+  // return to (unlike the reference-lookup flow's in-place state reset),
+  // so it's a real navigation back to the public tracking form.
+  return <TrackingSnapshotCard data={data} supportHref={supportHref} onBack={() => router.push("/track")} />;
 }
