@@ -45,6 +45,10 @@ const ICON_KEYS: Record<string, string> = {
   "/admin/system-updates": "refreshCw",
   "/account/rewards": "gift",
   "/account/profile": "userCircle",
+  "/design-queue": "penTool",
+  "/design-queue?view=in-progress": "clock",
+  "/design-queue?view=completed": "checkCircle",
+  "/design-feedback": "messageCircle",
 };
 
 function withIcons(items: { label: string; href: string }[]): NavItem[] {
@@ -56,6 +60,16 @@ const STAFF_NAV_RULES: { section: string; label: string; href: string; permissio
   { section: "MAIN", label: "Inquiries", href: "/inquiries", permission: "INQUIRY_VIEW" },
   { section: "MAIN", label: "Quotations", href: "/quotations", permission: "QUOTATION_VIEW" },
   { section: "MAIN", label: "Orders", href: "/orders", permission: "ORDER_VIEW" },
+  // Graphic Artist default functionality — gated on DESIGN_VIEW alone, so
+  // granting/revoking it is exactly what shows/hides this whole section,
+  // independent of any PRODUCTION_* permission (spec: must never imply
+  // Production Kanban access). "My Design Queue" and "In Progress" /
+  // "Completed" are the same page filtered by ?view=, the same pattern
+  // the Customer nav already uses for Orders/Invoices.
+  { section: "DESIGN", label: "My Design Queue", href: "/design-queue", permission: "DESIGN_VIEW" },
+  { section: "DESIGN", label: "In Progress", href: "/design-queue?view=in-progress", permission: "DESIGN_VIEW" },
+  { section: "DESIGN", label: "Completed", href: "/design-queue?view=completed", permission: "DESIGN_VIEW" },
+  { section: "DESIGN", label: "Feedback", href: "/design-feedback", permission: "DESIGN_VIEW" },
   { section: "OPERATIONS", label: "Production", href: "/production", permission: "PRODUCTION_VIEW" },
   { section: "OPERATIONS", label: "Inventory", href: "/inventory" },
   { section: "OPERATIONS", label: "Suppliers", href: "/inventory/suppliers", permission: "SUPPLIER_VIEW" },
@@ -130,7 +144,7 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
       ];
     case "STAFF": {
       const allowed = STAFF_NAV_RULES.filter((item) => !item.permission || staffPermissions?.has(item.permission));
-      const sections = ["MAIN", "OPERATIONS", "FINANCE", "CUSTOMERS", "MANAGEMENT", "SYSTEM"];
+      const sections = ["MAIN", "DESIGN", "OPERATIONS", "FINANCE", "CUSTOMERS", "MANAGEMENT", "SYSTEM"];
       return sections
         .map((section) => ({ section, items: withIcons(allowed.filter((i) => i.section === section)) }))
         .filter((s) => s.items.length > 0);

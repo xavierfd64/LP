@@ -97,7 +97,7 @@ export async function startProduction(
 
   const initialStatus: "IN_PROGRESS" | "QC" = first.isQCStage ? "QC" : "IN_PROGRESS";
 
-  await prisma.$transaction([
+  const [, firstLog] = await prisma.$transaction([
     prisma.jobOrder.update({
       where: { id: jobOrderId },
       data: { status: initialStatus, currentStageOrder: first.order },
@@ -107,6 +107,7 @@ export async function startProduction(
         jobOrderId,
         stageName: first.name,
         stageOrder: first.order,
+        isDesignStage: first.isDesignStage,
         status: "READY",
         assignedToId: options?.assigneeId ?? undefined,
       },
@@ -115,6 +116,11 @@ export async function startProduction(
 
   const { logAudit } = await import("@/lib/audit");
   await logAudit(actorId, "START_PRODUCTION", "JobOrder", jobOrderId, { stage: first.name });
+
+  if (firstLog.isDesignStage && !firstLog.assignedToId) {
+    const { autoAssignDesignStage } = await import("@/lib/design-assignment");
+    await autoAssignDesignStage(firstLog.id);
+  }
 
   const order = await prisma.order.findUniqueOrThrow({ where: { id: jo.orderId } });
   await notifyCustomer(
@@ -186,6 +192,7 @@ export async function completeCurrentStage(
   const previousStatus = jo.status;
   const previousStageOrder = jo.currentStageOrder;
   let newLogId: string | null = null;
+  let newLogIsDesignStage = false;
 
   await prisma.$transaction(async (tx) => {
     await tx.jobOrderStageLog.update({
@@ -211,9 +218,10 @@ export async function completeCurrentStage(
         data: { status: "QC", currentStageOrder: qcStage.order },
       });
       const created = await tx.jobOrderStageLog.create({
-        data: { jobOrderId, stageName: qcStage.name, stageOrder: qcStage.order, status: "READY" },
+        data: { jobOrderId, stageName: qcStage.name, stageOrder: qcStage.order, isDesignStage: qcStage.isDesignStage, status: "READY" },
       });
       newLogId = created.id;
+      newLogIsDesignStage = qcStage.isDesignStage;
       await tx.reworkRecord.updateMany({
         where: { jobOrderId, status: { in: ["OPEN", "IN_PROGRESS"] } },
         data: { status: "DONE" },
@@ -236,9 +244,10 @@ export async function completeCurrentStage(
         data: { status: "QC", currentStageOrder: next.order },
       });
       const created = await tx.jobOrderStageLog.create({
-        data: { jobOrderId, stageName: next.name, stageOrder: next.order, status: "READY" },
+        data: { jobOrderId, stageName: next.name, stageOrder: next.order, isDesignStage: next.isDesignStage, status: "READY" },
       });
       newLogId = created.id;
+      newLogIsDesignStage = next.isDesignStage;
       return;
     }
 
@@ -247,8 +256,9 @@ export async function completeCurrentStage(
       data: { currentStageOrder: next.order },
     });
     const created = await tx.jobOrderStageLog.create({
-      data: { jobOrderId, stageName: next.name, stageOrder: next.order, status: "READY" },
+      data: { jobOrderId, stageName: next.name, stageOrder: next.order, isDesignStage: next.isDesignStage, status: "READY" },
     });
+    newLogIsDesignStage = next.isDesignStage;
     newLogId = created.id;
   });
 
@@ -259,6 +269,11 @@ export async function completeCurrentStage(
   });
   if (isReworkCompletion) {
     await logAudit(actorId, "REWORK_CLOSED", "JobOrder", jobOrderId, { stage: log.stageName });
+  }
+
+  if (newLogId && newLogIsDesignStage) {
+    const { autoAssignDesignStage } = await import("@/lib/design-assignment");
+    await autoAssignDesignStage(newLogId);
   }
 
   const order = await prisma.order.findUniqueOrThrow({ where: { id: jo.orderId } });
@@ -462,6 +477,9 @@ export async function recordQCResult(
     quantityFailed: input.quantityFailed,
   });
 
+  let newQcLogId: string | null = null;
+  let newQcLogIsDesignStage = false;
+
   await prisma.$transaction(async (tx) => {
     if (currentLog) {
       await tx.jobOrderStageLog.update({
@@ -489,14 +507,17 @@ export async function recordQCResult(
         where: { id: jobOrderId },
         data: { status: "REWORK", currentStageOrder: assignedStageObj.order },
       });
-      await tx.jobOrderStageLog.create({
+      const created = await tx.jobOrderStageLog.create({
         data: {
           jobOrderId,
           stageName: assignedStageObj.name,
           stageOrder: assignedStageObj.order,
+          isDesignStage: assignedStageObj.isDesignStage,
           status: "READY",
         },
       });
+      newQcLogId = created.id;
+      newQcLogIsDesignStage = assignedStageObj.isDesignStage;
       return;
     }
 
@@ -511,10 +532,17 @@ export async function recordQCResult(
       where: { id: jobOrderId },
       data: { status: "IN_PROGRESS", currentStageOrder: next.order },
     });
-    await tx.jobOrderStageLog.create({
-      data: { jobOrderId, stageName: next.name, stageOrder: next.order, status: "READY" },
+    const created = await tx.jobOrderStageLog.create({
+      data: { jobOrderId, stageName: next.name, stageOrder: next.order, isDesignStage: next.isDesignStage, status: "READY" },
     });
+    newQcLogId = created.id;
+    newQcLogIsDesignStage = next.isDesignStage;
   });
+
+  if (newQcLogId && newQcLogIsDesignStage) {
+    const { autoAssignDesignStage } = await import("@/lib/design-assignment");
+    await autoAssignDesignStage(newQcLogId);
+  }
 
   if (input.result === "FAIL") {
     await logAudit(actorId, "REWORK_CREATED", "JobOrder", jobOrderId, {

@@ -10,17 +10,20 @@ const stageSchema = z.object({
   name: z.string().min(1),
   isQCStage: z.coerce.boolean(),
   isInstallStage: z.coerce.boolean(),
+  isDesignStage: z.coerce.boolean(),
 });
 
 function parseStages(formData: FormData) {
   const names = formData.getAll("stageName") as string[];
   const isQC = formData.getAll("stageIsQC") as string[];
   const isInstall = formData.getAll("stageIsInstall") as string[];
+  const isDesign = formData.getAll("stageIsDesign") as string[];
 
   return names.map((name, i) => ({
     name,
     isQCStage: isQC[i] === "true",
     isInstallStage: isInstall[i] === "true",
+    isDesignStage: isDesign[i] === "true",
   }));
 }
 
@@ -35,6 +38,7 @@ export async function createWorkflowTemplateAction(_prevState: string | undefine
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid stages.";
   if (!parsed.data.some((s) => s.isQCStage)) return "Exactly one stage must be marked as the QC stage.";
   if (parsed.data.filter((s) => s.isQCStage).length > 1) return "Only one stage can be marked as the QC stage.";
+  if (parsed.data.filter((s) => s.isDesignStage).length > 1) return "Only one stage can be marked as the design stage.";
 
   const existing = await prisma.workflowTemplate.findUnique({ where: { name } });
   if (existing) return "A template with that name already exists.";
@@ -65,6 +69,7 @@ export async function updateWorkflowTemplateAction(_prevState: string | undefine
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid stages.";
   if (!parsed.data.some((s) => s.isQCStage)) return "Exactly one stage must be marked as the QC stage.";
   if (parsed.data.filter((s) => s.isQCStage).length > 1) return "Only one stage can be marked as the QC stage.";
+  if (parsed.data.filter((s) => s.isDesignStage).length > 1) return "Only one stage can be marked as the design stage.";
 
   await prisma.$transaction([
     prisma.workflowStage.deleteMany({ where: { templateId } }),

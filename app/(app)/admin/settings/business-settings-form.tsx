@@ -166,6 +166,27 @@ export function BusinessSettingsForm({ settings }: { settings: BusinessSettings 
         </div>
       </section>
 
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-700">Production</h2>
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            name="autoAssignGraphicArtist"
+            value="true"
+            defaultChecked={settings.autoAssignGraphicArtist}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300"
+          />
+          <span>
+            <span className="block text-sm font-medium text-slate-900">Auto-select Graphic Artist</span>
+            <span className="block text-xs text-slate-400">
+              When a job order reaches its Design stage, automatically assign it to an eligible Graphic Artist with no
+              pending layout (or the lowest pending workload, if everyone has one) instead of leaving it open to accept
+              or requiring manual assignment.
+            </span>
+          </span>
+        </label>
+      </section>
+
       <Button type="submit" disabled={pending}>
         {pending ? "Saving..." : "Save Business Settings"}
       </Button>

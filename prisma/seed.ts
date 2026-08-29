@@ -99,6 +99,33 @@ async function main() {
     data: PERMISSION_PRESETS["Sales Staff"].map((permission) => ({ userId: staff2.id, permission })),
   });
 
+  // Two Graphic Artists (STAFF + DESIGN_VIEW) so auto-assignment's "prefer
+  // whoever has no pending layout" behavior actually has a choice to make
+  // in the demo, not just a single trivial candidate.
+  const artist1 = await prisma.user.create({
+    data: {
+      name: "Gina Graphics",
+      email: "artist1@lp.test",
+      passwordHash: await hash("password123"),
+      role: "STAFF",
+      phone: "0917-000-0006",
+      title: "Graphic Artist",
+    },
+  });
+  const artist2 = await prisma.user.create({
+    data: {
+      name: "Greg Graphics",
+      email: "artist2@lp.test",
+      passwordHash: await hash("password123"),
+      role: "STAFF",
+      phone: "0917-000-0007",
+      title: "Graphic Artist",
+    },
+  });
+  await prisma.staffPermission.createMany({
+    data: [artist1.id, artist2.id].map((userId) => ({ userId, permission: "DESIGN_VIEW" as const })),
+  });
+
   const prod1 = await prisma.user.create({
     data: {
       name: "Pedro Production",
@@ -192,7 +219,7 @@ async function main() {
       name: "Jersey",
       stages: {
         create: [
-          { name: "Design", order: 1 },
+          { name: "Design", order: 1, isDesignStage: true },
           { name: "Printing", order: 2 },
           { name: "Pressing", order: 3 },
           { name: "Sewing", order: 4 },
@@ -209,7 +236,7 @@ async function main() {
       name: "Tarp",
       stages: {
         create: [
-          { name: "Design", order: 1 },
+          { name: "Design", order: 1, isDesignStage: true },
           { name: "Printing", order: 2 },
           { name: "Cutting & Finishing", order: 3 },
           { name: "QC", order: 4, isQCStage: true },
@@ -224,7 +251,7 @@ async function main() {
       name: "DTF Shirt",
       stages: {
         create: [
-          { name: "Design", order: 1 },
+          { name: "Design", order: 1, isDesignStage: true },
           { name: "DTF Printing", order: 2 },
           { name: "Pressing", order: 3 },
           { name: "QC", order: 4, isQCStage: true },
@@ -239,7 +266,7 @@ async function main() {
       name: "Signage",
       stages: {
         create: [
-          { name: "Design", order: 1 },
+          { name: "Design", order: 1, isDesignStage: true },
           { name: "Fabrication", order: 2 },
           { name: "Printing & Mounting", order: 3 },
           { name: "QC", order: 4, isQCStage: true },
@@ -629,7 +656,7 @@ async function main() {
   });
   await prisma.jobOrderStageLog.createMany({
     data: [
-      { jobOrderId: order2jo1.id, stageName: "Design", stageOrder: 1, status: "COMPLETED", startedAt: new Date("2026-08-05"), completedAt: new Date("2026-08-06"), assignedToId: staff2.id },
+      { jobOrderId: order2jo1.id, stageName: "Design", stageOrder: 1, isDesignStage: true, status: "COMPLETED", startedAt: new Date("2026-08-05"), completedAt: new Date("2026-08-06"), assignedToId: staff2.id },
       { jobOrderId: order2jo1.id, stageName: "DTF Printing", stageOrder: 2, status: "COMPLETED", startedAt: new Date("2026-08-06"), completedAt: new Date("2026-08-08"), assignedToId: prod1.id },
       { jobOrderId: order2jo1.id, stageName: "Pressing", stageOrder: 3, status: "IN_PROGRESS", startedAt: new Date("2026-08-09"), assignedToId: prod1.id },
     ],
@@ -653,7 +680,7 @@ async function main() {
   });
   await prisma.jobOrderStageLog.createMany({
     data: [
-      { jobOrderId: order2jo2.id, stageName: "Design", stageOrder: 1, status: "COMPLETED", startedAt: new Date("2026-08-03"), completedAt: new Date("2026-08-04"), assignedToId: staff2.id },
+      { jobOrderId: order2jo2.id, stageName: "Design", stageOrder: 1, isDesignStage: true, status: "COMPLETED", startedAt: new Date("2026-08-03"), completedAt: new Date("2026-08-04"), assignedToId: staff2.id },
       { jobOrderId: order2jo2.id, stageName: "DTF Printing", stageOrder: 2, status: "COMPLETED", startedAt: new Date("2026-08-04"), completedAt: new Date("2026-08-06"), assignedToId: prod2.id },
       { jobOrderId: order2jo2.id, stageName: "Pressing", stageOrder: 3, status: "COMPLETED", startedAt: new Date("2026-08-06"), completedAt: new Date("2026-08-07"), assignedToId: prod2.id },
       { jobOrderId: order2jo2.id, stageName: "Pressing", stageOrder: 3, status: "IN_PROGRESS", startedAt: new Date("2026-08-08"), assignedToId: prod2.id, notes: "Reopened for rework of misaligned prints." },
@@ -745,6 +772,7 @@ async function main() {
       jobOrderId: order3jo1.id,
       stageName: s.name,
       stageOrder: s.order,
+      isDesignStage: s.isDesignStage,
       status: "COMPLETED" as const,
       startedAt: new Date(2026, 6, 10 + i),
       completedAt: new Date(2026, 6, 11 + i),
@@ -793,6 +821,7 @@ async function main() {
       jobOrderId: order3jo2.id,
       stageName: s.name,
       stageOrder: s.order,
+      isDesignStage: s.isDesignStage,
       status: "COMPLETED" as const,
       startedAt: new Date(2026, 6, 8 + i),
       completedAt: new Date(2026, 6, 9 + i),
@@ -821,6 +850,41 @@ async function main() {
       scheduledDate: new Date("2026-07-13"),
       completedAt: new Date("2026-07-13"),
     },
+  });
+
+  // ---------- Order 4: fresh job order sitting right at Design, unclaimed
+  // ---------- — the live demo/test case for the Graphic Artist workflow
+  // (Accept/Start/Complete, and auto-assignment when that setting is on).
+  const order4 = await prisma.order.create({
+    data: {
+      customerId: customer1.id,
+      orderNumber: "ORD-2026-0004",
+      status: "IN_PRODUCTION",
+      paymentTermType: "STANDARD_PARTIAL",
+      requiredPartialPct: 50,
+      totalAmount: 9000,
+    },
+  });
+  const order4jo1 = await prisma.jobOrder.create({
+    data: {
+      orderId: order4.id,
+      joNumber: "JO-001",
+      productType: "Jersey",
+      serviceId: jerseyService.id,
+      description: "18x sublimation jersey, Barangay league",
+      quantity: 18,
+      workflowTemplateId: jerseyTemplate.id,
+      currentStageOrder: 1,
+      status: "IN_PROGRESS",
+      priority: "HIGH",
+      deadline: new Date("2026-08-30"),
+    },
+  });
+  await prisma.jobOrderStageLog.create({
+    data: { jobOrderId: order4jo1.id, stageName: "Design", stageOrder: 1, isDesignStage: true, status: "READY" },
+  });
+  await prisma.payment.create({
+    data: { orderId: order4.id, amount: 4500, method: "CASH", status: "CONFIRMED", recordedById: staff1.id },
   });
 
   // Rewards for completed order3 (rate: 1 pt per PHP500 spent -> 90 pts)
@@ -914,6 +978,7 @@ async function main() {
   console.log("Login credentials (all passwords: password123):");
   console.log("  Admin:      admin@lp.test");
   console.log("  Staff:      staff1@lp.test / staff2@lp.test");
+  console.log("  Graphic Artist: artist1@lp.test / artist2@lp.test");
   console.log("  Production: prod1@lp.test / prod2@lp.test");
   console.log("  Customer:   juan@lp.test / maria@lp.test / ramon@lp.test");
 }

@@ -209,6 +209,16 @@ enum Permission {
   PRODUCTION_MARK_STAGE_COMPLETE
   PRODUCTION_MARK_COMPLETE
 
+  // Graphic Artist workflow — deliberately independent of PRODUCTION_*
+  // above: granting DESIGN_VIEW must never imply Production Kanban access,
+  // and vice versa. DESIGN_VIEW is "I am a Graphic Artist" (see my own
+  // queue, accept/start/complete my own assigned design-stage work).
+  // DESIGN_MANAGE is the admin-like capability to assign design work to
+  // *other* people and see every Graphic Artist's queue (ADMIN always has
+  // it via the existing bypass; a Staff lead may be granted it too).
+  DESIGN_VIEW
+  DESIGN_MANAGE
+
   FULFILLMENT_VIEW
   FULFILLMENT_SCHEDULE_PICKUP
   FULFILLMENT_SCHEDULE_DELIVERY
@@ -794,6 +804,14 @@ model WorkflowStage {
   order        Int
   isQCStage    Boolean           @default(false)
   isInstallStage Boolean         @default(false)
+  /// Marks this template's Design responsibility (Graphic Artist workflow)
+  /// — at most one per template, same exclusivity as isQCStage. Optional:
+  /// a template with no design work (e.g. straight to production) simply
+  /// never has one, and the Graphic Artist queue never shows it. Never
+  /// matched by stage *name* anywhere in the app — this flag is the only
+  /// source of truth for "is this the design stage," so an Admin renaming
+  /// a stage never silently breaks Graphic Artist routing.
+  isDesignStage Boolean          @default(false)
 
   @@unique([templateId, order])
 }
@@ -844,6 +862,12 @@ model JobOrderStageLog {
   jobOrder    JobOrder       @relation(fields: [jobOrderId], references: [id])
   stageName   String
   stageOrder  Int
+  /// Snapshotted from WorkflowStage.isDesignStage at the moment this log
+  /// is created — same denormalization already used for stageName/
+  /// stageOrder above, so the Graphic Artist queue never has to re-join
+  /// back to the (possibly since-edited) WorkflowStage/WorkflowTemplate to
+  /// know whether a given log is design work.
+  isDesignStage Boolean       @default(false)
   status      StageLogStatus @default(READY)
   assignedToId String?
   assignedTo  User?          @relation(fields: [assignedToId], references: [id])
@@ -1302,6 +1326,13 @@ model BusinessSettings {
   postalCode  String?
 
   assignmentMode StaffAssignmentMode @default(MANUAL)
+  /// "Auto-Select Graphic Artist" — when on, a new/newly-reached Design-
+  /// stage job order log is automatically assigned to an eligible Graphic
+  /// Artist (see lib/design-assignment.ts) instead of sitting unassigned
+  /// for self-acceptance or manual assignment. Independent of
+  /// assignmentMode above, which only governs customer-conversation
+  /// assignment.
+  autoAssignGraphicArtist Boolean @default(false)
 
   // Free-text payment instructions (e.g. GCash/bank account details) shown
   // on the Invoice and Statement of Account documents — no structured

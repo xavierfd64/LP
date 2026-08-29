@@ -36,6 +36,10 @@ import {
   Truck,
   TrendingUp,
   Layers,
+  PenTool,
+  Clock,
+  CheckCircle2,
+  MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -75,6 +79,10 @@ const ICON_COMPONENTS: Record<string, LucideIcon> = {
   truck: Truck,
   trendingUp: TrendingUp,
   layers: Layers,
+  penTool: PenTool,
+  clock: Clock,
+  checkCircle: CheckCircle2,
+  messageCircle: MessageCircle,
 };
 
 /** Grouped, optionally-collapsible sidebar nav (spec items 6/7) — used by both the desktop sidebar and the mobile drawer. */

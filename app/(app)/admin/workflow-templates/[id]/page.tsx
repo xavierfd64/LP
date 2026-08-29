@@ -40,6 +40,7 @@ export default async function EditWorkflowTemplatePage({ params }: PageProps<"/a
               name: s.name,
               isQCStage: s.isQCStage,
               isInstallStage: s.isInstallStage,
+              isDesignStage: s.isDesignStage,
             }))}
           />
         </CardContent>

@@ -82,7 +82,7 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
   if (!isValidTimeZone(parsed.data.timezone)) return "That timezone isn't recognized.";
 
-  const data: Record<string, string | null> = {
+  const data: Record<string, string | null | boolean> = {
     businessName: parsed.data.businessName,
     tagline: parsed.data.tagline ?? null,
     description: parsed.data.description ?? null,
@@ -97,6 +97,11 @@ export async function updateBusinessSettingsAction(_prevState: string | undefine
     assignmentMode: parsed.data.assignmentMode,
     paymentInstructions: parsed.data.paymentInstructions ?? null,
     timezone: parsed.data.timezone,
+    // A plain (unregistered) HTML checkbox only appears in the submitted
+    // FormData at all when checked — there's no "off" value to read, so
+    // presence-of-key is the checked state, not zod-parsed like the rest
+    // of this form's fields.
+    autoAssignGraphicArtist: formData.get("autoAssignGraphicArtist") === "true",
   };
 
   // Branding source (spec items 48/49): each of logo/favicon independently

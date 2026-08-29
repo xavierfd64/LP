@@ -67,6 +67,13 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    category: "Design",
+    permissions: [
+      { key: "DESIGN_VIEW", label: "Graphic Artist — view and work my own design queue" },
+      { key: "DESIGN_MANAGE", label: "Assign design work to others / view every Graphic Artist's queue" },
+    ],
+  },
+  {
     category: "Fulfillment",
     permissions: [
       { key: "FULFILLMENT_VIEW", label: "View fulfillment" },
@@ -307,6 +314,11 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "PRODUCTION_MARK_COMPLETE",
     "FORM_VIEW",
   ],
+  // Deliberately DESIGN_VIEW only, never any PRODUCTION_* permission — a
+  // Graphic Artist must not get Production Kanban access just from this
+  // preset. An Admin can still grant PRODUCTION_* or other permissions on
+  // top of this afterward if a specific person genuinely covers both.
+  "Graphic Artist": ["DESIGN_VIEW"],
   "Fulfillment Staff": [
     "ORDER_VIEW",
     "FULFILLMENT_VIEW",
@@ -316,5 +328,10 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
     "FULFILLMENT_MARK_DELIVERED",
     "FULFILLMENT_MARK_INSTALLED",
   ],
-  Manager: ALL_PERMISSIONS.filter((p) => !p.startsWith("USER_")),
+  // DESIGN_* excluded the same way USER_* already is — "Manager" is a
+  // general full-access operations preset, not an implicit "and also make
+  // this person a Graphic Artist" (that's its own explicit preset above);
+  // sweeping it in by accident would route Manager's /dashboard to the
+  // narrow Graphic Artist view instead of the rich one it's meant to see.
+  Manager: ALL_PERMISSIONS.filter((p) => !p.startsWith("USER_") && !p.startsWith("DESIGN_")),
 };

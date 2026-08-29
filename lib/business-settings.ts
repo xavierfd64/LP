@@ -23,6 +23,7 @@ export type BusinessSettings = {
   province: string | null;
   postalCode: string | null;
   assignmentMode: StaffAssignmentMode;
+  autoAssignGraphicArtist: boolean;
   paymentInstructions: string | null;
   emailEnabled: boolean;
   emailProvider: EmailProvider | null;
@@ -68,6 +69,7 @@ const FALLBACK: BusinessSettings = {
   province: null,
   postalCode: null,
   assignmentMode: "MANUAL",
+  autoAssignGraphicArtist: false,
   paymentInstructions: null,
   emailEnabled: false,
   emailProvider: null,
