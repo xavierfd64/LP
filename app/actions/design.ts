@@ -6,6 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { notifyUser } from "@/lib/notifications";
 import { publishDesignUpdate } from "@/lib/design-realtime";
 import { setStageLogStatus, completeCurrentStage, RuleViolation } from "@/lib/workflow";
+import { getEligibleGraphicArtists } from "@/lib/design-assignment";
 import { getDesignJobDetail, type DesignJobOrderDetail } from "@/lib/design-dashboard-data";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -124,11 +125,7 @@ export type GraphicArtistOption = { id: string; name: string; pendingCount: numb
  * logic uses, surfaced to a human making the same call manually. */
 export async function getGraphicArtistsAction(): Promise<GraphicArtistOption[]> {
   await requirePermission("DESIGN_MANAGE");
-  const artists = await prisma.user.findMany({
-    where: { role: "STAFF", active: true, staffPermissions: { some: { permission: "DESIGN_VIEW" } } },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  const artists = await getEligibleGraphicArtists();
   const loads = await prisma.jobOrderStageLog.groupBy({
     by: ["assignedToId"],
     where: { isDesignStage: true, status: { not: "COMPLETED" }, assignedToId: { in: artists.map((a) => a.id) } },

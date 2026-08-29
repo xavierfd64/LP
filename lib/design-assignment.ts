@@ -2,10 +2,27 @@ import { prisma } from "@/lib/prisma";
 import { notifyUser } from "@/lib/notifications";
 
 /**
- * Eligible = active STAFF granted DESIGN_VIEW (a Graphic Artist). ADMIN is
- * never auto-assigned — same call as pickEligibleStaff in
- * lib/auto-assignment.ts for conversations, which this mirrors. Ranked by
- * "pending layout" — the count of this person's own design-stage
+ * THE single source of truth for "who is an eligible Graphic Artist" —
+ * active STAFF granted DESIGN_VIEW. Every place in the app that needs this
+ * list (auto-assignment's candidate pool, the Design Queue's manual-assign
+ * picker, the Production Kanban's Design-stage assign/reassign dropdowns)
+ * calls this same function rather than re-deriving the condition, so the
+ * eligibility rule can never drift between them.
+ */
+export async function getEligibleGraphicArtists(): Promise<{ id: string; name: string }[]> {
+  return prisma.user.findMany({
+    where: {
+      role: "STAFF",
+      active: true,
+      staffPermissions: { some: { permission: "DESIGN_VIEW" } },
+    },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * Ranked by "pending layout" — the count of this person's own design-stage
  * JobOrderStageLogs that aren't COMPLETED yet — lowest first, so a
  * Graphic Artist with nothing queued is always preferred over one who's
  * busy (the system owner's explicit instruction), never randomly. Ties
@@ -13,14 +30,7 @@ import { notifyUser } from "@/lib/notifications";
  * deterministic, repeatable — not random — choice.
  */
 async function pickEligibleGraphicArtist(): Promise<string | null> {
-  const eligible = await prisma.user.findMany({
-    where: {
-      role: "STAFF",
-      active: true,
-      staffPermissions: { some: { permission: "DESIGN_VIEW" } },
-    },
-    select: { id: true, name: true },
-  });
+  const eligible = await getEligibleGraphicArtists();
   if (eligible.length === 0) return null;
 
   const loads = await prisma.jobOrderStageLog.groupBy({

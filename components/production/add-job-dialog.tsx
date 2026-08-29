@@ -10,7 +10,6 @@ import { PriorityFlag } from "@/components/ui/priority-flag";
 import { cn, formatDate } from "@/lib/utils";
 import {
   getEligibleJobOrdersAction,
-  getProductionStaffAction,
   getEligibleAssigneesAction,
   addJobToProductionAction,
   type EligibleJobOrder,

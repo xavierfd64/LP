@@ -313,11 +313,8 @@ export async function getProductionStaffAction(): Promise<ProductionStaffOption[
 export async function getEligibleAssigneesAction(isDesignStage: boolean): Promise<ProductionStaffOption[]> {
   await requirePermission("PRODUCTION_UPDATE_STAGE", ["PRODUCTION"]);
   if (isDesignStage) {
-    return prisma.user.findMany({
-      where: { role: "STAFF", active: true, staffPermissions: { some: { permission: "DESIGN_VIEW" } } },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    });
+    const { getEligibleGraphicArtists } = await import("@/lib/design-assignment");
+    return getEligibleGraphicArtists();
   }
   return prisma.user.findMany({
     where: { role: "PRODUCTION", active: true },
