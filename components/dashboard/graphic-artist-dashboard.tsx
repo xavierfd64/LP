@@ -4,6 +4,7 @@ import { KpiCard } from "./kpi-card";
 import { SectionHeader } from "./section-header";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { DesignQueueTable } from "@/components/design/design-queue-table";
+import { DesignRealtimeListener } from "@/components/design/design-realtime-listener";
 import { MiniMonthCalendar } from "@/components/design/mini-month-calendar";
 import {
   getDesignDashboardSummary,
@@ -47,6 +48,7 @@ export async function GraphicArtistDashboard({ userId, name, canManage }: { user
 
   return (
     <div className="space-y-6">
+      <DesignRealtimeListener />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">

@@ -20,6 +20,24 @@ import { paymentSummary } from "@/lib/workflow";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
+ * Design-stage job orders must never be workable from the Production
+ * Kanban — that responsibility belongs exclusively to the Graphic Artist
+ * module (app/actions/design.ts), gated on DESIGN_VIEW/DESIGN_MANAGE, not
+ * PRODUCTION_*. The board still *shows* a Design-stage card (useful
+ * visibility into the pipeline — see lib/production-board.ts), but every
+ * stage-mutating Production action must refuse to touch it server-side,
+ * not just hide the button: a PRODUCTION-role user has never been granted
+ * DESIGN_VIEW, so letting PRODUCTION_UPDATE_STAGE alone unlock a design
+ * stage log would silently bypass that permission boundary.
+ */
+async function assertNotDesignStage(stageLogId: string) {
+  const log = await prisma.jobOrderStageLog.findUnique({ where: { id: stageLogId }, select: { isDesignStage: true } });
+  if (log?.isDesignStage) {
+    throw new RuleViolation("This job is at the Design stage — it's managed from the Design Queue, not Production.");
+  }
+}
+
+/**
  * Start the job's current stage (READY -> IN_PROGRESS stage-log status —
  * the "Start {stage}" button). Previously this redirected to /production
  * on success (`redirect("/production")`), which was the actual root cause
@@ -36,6 +54,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 export async function startStageAction(stageLogId: string): Promise<ActionResult> {
   const user = await requirePermission("PRODUCTION_UPDATE_STAGE", ["PRODUCTION"]);
   try {
+    await assertNotDesignStage(stageLogId);
     await setStageLogStatus(stageLogId, "IN_PROGRESS", user.id);
     await publishProductionUpdate();
     return { ok: true };
@@ -50,6 +69,7 @@ export async function completeStageAction(jobOrderId: string, stageLogId: string
   const notes = (formData.get("notes") as string) || undefined;
 
   try {
+    await assertNotDesignStage(stageLogId);
     await completeCurrentStage(jobOrderId, stageLogId, user.id, notes);
   } catch (e) {
     if (e instanceof RuleViolation) {
@@ -81,6 +101,7 @@ export async function moveStageAction(
 ): Promise<MoveStageResult> {
   const user = await requirePermission("PRODUCTION_MARK_STAGE_COMPLETE", ["PRODUCTION"]);
   try {
+    await assertNotDesignStage(stageLogId);
     const undo = await completeCurrentStage(jobOrderId, stageLogId, user.id, notes, expectedTargetStageOrder);
     await publishProductionUpdate();
     return { ok: true, undo };
@@ -142,6 +163,9 @@ export async function reassignStageAction(jobOrderId: string, assigneeId: string
     orderBy: { createdAt: "desc" },
   });
   if (!currentLog) return { ok: false, error: "This job order has no active stage to reassign." };
+  if (currentLog.isDesignStage) {
+    return { ok: false, error: "This job is at the Design stage — assign it from the Design Queue, not Production." };
+  }
 
   if (assigneeId) {
     const assignee = await prisma.user.findUnique({ where: { id: assigneeId } });

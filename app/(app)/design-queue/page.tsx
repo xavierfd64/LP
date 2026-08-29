@@ -4,6 +4,7 @@ import { can } from "@/lib/permissions-guard";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { SectionHeader } from "@/components/dashboard/section-header";
 import { DesignQueueTable } from "@/components/design/design-queue-table";
+import { DesignRealtimeListener } from "@/components/design/design-realtime-listener";
 import { getDesignQueueRows, getDesignInProgressRows, getDesignCompletedRows } from "@/lib/design-dashboard-data";
 
 const VIEWS = {
@@ -40,6 +41,7 @@ export default async function DesignQueuePage({ searchParams }: PageProps<"/desi
 
   return (
     <div className="space-y-4">
+      <DesignRealtimeListener />
       <div>
         <h1 className="text-2xl font-bold text-slate-900">{meta.title}</h1>
         <p className="mt-1 text-sm text-slate-500">{canManage ? `${meta.sub} Showing every Graphic Artist's work.` : meta.sub}</p>

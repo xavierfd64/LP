@@ -121,6 +121,7 @@ export async function startProduction(
     const { autoAssignDesignStage } = await import("@/lib/design-assignment");
     await autoAssignDesignStage(firstLog.id);
   }
+  await publishStageAudience(firstLog.isDesignStage);
 
   const order = await prisma.order.findUniqueOrThrow({ where: { id: jo.orderId } });
   await notifyCustomer(
@@ -275,6 +276,12 @@ export async function completeCurrentStage(
     const { autoAssignDesignStage } = await import("@/lib/design-assignment");
     await autoAssignDesignStage(newLogId);
   }
+  // The completed stage's own audience needs to know it left their queue
+  // (e.g. Production's "Approve for Next Stage" completing a Design-stage
+  // rework re-entry) as much as the newly-opened stage's audience needs to
+  // know it arrived — cover both, not just the new stage.
+  await publishStageAudience(log.isDesignStage);
+  if (newLogId && newLogIsDesignStage !== log.isDesignStage) await publishStageAudience(newLogIsDesignStage);
 
   const order = await prisma.order.findUniqueOrThrow({ where: { id: jo.orderId } });
   const progressMessage = !next
@@ -324,6 +331,8 @@ export async function revertStageChange(undo: StageChangeUndo, actorId: string |
     throw new RuleViolation("This job order has already moved on and can no longer be undone.");
   }
 
+  const completedLog = await prisma.jobOrderStageLog.findUniqueOrThrow({ where: { id: undo.completedLogId } });
+
   await prisma.$transaction([
     prisma.jobOrderStageLog.delete({ where: { id: undo.newLogId } }),
     prisma.jobOrderStageLog.update({
@@ -341,6 +350,9 @@ export async function revertStageChange(undo: StageChangeUndo, actorId: string |
     from: undo.toStageName,
     to: undo.fromStageName,
   });
+
+  await publishStageAudience(newLog.isDesignStage);
+  if (completedLog.isDesignStage !== newLog.isDesignStage) await publishStageAudience(completedLog.isDesignStage);
 }
 
 /**
@@ -387,6 +399,13 @@ export async function returnToPreviousStage(jobOrderId: string, actorId: string,
     orderBy: { completedAt: "desc" },
   });
   if (!previousLog) throw new RuleViolation("This job order was never at the previous stage and can't be returned there.");
+  // returnToPreviousStage is only ever called from Production's own action
+  // (app/actions/production.ts) — a PRODUCTION-role actor reopening a
+  // Design-stage log would bypass the Graphic Artist permission boundary
+  // the same way starting/completing one directly would.
+  if (previousLog.isDesignStage) {
+    throw new RuleViolation("The previous stage is Design — it's managed from the Design Queue, not Production.");
+  }
 
   await prisma.$transaction([
     prisma.jobOrderStageLog.delete({ where: { id: currentLog.id } }),
@@ -406,6 +425,9 @@ export async function returnToPreviousStage(jobOrderId: string, actorId: string,
     to: previous.name,
     reason,
   });
+
+  await publishStageAudience(currentLog.isDesignStage);
+  if (previousLog.isDesignStage !== currentLog.isDesignStage) await publishStageAudience(previousLog.isDesignStage);
 }
 
 export async function setStageLogStatus(
@@ -422,6 +444,29 @@ export async function setStageLogStatus(
     stage: log.stageName,
     status,
   });
+
+  await publishStageAudience(log.isDesignStage);
+}
+
+/**
+ * Every stage transition below broadcasts a live-refresh signal to the
+ * right audience — the Design audience when the affected stage log is a
+ * design stage, the Production audience otherwise — regardless of which
+ * action-layer caller (Orders, Production, QC, or the Graphic Artist
+ * actions) triggered it. Centralized here rather than left to each caller
+ * to remember, since two different callers (the Orders page's "Start
+ * Production" and the Graphic Artist's "Complete Design") were found to
+ * silently skip it, leaving already-open dashboards stale until a manual
+ * reload.
+ */
+async function publishStageAudience(isDesignStage: boolean) {
+  if (isDesignStage) {
+    const { publishDesignUpdate } = await import("@/lib/design-realtime");
+    await publishDesignUpdate();
+  } else {
+    const { publishProductionUpdate } = await import("@/lib/production-realtime");
+    await publishProductionUpdate();
+  }
 }
 
 /**
@@ -543,6 +588,12 @@ export async function recordQCResult(
     const { autoAssignDesignStage } = await import("@/lib/design-assignment");
     await autoAssignDesignStage(newQcLogId);
   }
+  // QC itself is never a design stage (isQCStage/isDesignStage are
+  // mutually exclusive), so the completed stage's own audience is always
+  // Production; the newly-opened stage (rework target or next stage) may
+  // be either.
+  await publishStageAudience(false);
+  if (newQcLogId) await publishStageAudience(newQcLogIsDesignStage);
 
   if (input.result === "FAIL") {
     await logAudit(actorId, "REWORK_CREATED", "JobOrder", jobOrderId, {

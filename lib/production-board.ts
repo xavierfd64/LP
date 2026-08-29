@@ -113,6 +113,7 @@ export async function getProductionData(canSeeAmount: boolean): Promise<Producti
       progressPct,
       currentLogId: currentLog?.id ?? null,
       currentLogStatus: currentLog?.status ?? null,
+      isDesignStage: currentLog?.isDesignStage ?? false,
       assignedStaffId: currentLog?.assignedToId ?? null,
       assignedStaffName: currentLog?.assignedTo?.name ?? null,
       assignedStaffTitle: currentLog?.assignedTo?.title ?? null,

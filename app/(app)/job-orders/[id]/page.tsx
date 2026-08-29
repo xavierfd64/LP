@@ -33,6 +33,7 @@ import { computeExpectedConsumption, computeJobOrderCostSummary } from "@/lib/pr
 import { RecordConsumptionForm } from "./record-consumption-form";
 import { ReverseConsumptionButton } from "./reverse-consumption-button";
 import { ProductionRealtimeListener } from "@/components/production/production-realtime-listener";
+import { DesignRealtimeListener } from "@/components/design/design-realtime-listener";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function JobOrderDetailPage({
@@ -130,6 +131,7 @@ export default async function JobOrderDetailPage({
   return (
     <EditorShell>
       <ProductionRealtimeListener />
+      <DesignRealtimeListener />
       <EditorHeader
         eyebrow="Job Order"
         title={`${jo.joNumber} — ${jo.productType}`}

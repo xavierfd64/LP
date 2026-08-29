@@ -40,6 +40,12 @@ export type KanbanJobOrder = {
   progressPct: number;
   currentLogId: string | null;
   currentLogStatus: string | null;
+  /** True when the job's current stage is the workflow's Design stage —
+   * that responsibility belongs to the Graphic Artist module (Design
+   * Queue), not Production, so the board must render this card read-only
+   * (no Start/Complete/drag) even though it still shows it for pipeline
+   * visibility. */
+  isDesignStage: boolean;
   assignedStaffId: string | null;
   assignedStaffName: string | null;
   /** Optional job-function label (User.title, e.g. "Printer / Operator") — null when the account has none set, never fabricated from the system Role. */

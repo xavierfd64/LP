@@ -4,6 +4,7 @@ import { requirePermission, can } from "@/lib/permissions-guard";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { notifyUser } from "@/lib/notifications";
+import { publishDesignUpdate } from "@/lib/design-realtime";
 import { setStageLogStatus, completeCurrentStage, RuleViolation } from "@/lib/workflow";
 import { getDesignJobDetail, type DesignJobOrderDetail } from "@/lib/design-dashboard-data";
 
@@ -55,6 +56,10 @@ export async function acceptDesignJobAction(stageLogId: string): Promise<ActionR
 
     await prisma.jobOrderStageLog.update({ where: { id: stageLogId }, data: { assignedToId: user.id } });
     await logAudit(user.id, "DESIGN_JOB_ACCEPTED", "JobOrderStageLog", stageLogId, { stage: log.stageName });
+    // Broadcast to the whole design audience, not just the acceptor — other
+    // Graphic Artists and DESIGN_MANAGE viewers with this job still showing
+    // as "available" need to see it disappear from their own queues live.
+    await publishDesignUpdate();
     return { ok: true };
   } catch (e) {
     if (e instanceof RuleViolation) return { ok: false, error: e.message };
@@ -161,6 +166,7 @@ export async function assignDesignJobAction(stageLogId: string, graphicArtistId:
       `${user.name} assigned you a layout: ${jobOrder?.joNumber ?? "a job order"} (${log.stageName}).`,
       `/design-queue`
     );
+    await publishDesignUpdate();
 
     return { ok: true };
   } catch (e) {
@@ -182,6 +188,7 @@ export async function unassignDesignJobAction(stageLogId: string): Promise<Actio
     if (log.status !== "READY") throw new RuleViolation("Only a job that hasn't started yet can be unassigned.");
     await prisma.jobOrderStageLog.update({ where: { id: stageLogId }, data: { assignedToId: null } });
     await logAudit(user.id, "DESIGN_JOB_UNASSIGNED", "JobOrderStageLog", stageLogId, { stage: log.stageName });
+    await publishDesignUpdate();
     return { ok: true };
   } catch (e) {
     if (e instanceof RuleViolation) return { ok: false, error: e.message };

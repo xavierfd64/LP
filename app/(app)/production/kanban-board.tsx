@@ -813,7 +813,7 @@ function JobOrderCard({
   // becomes draggable once its current stage is actually in progress.
   // READY (not started yet) and QC cards keep their existing dedicated
   // controls instead (Start Stage / Go to QC) rather than a plain drag.
-  const isDraggable = canDrag && jo.currentLogStatus === "IN_PROGRESS" && canMarkStageComplete;
+  const isDraggable = canDrag && jo.currentLogStatus === "IN_PROGRESS" && canMarkStageComplete && !jo.isDesignStage;
   const colIndex = board.columns.findIndex((c) => c.name === jo.column);
   const nextCol = board.columns[colIndex + 1];
   const prevCol = colIndex > 0 ? board.columns[colIndex - 1] : null;
@@ -894,7 +894,7 @@ function JobOrderCard({
                       <Copy className="h-3.5 w-3.5" /> {duplicating ? "Duplicating…" : "Duplicate Job"}
                     </button>
                   )}
-                  {!isReadyColumn && jo.status !== "QC" && canMarkStageComplete && nextCol && (
+                  {!isReadyColumn && jo.status !== "QC" && canMarkStageComplete && nextCol && !jo.isDesignStage && (
                     <button
                       type="button"
                       onClick={() => {
@@ -906,7 +906,7 @@ function JobOrderCard({
                       <ArrowRightLeft className="h-3.5 w-3.5" /> Move to Another Stage
                     </button>
                   )}
-                  {!isReadyColumn && canUpdateStage && prevCol && jo.currentLogStatus !== "COMPLETED" && (
+                  {!isReadyColumn && canUpdateStage && prevCol && jo.currentLogStatus !== "COMPLETED" && !jo.isDesignStage && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1007,6 +1007,8 @@ function JobOrderCard({
             <Button type="button" size="sm" className="h-7 px-2 text-xs" onClick={() => onOpenReady(jo.id)}>
               {jo.status === "RELEASED" ? "Complete Order" : "Release for Fulfillment"} <ChevronRight className="h-3.5 w-3.5" />
             </Button>
+          ) : jo.isDesignStage ? (
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">Managed by Graphic Artist</span>
           ) : jo.currentLogStatus === "READY" ? (
             canUpdateStage && (
               <Button type="button" size="sm" className="h-7 px-2 text-xs" onClick={handleStart} disabled={starting}>

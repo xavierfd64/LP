@@ -28,6 +28,8 @@ export function RealtimeProvider() {
         window.dispatchEvent(new CustomEvent("realtime:notification", { detail: data }));
       } else if (data.type === "production") {
         window.dispatchEvent(new CustomEvent("realtime:production"));
+      } else if (data.type === "design") {
+        window.dispatchEvent(new CustomEvent("realtime:design"));
       }
     };
 

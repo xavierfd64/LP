@@ -55,7 +55,21 @@ export type RealtimeNotificationEvent = {
  */
 export type RealtimeProductionEvent = { type: "production" };
 
-export type RealtimeEvent = RealtimeMessageEvent | RealtimeNotificationEvent | RealtimeProductionEvent;
+/**
+ * A Design-stage job order changed (auto-assigned, manually assigned,
+ * unassigned, accepted, started, or completed) — the same "just the
+ * signal to refetch, not a diff" shape as RealtimeProductionEvent, and for
+ * the same reason: every Graphic Artist/DESIGN_MANAGE viewer's queue is
+ * re-read from the server on refresh, so this never needs a payload.
+ * Broadcast to the whole design audience (see lib/design-realtime.ts), not
+ * just the one artist a specific action targets, so e.g. a newly-created
+ * unassigned design job (manual-acceptance mode, nobody to notifyUser
+ * directly) still reaches every eligible Graphic Artist's already-open
+ * dashboard instantly.
+ */
+export type RealtimeDesignEvent = { type: "design" };
+
+export type RealtimeEvent = RealtimeMessageEvent | RealtimeNotificationEvent | RealtimeProductionEvent | RealtimeDesignEvent;
 
 // Route Handlers and Server Actions compile into separate module graphs
 // (visible even within a single Node process, especially under Turbopack
