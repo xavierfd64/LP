@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { LoginForm } from "./login-form";
@@ -6,8 +7,20 @@ import { OAuthButtons, OrDivider } from "@/components/auth/oauth-buttons";
 import { availableOAuthProviders } from "@/lib/oauth-providers";
 import { friendlyAuthError } from "@/lib/auth-errors";
 import { getBusinessSettings } from "@/lib/business-settings";
+import { auth, roleHomePath } from "@/lib/auth";
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  // An already-authenticated visitor must never see an active login form —
+  // covers a direct/typed visit to /login and, empirically verified, the
+  // browser Back button landing here after a successful login too: Next.js
+  // re-runs this Server Component (rather than serving a cached RSC
+  // payload) for that navigation, so no separate client-side listener is
+  // needed. auth() re-validates against the DB's sessionVersion on every
+  // call (see lib/auth.ts's jwt callback), so this is never fooled by a
+  // stale cookie left over from before a logout.
+  const session = await auth();
+  if (session?.user) redirect(roleHomePath(session.user.role));
+
   const sp = await searchParams;
   const rawError = typeof sp.error === "string" ? sp.error : undefined;
   const errorMsg = friendlyAuthError(rawError);

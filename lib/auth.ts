@@ -42,6 +42,20 @@ async function resolveOAuthCredentials() {
   return { google, facebook };
 }
 
+// Shared by "/" (redirects an authenticated visitor to their role's home)
+// and the /login page (redirects an already-authenticated visitor away
+// from the login form) — kept as one function so both stay in sync.
+export function roleHomePath(role: string): string {
+  switch (role) {
+    case "ADMIN":
+      return "/admin/dashboard";
+    case "PRODUCTION":
+      return "/production";
+    default:
+      return "/dashboard";
+  }
+}
+
 // NextAuth's supported "advanced initialization" form — a config factory
 // evaluated per request — rather than a static object, specifically so
 // the provider list can depend on the async DB read above. Everything

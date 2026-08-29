@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { auth, roleHomePath } from "@/lib/auth";
 
 // The root domain is not a public landing page: an unauthenticated visitor
 // is sent straight to /login (3rd Update, item 1) rather than shown a
@@ -10,13 +10,5 @@ import { auth } from "@/lib/auth";
 export default async function Home() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-
-  switch (session.user.role) {
-    case "ADMIN":
-      redirect("/admin/dashboard");
-    case "PRODUCTION":
-      redirect("/production");
-    default:
-      redirect("/dashboard");
-  }
+  redirect(roleHomePath(session.user.role));
 }
