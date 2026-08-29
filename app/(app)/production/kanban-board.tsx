@@ -906,7 +906,7 @@ function JobOrderCard({
                       <ArrowRightLeft className="h-3.5 w-3.5" /> Move to Another Stage
                     </button>
                   )}
-                  {!isReadyColumn && canUpdateStage && prevCol && jo.currentLogStatus !== "COMPLETED" && !jo.isDesignStage && (
+                  {!isReadyColumn && canUpdateStage && prevCol && !prevCol.isDesignStage && jo.currentLogStatus !== "COMPLETED" && !jo.isDesignStage && (
                     <button
                       type="button"
                       onClick={() => {

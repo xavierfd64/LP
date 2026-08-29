@@ -26,7 +26,7 @@ import { formatDate, formatDateTime, cn } from "@/lib/utils";
 import { READY_COLUMN } from "@/lib/production-board-types";
 import {
   getJobOrderPanelDataAction,
-  getProductionStaffAction,
+  getEligibleAssigneesAction,
   reassignStageAction,
   duplicateJobOrderAction,
   type JobOrderPanelData,
@@ -95,6 +95,7 @@ export function JobDetailsPanel({
   const [loading, setLoading] = useState(false);
   const [staff, setStaff] = useState<ProductionStaffOption[]>([]);
   const [reassigning, setReassigning] = useState(false);
+  const [reassignError, setReassignError] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [duplicated, setDuplicated] = useState(false);
 
@@ -102,23 +103,30 @@ export function JobDetailsPanel({
     if (!jobOrderId) return;
     setTab(initialTab ?? "Overview");
     setData(null);
+    setReassignError(null);
     setLoading(true);
-    Promise.all([getJobOrderPanelDataAction(jobOrderId), getProductionStaffAction()]).then(([d, s]) => {
+    getJobOrderPanelDataAction(jobOrderId).then((d) => {
       setData(d);
-      setStaff(s);
       setLoading(false);
+      // The current stage decides who's a valid assignee (Graphic Artists
+      // for Design, Production staff otherwise) — can't fetch this until
+      // we know which stage the job order is actually on.
+      if (d) getEligibleAssigneesAction(d.isCurrentStageDesign).then(setStaff);
     });
   }, [jobOrderId, initialTab]);
 
   async function handleReassign(assigneeId: string) {
     if (!data) return;
     setReassigning(true);
+    setReassignError(null);
     const result = await reassignStageAction(data.id, assigneeId || null);
     setReassigning(false);
     if (result.ok) {
       const refreshed = await getJobOrderPanelDataAction(data.id);
       setData(refreshed);
       onChanged();
+    } else {
+      setReassignError(result.error);
     }
   }
 
@@ -266,7 +274,9 @@ export function JobDetailsPanel({
                   </section>
 
                   <section className="border-t border-slate-100 pt-4">
-                    <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Assigned Staff</p>
+                    <p className="mb-2 text-xs font-semibold uppercase text-slate-500">
+                      {data.isCurrentStageDesign ? "Assigned Graphic Artist" : "Assigned Staff"}
+                    </p>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm text-slate-800">
                         {data.assignedStaffName ?? "Unassigned"}
@@ -286,9 +296,23 @@ export function JobDetailsPanel({
                         ))}
                       </Select>
                     </div>
+                    {reassignError && <p className="mt-1 text-xs text-red-600">{reassignError}</p>}
                   </section>
 
-                  {!isDone && (
+                  {!isDone && data.isCurrentStageDesign && (
+                    <section className="border-t border-slate-100 pt-4">
+                      <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Next Actions</p>
+                      <p className="text-xs text-slate-500">
+                        This job is at the Design stage — the responsible Graphic Artist completes it from the{" "}
+                        <Link href="/design-queue" className="font-medium text-brand-600 underline">
+                          Design Queue
+                        </Link>
+                        , which then advances it here automatically.
+                      </p>
+                    </section>
+                  )}
+
+                  {!isDone && !data.isCurrentStageDesign && (
                     <section className="border-t border-slate-100 pt-4">
                       <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Next Actions</p>
                       {isAtQcStage ? (

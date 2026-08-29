@@ -153,6 +153,18 @@ export async function returnToPreviousStageAction(jobOrderId: string, reason: st
  * record, not a live assignment) — mirrors the same "current stage log"
  * precondition every other stage action already uses.
  */
+/**
+ * Assign/Reassign Responsible Staff (Job Details side panel). Stage-aware
+ * like getEligibleAssigneesAction/addJobToProductionAction: a normal
+ * stage's responsible party is Production staff, but the workflow's
+ * Design stage is Graphic Artist territory — the Job Details panel is a
+ * real Kanban entry point an Admin/authorized Staff uses on every stage,
+ * so a Design-stage job order sitting there must still let them pick or
+ * change the responsible Graphic Artist, not just refuse the whole
+ * action. Only the *kind* of assignee accepted changes; the underlying
+ * assignedToId column and Design Queue query are exactly the same one
+ * lib/design-dashboard-data.ts already reads.
+ */
 export async function reassignStageAction(jobOrderId: string, assigneeId: string | null): Promise<ActionResult> {
   const user = await requirePermission("PRODUCTION_UPDATE_STAGE", ["PRODUCTION"]);
   const jo = await prisma.jobOrder.findUnique({ where: { id: jobOrderId } });
@@ -163,20 +175,33 @@ export async function reassignStageAction(jobOrderId: string, assigneeId: string
     orderBy: { createdAt: "desc" },
   });
   if (!currentLog) return { ok: false, error: "This job order has no active stage to reassign." };
-  if (currentLog.isDesignStage) {
-    return { ok: false, error: "This job is at the Design stage — assign it from the Design Queue, not Production." };
-  }
 
   if (assigneeId) {
     const assignee = await prisma.user.findUnique({ where: { id: assigneeId } });
-    if (!assignee || !assignee.active || assignee.role !== "PRODUCTION") {
-      return { ok: false, error: "Please select a valid, active production staff member." };
+    const validAssignee = currentLog.isDesignStage
+      ? assignee?.role === "STAFF" && (await can(assignee, "DESIGN_VIEW"))
+      : assignee?.role === "PRODUCTION";
+    if (!assignee || !assignee.active || !validAssignee) {
+      return {
+        ok: false,
+        error: currentLog.isDesignStage ? "Please select a valid, active Graphic Artist." : "Please select a valid, active production staff member.",
+      };
     }
   }
 
   await prisma.jobOrderStageLog.update({ where: { id: currentLog.id }, data: { assignedToId: assigneeId } });
   await logAudit(user.id, "STAGE_REASSIGNED", "JobOrder", jobOrderId, { stage: currentLog.stageName, assigneeId });
-  await publishProductionUpdate();
+
+  if (currentLog.isDesignStage) {
+    const { publishDesignUpdate } = await import("@/lib/design-realtime");
+    await publishDesignUpdate();
+    if (assigneeId) {
+      const { notifyUser } = await import("@/lib/notifications");
+      await notifyUser(assigneeId, "DESIGN_JOB_ASSIGNED", `${user.name} assigned you a layout: ${jo.joNumber} (${currentLog.stageName}).`, `/design-queue`);
+    }
+  } else {
+    await publishProductionUpdate();
+  }
   return { ok: true };
 }
 
@@ -316,6 +341,12 @@ export type JobOrderPanelData = {
   customerName: string;
   progressPct: number;
   stages: { name: string; order: number; state: "done" | "current" | "upcoming"; isQCStage: boolean }[];
+  /** True when the job's current stage is the workflow's Design stage —
+   * drives the panel to fetch Graphic Artists (not Production staff) for
+   * the Assigned Staff dropdown, and to hide the direct "Send to X" /
+   * "Mark as Ready" action (that responsibility belongs to the Design
+   * module, via Complete Design, not Production). */
+  isCurrentStageDesign: boolean;
   assignedStaffId: string | null;
   assignedStaffName: string | null;
   assignedStaffTitle: string | null;
@@ -361,7 +392,10 @@ export async function getJobOrderPanelDataAction(jobOrderId: string): Promise<Jo
   const previousCompletedLog = previous
     ? jo.stageLogs.find((l) => l.stageOrder === previous.order && l.status === "COMPLETED")
     : null;
-  const canReturnToPrevious = !isDone && !!previous && !!currentLogOpen && !!previousCompletedLog;
+  // A previous stage that's Design can't be returned to from here — see
+  // returnToPreviousStage's own guard — so don't offer a button that would
+  // always fail; that responsibility is reopened from the Design Queue.
+  const canReturnToPrevious = !isDone && !!previous && !previous.isDesignStage && !!currentLogOpen && !!previousCompletedLog;
 
   const auditRows = await prisma.auditLog.findMany({
     where: { entityType: "JobOrder", entityId: jobOrderId },
@@ -390,6 +424,7 @@ export async function getJobOrderPanelDataAction(jobOrderId: string): Promise<Jo
       isQCStage: s.isQCStage,
       state: isDone || i < currentIdx ? "done" : i === currentIdx ? "current" : "upcoming",
     })),
+    isCurrentStageDesign: currentLog?.isDesignStage ?? false,
     assignedStaffId: currentLog?.assignedToId ?? null,
     assignedStaffName: currentLog?.assignedTo?.name ?? null,
     assignedStaffTitle: currentLog?.assignedTo?.title ?? null,
