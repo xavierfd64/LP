@@ -93,8 +93,8 @@ export function GlobalSearch() {
   }
 
   return (
-    <div ref={boxRef} className="relative w-full max-w-md">
-      <div className="relative">
+    <div ref={boxRef} className="relative flex w-full max-w-md items-center gap-1.5">
+      <div className="relative min-w-0 flex-1">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
           value={query}
@@ -123,20 +123,26 @@ export function GlobalSearch() {
             }
           }}
           placeholder="Search customers, quotations, orders, invoices…"
-          className="pl-8 lg:pr-8"
+          className="pl-8"
         />
-        <button
-          type="button"
-          onClick={() => setScannerOpen(true)}
-          aria-label="Scan QR Code"
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden"
-        >
-          <QrCode className="h-4 w-4" />
-        </button>
       </div>
+      {/* A true sibling flex item, not an overlay on top of the input — the
+          QR button gets its own fixed, dedicated width so it can never
+          overlap or clip the search text at any viewport size, however
+          long the placeholder/typed value gets. Mobile/tablet only
+          (desktop uses a USB QR/barcode reader typed straight into the
+          field above, no camera button needed there). */}
+      <button
+        type="button"
+        onClick={() => setScannerOpen(true)}
+        aria-label="Scan QR Code"
+        className="shrink-0 rounded-md border border-slate-300 bg-white p-[7px] text-slate-500 hover:bg-slate-50 hover:text-slate-700 min-[1400px]:hidden"
+      >
+        <QrCode className="h-4 w-4" />
+      </button>
 
       {open && query.trim().length >= 2 && (
-        <div className="absolute left-0 right-0 z-30 mt-1 max-h-96 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
           {!results ? (
             <p className="px-3 py-4 text-center text-sm text-slate-400">Searching…</p>
           ) : !hasResults ? (
