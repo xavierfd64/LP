@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { recordPaymentAction } from "@/app/actions/payments";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select } from "@/components/ui/input";
@@ -20,20 +20,37 @@ import type { OrderSearchResult } from "@/app/actions/order-search";
  * combobox when arriving from an order-scoped "Record Payment" link —
  * replaces the old `orders` array + defaultOrderId prop, since the order
  * list is no longer preloaded in bulk (see order-combobox.tsx).
+ *
+ * `action` defaults to the standard redirecting recordPaymentAction; a
+ * caller that must stay exactly where it is (a Dashboard popup) instead
+ * passes recordPaymentInPlaceAction and an `onSuccess` callback — that
+ * action never redirects, so success can only be detected here by
+ * watching `pending` fall back to false with no error, which is exactly
+ * what the effect below does.
  */
 export function PaymentForm({
   defaultOrder,
   redirectTo,
   onCancel,
+  onSuccess,
   submitLabel = "Record Payment (Confirmed)",
+  action = recordPaymentAction,
 }: {
   defaultOrder?: OrderSearchResult | null;
   redirectTo?: string;
   onCancel?: () => void;
+  onSuccess?: () => void;
   submitLabel?: string;
+  action?: (prevState: string | undefined, formData: FormData) => Promise<string | undefined>;
 }) {
-  const [error, formAction, pending] = useActionState(recordPaymentAction, undefined);
+  const [error, formAction, pending] = useActionState(action, undefined);
   const [orderId, setOrderId] = useState(defaultOrder?.id ?? "");
+  const wasPending = useRef(false);
+
+  useEffect(() => {
+    if (wasPending.current && !pending && !error) onSuccess?.();
+    wasPending.current = pending;
+  }, [pending, error, onSuccess]);
 
   return (
     <form action={formAction} className="space-y-4">

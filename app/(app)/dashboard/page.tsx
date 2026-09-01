@@ -54,6 +54,7 @@ export default async function DashboardPage() {
       canMessageCustomers={canMessageCustomers}
       quickActions={quickActions}
       canSendQuotation={canSendQuotation}
+      canRecordPayment={canRecordPayment}
     />
   );
 }

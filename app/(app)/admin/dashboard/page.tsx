@@ -18,6 +18,7 @@ export default async function AdminDashboardPage() {
       canMessageCustomers
       quickActions={quickActions}
       canSendQuotation
+      canRecordPayment
     />
   );
 }

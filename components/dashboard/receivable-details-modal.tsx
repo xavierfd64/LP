@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,10 @@ import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/tab
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { getReceivableDetailsAction } from "@/app/actions/dashboard";
 import { startCustomerConversationAction } from "@/app/actions/messages";
+import { recordPaymentInPlaceAction } from "@/app/actions/payments";
+import { PaymentForm } from "@/app/(app)/payments/payment-form";
 import type { ReceivableDetails } from "@/lib/dashboard-data";
+import type { OrderSearchResult } from "@/app/actions/order-search";
 
 const TX_STATUS_TONE = { UNPAID: "yellow", PARTIALLY_PAID: "blue", OVERDUE: "red" } as const;
 const PAYMENT_STATUS_TONE: Record<string, "green" | "yellow" | "red"> = { CONFIRMED: "green", PENDING: "yellow", REJECTED: "red" };
@@ -21,24 +25,67 @@ const PAYMENT_STATUS_TONE: Record<string, "green" | "yellow" | "red"> = { CONFIR
  * up front. Answers "why is this customer on the Receivables list" with
  * the actual transactions responsible, never the general Customer Profile.
  */
-export function ReceivableDetailsModal({ customerId, canMessage }: { customerId: string; canMessage: boolean }) {
+export function ReceivableDetailsModal({
+  customerId,
+  canMessage,
+  canRecordPayment,
+}: {
+  customerId: string;
+  canMessage: boolean;
+  canRecordPayment: boolean;
+}) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ReceivableDetails | null>(null);
   const [messaging, setMessaging] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  // A payment recorded during this viewing that hasn't yet been reflected
+  // on the Dashboard behind this dialog — see closeDetails() below for why
+  // that refresh is deliberately deferred rather than fired immediately.
+  const [dashboardStale, setDashboardStale] = useState(false);
 
-  async function handleOpen() {
-    setOpen(true);
-    setLoading(true);
-    setError(null);
+  async function loadDetails() {
     try {
       const result = await getReceivableDetailsAction(customerId);
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load receivable details.");
-    } finally {
-      setLoading(false);
+    }
+  }
+
+  async function handleOpen() {
+    setOpen(true);
+    setLoading(true);
+    setError(null);
+    await loadDetails();
+    setLoading(false);
+  }
+
+  /**
+   * After a successful in-place payment: refresh this modal's own data
+   * (Recent Payments / Outstanding Balance) immediately, per the standing
+   * "no manual refresh" requirement. The Dashboard's own Receivables list
+   * behind this dialog is intentionally NOT refreshed here — this row
+   * (this exact customerId) is what the whole modal tree, including this
+   * component instance, is mounted under in ReceivablesList; if this
+   * payment clears the balance, an immediate router.refresh() would remove
+   * the row (and this component along with it) while the dialog the user
+   * is still looking at is open, yanking it away mid-view. Deferred to
+   * closeDetails() instead, so it happens the moment it's actually safe to.
+   */
+  async function handlePaymentSuccess() {
+    setPaymentOpen(false);
+    await loadDetails();
+    setDashboardStale(true);
+  }
+
+  function closeDetails() {
+    setOpen(false);
+    if (dashboardStale) {
+      router.refresh();
+      setDashboardStale(false);
     }
   }
 
@@ -53,8 +100,20 @@ export function ReceivableDetailsModal({ customerId, canMessage }: { customerId:
     }
   }
 
-  const singleOrderId = data?.transactions.length === 1 ? data.transactions[0].id : null;
-  const recordPaymentHref = singleOrderId ? `/payments?orderId=${singleOrderId}` : "/payments";
+  // A single open transaction preselects the payment form's Order combobox
+  // so staff never has to re-search for someone already on this screen;
+  // with more than one, leave it undefined so the combobox works exactly
+  // like the standalone /payments page does today.
+  const defaultOrder: OrderSearchResult | null =
+    data && data.transactions.length === 1
+      ? {
+          id: data.transactions[0].id,
+          orderNumber: data.transactions[0].reference,
+          customerName: data.customer.name,
+          customerPhone: data.customer.contactNumber,
+          quoteNumber: null,
+        }
+      : null;
 
   return (
     <>
@@ -72,7 +131,7 @@ export function ReceivableDetailsModal({ customerId, canMessage }: { customerId:
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={closeDetails}
                 aria-label="Close"
                 className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
@@ -185,16 +244,51 @@ export function ReceivableDetailsModal({ customerId, canMessage }: { customerId:
                   {messaging ? "Opening..." : "Message"}
                 </Button>
               )}
-              <Link href={recordPaymentHref}>
-                <Button type="button" size="sm">
+              {canRecordPayment && (
+                <Button type="button" size="sm" onClick={() => setPaymentOpen(true)} disabled={loading || !data}>
                   Record Payment
                 </Button>
-              </Link>
-              <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
+              )}
+              <Button type="button" variant="outline" size="sm" onClick={closeDetails}>
                 Close
               </Button>
             </div>
           </div>
+
+          {paymentOpen && data && (
+            <div
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-y-auto rounded-lg bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-brand-700">Record Payment</p>
+                    <p className="truncate text-xs text-slate-400">
+                      {data.customer.name} · {formatCurrency(data.totalOutstanding)} outstanding
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentOpen(false)}
+                    aria-label="Close"
+                    className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="p-5">
+                  <PaymentForm
+                    defaultOrder={defaultOrder}
+                    action={recordPaymentInPlaceAction}
+                    onSuccess={handlePaymentSuccess}
+                    onCancel={() => setPaymentOpen(false)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>

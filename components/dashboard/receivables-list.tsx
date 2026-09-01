@@ -19,7 +19,15 @@ const STATUS_TONE: Record<SoaBalanceStatus, "green" | "yellow" | "red"> = {
 };
 
 /** Spec items 15/16 — SOA reuses the existing Statement of Account pages, Message reuses the existing Chatbox (never a new messaging system). */
-export function ReceivablesList({ rows, canMessage }: { rows: ReceivableRow[]; canMessage: boolean }) {
+export function ReceivablesList({
+  rows,
+  canMessage,
+  canRecordPayment,
+}: {
+  rows: ReceivableRow[];
+  canMessage: boolean;
+  canRecordPayment: boolean;
+}) {
   async function message(customerId: string) {
     const { id } = await startCustomerConversationAction(customerId);
     window.dispatchEvent(new CustomEvent("chatbox:open-conversation", { detail: { conversationId: id } }));
@@ -40,7 +48,7 @@ export function ReceivablesList({ rows, canMessage }: { rows: ReceivableRow[]; c
             </div>
             <p className="mt-0.5 text-sm font-semibold text-slate-700">{formatCurrency(r.balance)} outstanding</p>
             <div className="mt-2 flex gap-1.5">
-              <ReceivableDetailsModal customerId={r.customerId} canMessage={canMessage} />
+              <ReceivableDetailsModal customerId={r.customerId} canMessage={canMessage} canRecordPayment={canRecordPayment} />
               <SoaModal customerId={r.customerId} />
               {canMessage && (
                 <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => message(r.customerId)}>

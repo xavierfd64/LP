@@ -43,9 +43,19 @@ const recordPaymentSchema = z.object({
 // (see applyVoucherAction) so it never needs a proof upload either.
 const CUSTOMER_PROOF_METHODS = ["GCASH", "MAYA", "BANK_TRANSFER", "OTHER"] as const;
 
-export async function recordPaymentAction(_prevState: string | undefined, formData: FormData) {
-  const user = await requirePermission("PAYMENT_RECORD");
+type CreatePaymentResult = { ok: true; orderId: string; paymentId: string } | { ok: false; error: string };
 
+/**
+ * The actual payment-recording logic (validation, optional proof upload,
+ * the Payment row itself, the audit entry, the payment-satisfied
+ * auto-Job-Order-creation side effect) — shared by every caller so there
+ * is exactly one place this happens, never a duplicated/simplified copy.
+ * Deliberately has no opinion about what happens after: recordPaymentAction
+ * below redirects on success (its own long-standing behavior, unchanged),
+ * while recordPaymentInPlaceAction does not, for callers (a Dashboard
+ * popup) that must stay exactly where they are.
+ */
+async function createPaymentRecord(formData: FormData, userId: string): Promise<CreatePaymentResult> {
   const parsed = recordPaymentSchema.safeParse({
     orderId: formData.get("orderId"),
     amount: formData.get("amount"),
@@ -54,7 +64,7 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
     paymentDate: formData.get("paymentDate") || undefined,
     notes: formData.get("notes") || undefined,
   });
-  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
   const { orderId, amount, method, referenceNumber, paymentDate, notes } = parsed.data;
 
@@ -70,7 +80,7 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
       const saved = await saveUploadedFile(proofFile, "document");
       proofFilePath = saved.path;
     } catch (e) {
-      if (e instanceof UploadRejectedError) return e.message;
+      if (e instanceof UploadRejectedError) return { ok: false, error: e.message };
       throw e;
     }
   }
@@ -85,23 +95,48 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
       notes,
       status: "CONFIRMED",
       proofFilePath,
-      recordedById: user.id,
+      recordedById: userId,
     },
   });
 
-  await logAudit(user.id, "PAYMENT_RECORDED", "Payment", payment.id, {
+  await logAudit(userId, "PAYMENT_RECORDED", "Payment", payment.id, {
     orderId,
     amount,
     status: "CONFIRMED",
   });
-  await autoCreateJobOrderIfPaymentSatisfied(orderId, user.id);
+  await autoCreateJobOrderIfPaymentSatisfied(orderId, userId);
+
+  return { ok: true, orderId, paymentId: payment.id };
+}
+
+export async function recordPaymentAction(_prevState: string | undefined, formData: FormData) {
+  const user = await requirePermission("PAYMENT_RECORD");
+  const result = await createPaymentRecord(formData, user.id);
+  if (!result.ok) return result.error;
 
   // Same "caller says where to land" pattern uploadPaymentProofAction
   // already uses below — RecordPaymentDialog (order detail page) and the
   // Payments page's Record Payment modal both bind this same action but
   // want to land somewhere different afterward.
   const redirectTo = ((formData.get("redirectTo") as string) || "").trim();
-  redirect(redirectTo || `/orders/${orderId}`);
+  redirect(redirectTo || `/orders/${result.orderId}`);
+}
+
+/**
+ * Same payment-recording logic as recordPaymentAction above, for a caller
+ * that must stay exactly where it is afterward (the Dashboard's
+ * Receivable Details -> Record Payment popup) rather than navigate
+ * anywhere — Next.js's redirect() always performs a real client-side
+ * navigation, even back to the current URL, which would close whatever
+ * modal called it. Returns the same string|undefined shape
+ * recordPaymentAction's error path already does (a message, or undefined
+ * for success), so it's a drop-in `action` for PaymentForm without
+ * changing that component's existing useActionState typing.
+ */
+export async function recordPaymentInPlaceAction(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
+  const user = await requirePermission("PAYMENT_RECORD");
+  const result = await createPaymentRecord(formData, user.id);
+  return result.ok ? undefined : result.error;
 }
 
 export async function uploadPaymentProofAction(_prevState: string | undefined, formData: FormData) {

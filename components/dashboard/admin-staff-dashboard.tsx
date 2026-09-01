@@ -50,12 +50,14 @@ export async function AdminStaffDashboard({
   canMessageCustomers,
   quickActions,
   canSendQuotation,
+  canRecordPayment,
 }: {
   name: string;
   canSeeFinancials: boolean;
   canMessageCustomers: boolean;
   quickActions: QuickAction[];
   canSendQuotation: boolean;
+  canRecordPayment: boolean;
 }) {
   const [kpis, needsAttention, financial, receivables, production, activity, upcoming, insights, charts, revenueTrend, financialFoundation] = await Promise.all([
     getPrimaryKpis(),
@@ -145,7 +147,7 @@ export async function AdminStaffDashboard({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <NeedsAttention items={needsAttention} />
         {canSeeFinancials ? <FinancialOverview initial={financial} /> : <div className="lg:col-span-2" />}
-        {canSeeFinancials && <ReceivablesList rows={receivables} canMessage={canMessageCustomers} />}
+        {canSeeFinancials && <ReceivablesList rows={receivables} canMessage={canMessageCustomers} canRecordPayment={canRecordPayment} />}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
