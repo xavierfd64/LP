@@ -36,7 +36,7 @@ export default async function QuotationPrintPage({ params }: PageProps<"/quotati
     quotation.customer.email ?? quotation.customer.contactNumber ?? quotation.customer.user?.email ?? quotation.customer.user?.phone ?? null;
 
   return (
-    <DocumentShell title="Quotation" documentNumber={quotation.quoteNumber}>
+    <DocumentShell title="Quotation" documentNumber={quotation.quoteNumber} qrPath={`/quotations/${quotation.id}`}>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DocumentField label="Quotation Number" value={quotation.quoteNumber} />
         <DocumentField label="Date Created" value={formatDate(quotation.createdAt)} />

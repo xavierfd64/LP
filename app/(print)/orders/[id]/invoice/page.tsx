@@ -5,7 +5,6 @@ import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { confirmedPaymentTotal } from "@/lib/workflow";
-import { deriveDocumentNumber } from "@/lib/numbering";
 import { DocumentShell, DocumentField, DocumentSection } from "@/components/documents/document-shell";
 import { DocumentItemsTable, type DocumentLineItem } from "@/components/documents/document-items-table";
 import { DocumentTotals } from "@/components/documents/document-totals";
@@ -56,14 +55,14 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
   const subtotal = items.reduce((sum, i) => sum + i.qty * i.unitPrice, 0);
 
   const contact = order.customer.email ?? order.customer.contactNumber ?? order.customer.user?.email ?? order.customer.user?.phone ?? null;
-  // Unified document identity (3rd Update item 5) — this app has no
-  // separate persisted Invoice entity, so the invoice number is derived
-  // from the Order's own number at render time (same date+sequence
-  // digits, INV- in place of ORD-) rather than stored.
-  const invoiceNumber = deriveDocumentNumber(order.orderNumber, "INV");
+  // Unified document identity — this app has no separate persisted
+  // Invoice entity, so the invoice "number" is simply the Order's own
+  // unified reference number (no prefix, so no derivation needed —
+  // Quotation/Job Order/Invoice all show the exact same literal string).
+  const invoiceNumber = order.orderNumber;
 
   return (
-    <DocumentShell title="Invoice" documentNumber={invoiceNumber}>
+    <DocumentShell title="Invoice" documentNumber={invoiceNumber} qrPath={`/orders/${order.id}`}>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DocumentField label="Invoice Number" value={invoiceNumber} />
         <DocumentField label="Invoice Date" value={formatDate(order.createdAt)} />

@@ -1,4 +1,5 @@
 import { getBusinessSettings, formatBusinessAddress } from "@/lib/business-settings";
+import { documentQrDataUrl } from "@/lib/qr-code";
 import { PrintButton } from "./print-button";
 import { BrandLogo } from "@/components/branding/brand-logo";
 
@@ -14,11 +15,14 @@ import { BrandLogo } from "@/components/branding/brand-logo";
 export async function DocumentShell({
   title,
   documentNumber,
+  qrPath,
   children,
   headerAction,
 }: {
   title: string;
   documentNumber?: string;
+  /** Internal app path this document's own detail page lives at (e.g. `/orders/{id}`) — when set, a QR code linking straight there renders next to the document number, same placement the "New Reference Number + QR Code" reference illustration shows. Omit for document types that don't have (or shouldn't expose) a QR yet. */
+  qrPath?: string;
   children: React.ReactNode;
   /** Overrides the default "Print / Save as PDF" button — used by the public document-sharing page, where printing is only offered for View + Download links (enforced server-side, not just by omitting this). Pass `null` to show nothing. */
   headerAction?: React.ReactNode | null;
@@ -26,6 +30,7 @@ export async function DocumentShell({
   const settings = await getBusinessSettings();
   const address = formatBusinessAddress(settings);
   const contactBits = [settings.contactNumber, settings.email].filter(Boolean);
+  const qrDataUrl = qrPath ? await documentQrDataUrl(qrPath) : null;
 
   return (
     <div className="mx-auto max-w-3xl bg-white p-6 text-slate-900 sm:p-10 print:max-w-none print:p-0">
@@ -41,9 +46,18 @@ export async function DocumentShell({
             {contactBits.length > 0 && <p className="text-xs text-slate-500">{contactBits.join(" · ")}</p>}
           </div>
         </div>
-        <div className="shrink-0 text-left sm:text-right">
-          <p className="text-2xl font-bold uppercase tracking-wide text-brand-700">{title}</p>
-          {documentNumber && <p className="text-sm text-slate-500">{documentNumber}</p>}
+        <div className="flex shrink-0 items-start gap-3 sm:justify-end">
+          <div className="text-left sm:text-right">
+            <p className="text-2xl font-bold uppercase tracking-wide text-brand-700">{title}</p>
+            {documentNumber && <p className="text-sm text-slate-500">{documentNumber}</p>}
+          </div>
+          {qrDataUrl && (
+            // eslint-disable-next-line @next/next/no-img-element -- a data: URI, not an optimizable remote asset
+            <div className="shrink-0 text-center print:break-inside-avoid">
+              <img src={qrDataUrl} alt={`QR code for ${documentNumber ?? title}`} width={72} height={72} className="rounded border border-slate-200" />
+              <p className="mt-1 text-[9px] leading-tight text-slate-400">Scan to view</p>
+            </div>
+          )}
         </div>
       </header>
 

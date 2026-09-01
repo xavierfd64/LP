@@ -1,58 +1,50 @@
 import { prisma } from "@/lib/prisma";
 
 /**
- * Unified document identity (3rd Update item 5): Quotation, Order, and the
- * Invoice print view of an Order all share one "transaction identity" —
- * the same YYYY-MMDD-#### digits, only the prefix changes
- * (QUO-2026-0826-0001 -> ORD-2026-0826-0001 -> INV-2026-0826-0001). The
- * numeric part is a single global sequence (document_number_seq, a real
- * Postgres SEQUENCE — see the 20260826120000 migration) shared by every
- * document type and every concurrent request: `nextval()` is atomic at the
- * database level, so two staff creating a Quotation and an Order-with-no-
- * quotation at the same instant can never be handed the same number,
- * unlike the old per-table `count()`-then-format approach this replaced.
- * The date embedded in the number is when that identity was first minted,
- * not "today" — an Order derived from a Quotation keeps the Quotation's
- * original date+sequence digits (see deriveDocumentNumber), it doesn't
- * redraw a new one.
+ * Unified document identity (LP System Update — "one unified reference
+ * number for Quotation, Job Order & Invoice"): Quotation, Order, and the
+ * Invoice print view of an Order all share one literal transaction
+ * number — no per-document prefix (previously QUO-/ORD-/INV-, now
+ * removed entirely per the explicit "no document-type prefix"
+ * requirement). The numeric part is a single global sequence
+ * (document_number_seq, a real Postgres SEQUENCE — see the
+ * 20260826120000 migration) shared by every document type and every
+ * concurrent request: `nextval()` is atomic at the database level, so two
+ * staff creating a Quotation and an Order-with-no-quotation at the same
+ * instant can never be handed the same number, unlike a `count()`-then-
+ * format approach. This also means the digits were already guaranteed
+ * globally unique across Quotation/Order even before the prefix was
+ * dropped — removing it changes only the display format, not uniqueness.
+ * The date embedded in the number is when that identity was first
+ * minted, not "today" — an Order derived from a Quotation keeps the
+ * Quotation's original date+sequence digits verbatim, it doesn't redraw
+ * a new one (see nextOrderNumber).
  */
 async function nextGlobalSequence(): Promise<number> {
   const rows = await prisma.$queryRaw<{ n: bigint }[]>`SELECT nextval('document_number_seq') AS n`;
   return Number(rows[0].n);
 }
 
-function formatDocumentNumber(prefix: string, date: Date, seq: number): string {
+function formatDocumentNumber(date: Date, seq: number): string {
   const yyyy = date.getFullYear();
   const mmdd = `${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-  return `${prefix}-${yyyy}-${mmdd}-${String(seq).padStart(4, "0")}`;
+  return `${yyyy}-${mmdd}-${String(seq).padStart(4, "0")}`;
 }
 
 /** Mints a brand-new transaction identity — for a Quotation, or for an Order created with no prior Quotation to inherit from. */
-export async function nextTransactionNumber(prefix: "QUO" | "ORD"): Promise<string> {
+export async function nextTransactionNumber(): Promise<string> {
   const seq = await nextGlobalSequence();
-  return formatDocumentNumber(prefix, new Date(), seq);
+  return formatDocumentNumber(new Date(), seq);
 }
 
-/**
- * Swaps a transaction identity's prefix while keeping its date+sequence
- * digits — Order-from-Quotation, and the Invoice print view's number
- * (which is never stored; derived from the Order's orderNumber at render
- * time, since this app has no separate persisted Invoice entity).
- */
-export function deriveDocumentNumber(sourceNumber: string, newPrefix: string): string {
-  const parts = sourceNumber.split("-");
-  parts[0] = newPrefix;
-  return parts.join("-");
-}
-
-/** New Order: reuses the linked Quotation's identity if there is one, otherwise mints a fresh one. */
+/** New Order: reuses the linked Quotation's identity verbatim if there is one (same literal number, not a derived variant — there's no prefix left to swap), otherwise mints a fresh one. */
 export async function nextOrderNumber(sourceQuoteNumber?: string | null): Promise<string> {
-  if (sourceQuoteNumber) return deriveDocumentNumber(sourceQuoteNumber, "ORD");
-  return nextTransactionNumber("ORD");
+  if (sourceQuoteNumber) return sourceQuoteNumber;
+  return nextTransactionNumber();
 }
 
 export async function nextQuoteNumber(): Promise<string> {
-  return nextTransactionNumber("QUO");
+  return nextTransactionNumber();
 }
 
 /**

@@ -45,7 +45,7 @@ export default async function JobOrderPrintPage({ params }: PageProps<"/job-orde
     jo.order.customer.email ?? jo.order.customer.contactNumber ?? jo.order.customer.user?.email ?? jo.order.customer.user?.phone ?? null;
 
   return (
-    <DocumentShell title="Job Order" documentNumber={jo.joNumber}>
+    <DocumentShell title="Job Order" documentNumber={jo.joNumber} qrPath={`/job-orders/${jo.id}`}>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DocumentField label="Job Order Number" value={jo.joNumber} />
         <DocumentField label="Date Created" value={formatDate(jo.createdAt)} />
