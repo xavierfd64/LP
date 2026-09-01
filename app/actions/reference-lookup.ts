@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { ORDER_TRACKING_INCLUDE } from "@/lib/order-tracking";
+import { isRateLimited, clientIp } from "@/lib/rate-limit";
 import { buildPublicSnapshot, type PublicOrderTracking } from "./public-tracking";
 
 export type ReferenceLookupResult =
@@ -9,31 +10,18 @@ export type ReferenceLookupResult =
   | { ok: false; reason: "not_found" }
   | { ok: false; reason: "quotation_pending"; quoteNumber: string; status: string };
 
-const ATTEMPT_LIMIT = 10;
-const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
-
-type AttemptStore = Map<string, { count: number; resetAt: number }>;
-function attemptStore(): AttemptStore {
-  const g = globalThis as unknown as { __refLookupAttempts?: AttemptStore };
-  if (!g.__refLookupAttempts) g.__refLookupAttempts = new Map();
-  return g.__refLookupAttempts;
-}
-
-/** Best-effort per-reference throttle (in-memory — resets on redeploy, same
- * pragmatic tradeoff as the rest of this stack's debounce/sweep patterns).
- * Caps brute-force guessing of the contact second-factor for a known/guessed
- * reference number. */
-function rateLimited(key: string): boolean {
-  const store = attemptStore();
-  const now = Date.now();
-  const entry = store.get(key);
-  if (!entry || entry.resetAt < now) {
-    store.set(key, { count: 1, resetAt: now + ATTEMPT_WINDOW_MS });
-    return false;
-  }
-  entry.count += 1;
-  return entry.count > ATTEMPT_LIMIT;
-}
+// Reference-keyed: caps brute-forcing the contact second-factor for one
+// known/guessed reference number.
+const REFERENCE_ATTEMPT_LIMIT = 10;
+const REFERENCE_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+// IP-keyed: the reference-keyed limit above resets fresh for every new
+// reference guessed, so on its own it does nothing to stop someone who
+// already knows a target's contact info from scanning through this app's
+// now-sequential, low-entropy reference numbers (YYYY-MMDD-#### — see
+// lib/numbering.ts) looking for the one that matches. This caps that
+// scan regardless of how many different references it tries.
+const IP_ATTEMPT_LIMIT = 20;
+const IP_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 
 function contactMatches(customer: { email: string | null; contactNumber: string | null }, input: string): boolean {
   const norm = input.trim().toLowerCase();
@@ -63,7 +51,15 @@ export async function lookupTrackingByReferenceAction(rawReference: string, rawC
   const reference = rawReference.trim().toUpperCase();
   const contact = rawContact.trim();
   if (!reference || !contact) return { ok: false, reason: "not_found" };
-  if (rateLimited(reference)) return { ok: false, reason: "not_found" };
+
+  const ip = await clientIp();
+  // Both checks always run (never short-circuited past each other) so attempt
+  // counts stay accurate regardless of which one is already tripped — same
+  // pattern as the login/reset-request limiters in app/actions/auth.ts and
+  // password-reset.ts. The response is identical either way.
+  const referenceLimited = isRateLimited("reference-lookup", reference, REFERENCE_ATTEMPT_LIMIT, REFERENCE_ATTEMPT_WINDOW_MS);
+  const ipLimited = isRateLimited("reference-lookup-ip", ip, IP_ATTEMPT_LIMIT, IP_ATTEMPT_WINDOW_MS);
+  if (referenceLimited || ipLimited) return { ok: false, reason: "not_found" };
 
   const [byOrder, byQuotation, byJobOrders] = await Promise.all([
     prisma.order.findFirst({ where: { orderNumber: { equals: reference, mode: "insensitive" } } }),

@@ -98,7 +98,12 @@ export async function resetPasswordAction(_prevState: string | undefined, formDa
   if (!check.ok) return "This reset link is invalid or has expired. Please request a new one.";
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  await prisma.user.update({ where: { id: check.userId }, data: { passwordHash } });
+  // A password reset is often prompted by a suspected compromise, so any
+  // session minted before it — including one an attacker captured — must
+  // stop working immediately, the same way logout does (see
+  // User.sessionVersion's doc comment in schema.prisma). Without this, a
+  // hijacked session would keep working right through the "fix".
+  await prisma.user.update({ where: { id: check.userId }, data: { passwordHash, sessionVersion: { increment: 1 } } });
   // Marks this token AND any other still-outstanding one for this user used
   // — a stale second link from an earlier request can't be replayed later.
   await prisma.passwordResetToken.updateMany({

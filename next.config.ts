@@ -67,6 +67,10 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const nextConfig: NextConfig = {
+  // Drops the default "X-Powered-By: Next.js" response header — pure
+  // banner-grabbing information, no functional purpose, no reason to hand
+  // it to every caller for free.
+  poweredByHeader: false,
   experimental: {
     serverActions: {
       // Chat attachments allow up to 10MB (see ATTACHMENT_MAX_BYTES in

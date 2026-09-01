@@ -2,6 +2,24 @@ import { NextResponse } from "next/server";
 import NextAuth from "next-auth";
 import { authConfig } from "@/lib/auth.config";
 
+// Security audit note (pre-Railway-migration pass): this builds its own
+// NextAuth instance from the plain authConfig rather than importing the
+// hardened `auth` from lib/auth.ts, so the JWT it decodes here is NOT
+// checked against User.sessionVersion — a logged-out (or password-reset)
+// session's token still passes THIS gate until it naturally expires.
+// Verified this is not actually exploitable: every protected route group
+// has its own layout.tsx (app/(app)/layout.tsx, app/(print)/layout.tsx)
+// that calls requireUser() — which DOES use lib/auth.ts's auth() and DOES
+// enforce sessionVersion — on every request, so a stale token is always
+// rejected one layer in, before any protected data renders (confirmed by
+// replaying a pre-logout session cookie directly against a protected page).
+// Proxy defaults to the Node.js runtime as of Next.js 16 (previously Edge,
+// which is why this split existed), so importing lib/auth.ts's instance
+// here instead is now technically possible — deliberately not done, since
+// it would add lib/auth.ts's own DB round-trips (getBusinessSettings +
+// the sessionVersion lookup) to every single navigation, duplicating a
+// check the layout guard immediately downstream already makes, for no
+// additional real-world protection.
 const { auth } = NextAuth(authConfig);
 
 // "/" is listed here even though it never actually renders for an

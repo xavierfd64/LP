@@ -1,4 +1,5 @@
 import { writeFile, mkdir } from "fs/promises";
+import { randomBytes } from "crypto";
 import path from "path";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
@@ -99,7 +100,14 @@ export async function saveUploadedFile(
   }
 
   await mkdir(UPLOAD_DIR, { recursive: true });
-  const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+  // These files are served back out from /public/uploads with no session
+  // check (there's no route to put one behind — see proxy.ts's matcher
+  // exclusion), so the filename itself is the only thing standing between
+  // "whoever has the link" and the file, exactly like this app's tracking
+  // and share-link tokens — it needs the same CSPRNG-grade unguessability,
+  // not a Math.random() suffix combined with a public, narrow-window
+  // timestamp.
+  const safeName = `${randomBytes(16).toString("hex")}${ext}`;
   await writeFile(path.join(UPLOAD_DIR, safeName), bytes);
   return { filename: file.name, path: `/uploads/${safeName}` };
 }
