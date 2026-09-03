@@ -229,6 +229,9 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
               specs: (li.specs as Record<string, string> | null) ?? null,
             }))}
             notes={quotation.notes}
+            discountType={quotation.discountType}
+            discountValue={Number(quotation.discountValue)}
+            taxPct={Number(quotation.taxPct)}
           />
         )}
         {isStaffLike && canCancel && editable && <CancelQuotationForm quotationId={quotation.id} />}

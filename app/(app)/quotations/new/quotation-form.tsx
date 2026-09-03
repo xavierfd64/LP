@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { createQuotationAction } from "@/app/actions/quotations";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Textarea } from "@/components/ui/input";
+import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { LineItemsEditor, lineItemAmount, emptyLineItem, type LineItem } from "../line-items-editor";
 import { LineItemsView } from "@/components/documents/line-items-view";
@@ -13,6 +13,7 @@ import type { CustomerSearchResult } from "@/app/actions/customers";
 import { FormSectionCard } from "@/components/documents/form-section-card";
 import { TotalsPanel } from "@/components/documents/editor-shell";
 import { formatCurrency } from "@/lib/utils";
+import { computeTotals, type DiscountType } from "@/lib/pricing-totals";
 
 export function QuotationForm({
   inquiryId,
@@ -30,14 +31,18 @@ export function QuotationForm({
 }) {
   const [error, formAction, pending] = useActionState(createQuotationAction, undefined);
   const [items, setItems] = useState<LineItem[]>(defaultLineItems && defaultLineItems.length > 0 ? defaultLineItems : [{ ...emptyLineItem }]);
-  const [discountPct, setDiscountPct] = useState(0);
-  const [taxPct, setTaxPct] = useState(12);
+  const [discountType, setDiscountType] = useState<DiscountType>("PERCENTAGE");
+  const [discountValue, setDiscountValue] = useState(0);
+  // Tax/VAT correction: this used to default to 12, silently applying a
+  // tax rate to every new quotation regardless of whether the business
+  // actually charges one. New quotations now default to 0% — Staff enters
+  // the real rate only when one actually applies.
+  const [taxPct, setTaxPct] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
 
-  const subtotal = items.reduce((sum, li) => sum + lineItemAmount(li), 0);
-  const discountAmount = (subtotal * (Number(discountPct) || 0)) / 100;
-  const taxAmount = (subtotal - discountAmount) * ((Number(taxPct) || 0) / 100);
-  const grandTotal = subtotal - discountAmount + taxAmount;
+  const rawSubtotal = items.reduce((sum, li) => sum + lineItemAmount(li), 0);
+  const totals = computeTotals({ subtotal: rawSubtotal, discountType, discountValue, taxPct });
+  const { subtotal, discountAmount, discountLabel, taxAmount, total: grandTotal } = totals;
 
   return (
     <form action={formAction} className="space-y-5">
@@ -68,26 +73,41 @@ export function QuotationForm({
         <TotalsPanel
           rows={[
             { label: "Subtotal", value: formatCurrency(subtotal) },
-            ...(discountAmount > 0 ? [{ label: `Discount (${discountPct}%)`, value: formatCurrency(discountAmount), negative: true }] : []),
+            ...(discountAmount > 0 ? [{ label: discountLabel ?? "Discount", value: formatCurrency(discountAmount), negative: true }] : []),
             ...(taxAmount > 0 ? [{ label: `Tax / VAT (${taxPct}%)`, value: formatCurrency(taxAmount) }] : []),
           ]}
           total={{ label: "Grand Total", value: formatCurrency(grandTotal) }}
         />
         <div className="ml-auto grid w-full grid-cols-2 gap-3 sm:w-80">
           <div>
-            <Label htmlFor="discountPct">Discount (%)</Label>
-            <Input
-              id="discountPct"
-              name="discountPct"
-              type="number"
-              min={0}
-              max={100}
-              step="0.01"
-              value={discountPct}
-              onChange={(e) => setDiscountPct(Number(e.target.value))}
-            />
+            <Label htmlFor="discountType">Discount Type</Label>
+            <Select
+              id="discountType"
+              name="discountType"
+              value={discountType}
+              onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+            >
+              <option value="PERCENTAGE">Percentage</option>
+              <option value="FIXED">Fixed Amount</option>
+            </Select>
           </div>
           <div>
+            <Label htmlFor="discountValue">{discountType === "FIXED" ? "Discount (₱)" : "Discount (%)"}</Label>
+            <Input
+              id="discountValue"
+              name="discountValue"
+              type="number"
+              min={0}
+              max={discountType === "PERCENTAGE" ? 100 : undefined}
+              step="0.01"
+              value={discountValue}
+              onChange={(e) => setDiscountValue(Number(e.target.value))}
+            />
+            {discountType === "FIXED" && discountValue > subtotal && subtotal > 0 && (
+              <p className="mt-1 text-xs text-amber-600">Capped to the subtotal ({formatCurrency(subtotal)}).</p>
+            )}
+          </div>
+          <div className="col-span-2">
             <Label htmlFor="taxPct">Tax / VAT (%)</Label>
             <Input
               id="taxPct"
@@ -117,7 +137,7 @@ export function QuotationForm({
           <TotalsPanel
             rows={[
               { label: "Subtotal", value: formatCurrency(subtotal) },
-              ...(discountAmount > 0 ? [{ label: `Discount (${discountPct}%)`, value: formatCurrency(discountAmount), negative: true }] : []),
+              ...(discountAmount > 0 ? [{ label: discountLabel ?? "Discount", value: formatCurrency(discountAmount), negative: true }] : []),
               ...(taxAmount > 0 ? [{ label: `Tax / VAT (${taxPct}%)`, value: formatCurrency(taxAmount) }] : []),
             ]}
             total={{ label: "Grand Total", value: formatCurrency(grandTotal) }}

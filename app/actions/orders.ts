@@ -9,11 +9,23 @@ import { logAudit } from "@/lib/audit";
 import { startProduction, RuleViolation } from "@/lib/workflow";
 import { notifyCustomer } from "@/lib/notifications";
 import { estimateCostForLines } from "@/lib/service-cost";
+import { computeTotals, type DiscountType } from "@/lib/pricing-totals";
 
 const orderSchema = z.object({
   customerId: z.string().min(1),
   quotationId: z.string().optional(),
-  totalAmount: z.coerce.number().nonnegative(),
+  // Manual (no-quotation) pricing inputs — a "NEW" order has no persisted
+  // line items of its own (only an Order created FROM a Quotation does,
+  // via that Quotation's lineItems), so subtotal is necessarily supplied
+  // by the client here; discountType/discountValue/taxPct are then always
+  // re-applied server-side via computeTotals, never trusted as a final
+  // total. Ignored entirely when quotationId is set — see below, where the
+  // Order's pricing is instead copied straight from the Quotation's own
+  // already-computed, server-trusted breakdown.
+  subtotal: z.coerce.number().nonnegative().optional(),
+  discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  discountValue: z.coerce.number().nonnegative().optional(),
+  taxPct: z.coerce.number().nonnegative().optional(),
   paymentTermType: z.enum(["STANDARD_PARTIAL", "APPROVED_TERMS"]),
   requiredPartialPct: z.coerce.number().int().min(0).max(100).default(50),
   termsApprovedBy: z.string().optional(),
@@ -28,7 +40,10 @@ export async function createOrderAction(_prevState: string | undefined, formData
   const parsed = orderSchema.safeParse({
     customerId: formData.get("customerId"),
     quotationId: formData.get("quotationId") || undefined,
-    totalAmount: formData.get("totalAmount"),
+    subtotal: formData.get("subtotal") || undefined,
+    discountType: formData.get("discountType") || undefined,
+    discountValue: formData.get("discountValue") || undefined,
+    taxPct: formData.get("taxPct") || undefined,
     paymentTermType: formData.get("paymentTermType"),
     requiredPartialPct: formData.get("requiredPartialPct") || 50,
     termsApprovedBy: formData.get("termsApprovedBy") || undefined,
@@ -50,6 +65,16 @@ export async function createOrderAction(_prevState: string | undefined, formData
   // this is stored, not recomputed live on every future page view.
   let costSnapshot: { totalCost: number; fullyConfigured: boolean } | null = null;
   let sourceQuoteNumber: string | undefined;
+  // Pricing breakdown (Sept 3 correction): an Order created FROM a
+  // Quotation copies that Quotation's already-computed, server-trusted
+  // discount/tax breakdown verbatim — never re-derived from anything the
+  // client sent, and never at risk of a fixed discount silently turning
+  // into "the % it happened to equal." A manually-created order (no
+  // quotation) has no persisted line items of its own, so its subtotal is
+  // necessarily client-supplied, but the discount/tax math on top of it is
+  // always recomputed here via the same shared computeTotals() every other
+  // pricing form uses — the client's own total is never trusted directly.
+  let pricing: ReturnType<typeof computeTotals>;
   if (data.quotationId) {
     const quotation = await prisma.quotation.findUnique({
       where: { id: data.quotationId },
@@ -61,7 +86,26 @@ export async function createOrderAction(_prevState: string | undefined, formData
         quotation.lineItems.map((li) => ({ serviceId: li.serviceId, qty: li.qty, sellingAmount: Number(li.unitPrice) * li.qty }))
       );
       costSnapshot = { totalCost: estimate.totalCost, fullyConfigured: estimate.fullyConfigured };
+      pricing = {
+        subtotal: quotation.subtotal != null ? Number(quotation.subtotal) : quotation.lineItems.reduce((sum, li) => sum + li.qty * Number(li.unitPrice), 0),
+        discountType: quotation.discountType as DiscountType,
+        discountValue: Number(quotation.discountValue),
+        discountAmount: Number(quotation.discountAmount),
+        discountLabel: quotation.discountLabel,
+        taxPct: Number(quotation.taxPct),
+        taxAmount: Number(quotation.taxAmount),
+        total: Number(quotation.total),
+      };
+    } else {
+      pricing = computeTotals({ subtotal: 0, discountType: "PERCENTAGE", discountValue: 0, taxPct: 0 });
     }
+  } else {
+    pricing = computeTotals({
+      subtotal: data.subtotal ?? 0,
+      discountType: (data.discountType as DiscountType) ?? "PERCENTAGE",
+      discountValue: data.discountValue ?? 0,
+      taxPct: data.taxPct ?? 0,
+    });
   }
 
   // Unified document identity (3rd Update item 5): an Order created from an
@@ -74,7 +118,14 @@ export async function createOrderAction(_prevState: string | undefined, formData
       orderNumber,
       customerId: data.customerId,
       quotationId: data.quotationId,
-      totalAmount: data.totalAmount,
+      totalAmount: pricing.total,
+      subtotal: pricing.subtotal,
+      discountType: pricing.discountType,
+      discountValue: pricing.discountValue,
+      discountAmount: pricing.discountAmount,
+      discountLabel: pricing.discountLabel,
+      taxPct: pricing.taxPct,
+      taxAmount: pricing.taxAmount,
       paymentTermType: data.paymentTermType,
       requiredPartialPct: data.requiredPartialPct,
       termsApprovedBy: data.paymentTermType === "APPROVED_TERMS" ? data.termsApprovedBy : undefined,

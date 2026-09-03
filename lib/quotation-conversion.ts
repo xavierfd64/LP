@@ -50,6 +50,18 @@ export async function convertApprovedQuotationToOrder(
       customerId: quotation.customerId,
       quotationId: quotation.id,
       totalAmount: quotation.total,
+      // Pricing breakdown copied verbatim from the Quotation (Sept 3
+      // correction) — same fields the manual "Create Order from Quotation"
+      // path copies in app/actions/orders.ts, kept in sync here so an
+      // auto-created Order (the normal path — see this module's own
+      // comment above) never loses its discount type/value or tax rate.
+      subtotal: quotation.subtotal,
+      discountType: quotation.discountType,
+      discountValue: quotation.discountValue,
+      discountAmount: quotation.discountAmount,
+      discountLabel: quotation.discountLabel,
+      taxPct: quotation.taxPct,
+      taxAmount: quotation.taxAmount,
       paymentTermType: isQualifiedForTerms ? "APPROVED_TERMS" : "STANDARD_PARTIAL",
       requiredPartialPct: 50,
       termsApprovedBy: isQualifiedForTerms

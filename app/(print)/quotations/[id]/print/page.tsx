@@ -65,7 +65,8 @@ export default async function QuotationPrintPage({ params }: PageProps<"/quotati
       <DocumentTotals
         subtotal={subtotal}
         discount={Number(quotation.discountAmount) > 0 ? Number(quotation.discountAmount) : undefined}
-        rows={Number(quotation.taxAmount) > 0 ? [{ label: "Tax / VAT", value: formatCurrency(Number(quotation.taxAmount)) }] : undefined}
+        discountLabel={quotation.discountLabel}
+        rows={Number(quotation.taxAmount) > 0 ? [{ label: `Tax / VAT (${Number(quotation.taxPct)}%)`, value: formatCurrency(Number(quotation.taxAmount)) }] : undefined}
         grandTotal={Number(quotation.total)}
       />
 

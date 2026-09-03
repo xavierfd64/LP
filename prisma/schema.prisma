@@ -40,6 +40,23 @@ enum PaymentTermType {
 }
 
 /**
+ * How a manual overall discount (set by Staff on a Quotation/Order — never
+ * a Service's own bulk-tier/promotion engine, see lib/pricing.ts, which is
+ * a separate concern) is interpreted. FIXED is a straight peso amount
+ * subtracted from the subtotal, capped at the subtotal so it can never
+ * push the taxable amount or grand total negative; PERCENTAGE is applied
+ * against the subtotal as before. Every pre-existing Quotation row is
+ * backfilled to PERCENTAGE (see the migration that added this column) —
+ * that was already the only interpretation the app ever computed or
+ * displayed, so this makes the existing assumption explicit rather than
+ * changing it.
+ */
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+/**
  * Pricing methods a Service can be configured with (spec Part F item 20).
  * NONE means "no automatic pricing" — the honest default for every
  * existing/new Service until Admin explicitly configures one, per item 26
@@ -488,12 +505,27 @@ model Quotation {
   // price" — show the math). Null/0 for ordinary staff-built quotations,
   // where `total` alone (the pre-existing behavior) is still authoritative.
   subtotal      Decimal? @db.Decimal(12, 2)
+  // The manual discount's own type + raw entered value (Sept 3 pricing
+  // correction) — discountAmount below stays the authoritative, always-
+  // correct applied peso amount used everywhere else in the app, but it
+  // alone can't tell a 10% discount apart from a coincidentally-equal-
+  // amount fixed discount on re-edit. discountValue is the number the
+  // Staff member actually typed (e.g. 10 for 10%, or 250.00 for a ₱250
+  // fixed discount) — never re-derived by dividing discountAmount back
+  // out of subtotal, which is exactly the lossy trick this replaces.
+  discountType   DiscountType @default(PERCENTAGE)
+  discountValue  Decimal @default(0) @db.Decimal(12, 2)
   discountAmount Decimal @default(0) @db.Decimal(12, 2)
   discountLabel  String?
   // Tax/VAT amount (Aug 22 3rd update — Quotation Totals now supports a
   // manual Tax/VAT % at creation, applied after the discount). Default 0
   // so every pre-existing Quotation (and instant quotations, which never
-  // set this) keeps its previously-computed `total` unaffected.
+  // set this) keeps its previously-computed `total` unaffected. taxPct is
+  // the actual rate applied (Sept 3 correction — the form used to default
+  // this to 12 with no way to tell a deliberate 12% from the unwanted
+  // default; new quotations now default to 0, and the rate itself is
+  // stored so an edit can reapply it instead of re-deriving it).
+  taxPct         Decimal @default(0) @db.Decimal(5, 2)
   taxAmount      Decimal @default(0) @db.Decimal(12, 2)
   isInstant      Boolean @default(false)
   rejectReason   String?
@@ -560,6 +592,22 @@ model Order {
   termsReason      String?
   requiredPartialPct Int           @default(50)
   totalAmount      Decimal         @default(0) @db.Decimal(12, 2)
+  // Pricing breakdown (Sept 3 correction) — Order previously stored only
+  // the final totalAmount, discarding the discount/tax math entirely (an
+  // Order created from a Quotation copies this straight from it; a
+  // manually-created walk-in order computes it server-side from its own
+  // submitted subtotal/discount/tax, never from a trusted client total).
+  // All nullable/defaulted so every pre-existing Order — none of which
+  // ever had this breakdown — is unaffected: subtotal null means "no
+  // breakdown recorded," and document views fall back to their prior
+  // derivation for those rows exactly as before.
+  subtotal         Decimal?        @db.Decimal(12, 2)
+  discountType     DiscountType    @default(PERCENTAGE)
+  discountValue    Decimal         @default(0) @db.Decimal(12, 2)
+  discountAmount   Decimal         @default(0) @db.Decimal(12, 2)
+  discountLabel    String?
+  taxPct           Decimal         @default(0) @db.Decimal(5, 2)
+  taxAmount        Decimal         @default(0) @db.Decimal(12, 2)
   releaseException Boolean         @default(false)
   releaseExceptionBy String?
   releaseExceptionReason String?

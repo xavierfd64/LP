@@ -12,6 +12,7 @@ import { notifyCustomer, notifyStaff, notifyUserInApp } from "@/lib/notification
 import { ACTIVE_QUOTATION_STATUSES, FORCE_APPROVABLE_STATUSES, SENDABLE_QUOTATION_STATUSES } from "@/lib/quotation-status";
 import { convertApprovedQuotation } from "@/lib/quotation-conversion";
 import { calculatePricing } from "@/lib/pricing";
+import { computeTotals, type DiscountType } from "@/lib/pricing-totals";
 
 const lineItemsSchema = z.array(
   z.object({
@@ -75,6 +76,15 @@ function clampPct(raw: FormDataEntryValue | null): number {
   return Math.min(100, Math.max(0, n));
 }
 
+function parseDiscountType(raw: FormDataEntryValue | null): DiscountType {
+  return raw === "FIXED" ? "FIXED" : "PERCENTAGE";
+}
+
+function parseNonNegative(raw: FormDataEntryValue | null): number {
+  const n = Number(raw ?? 0);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
 export async function createQuotationAction(_prevState: string | undefined, formData: FormData) {
   const user = await requirePermission("QUOTATION_CREATE");
 
@@ -83,10 +93,14 @@ export async function createQuotationAction(_prevState: string | undefined, form
   const validUntilRaw = formData.get("validUntil") as string | null;
   const notesRaw = (formData.get("notes") as string) || undefined;
   // Aug 22 3rd update — Quotation Totals now supports a manual overall
-  // Discount (%) and Tax/VAT (%), recomputed from the line items here
-  // (never trusting a client-submitted total) exactly like every other
-  // pricing figure in this codebase.
-  const discountPct = clampPct(formData.get("discountPct"));
+  // Discount and Tax/VAT, recomputed from the line items here (never
+  // trusting a client-submitted total) exactly like every other pricing
+  // figure in this codebase. Sept 3 correction: Tax/VAT now defaults to 0%
+  // (was silently defaulting to 12% in the form regardless of what the
+  // business actually charges), and Discount now supports a fixed peso
+  // amount as well as a percentage — see lib/pricing-totals.ts.
+  const discountType = parseDiscountType(formData.get("discountType"));
+  const discountValue = parseNonNegative(formData.get("discountValue"));
   const taxPct = clampPct(formData.get("taxPct"));
   const intent = formData.get("intent") === "send" ? "send" : "draft";
 
@@ -109,10 +123,8 @@ export async function createQuotationAction(_prevState: string | undefined, form
     if (!canSend) return "You do not have permission to send quotations to a customer. Save as draft instead.";
   }
 
-  const subtotal = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
-  const discountAmount = (subtotal * discountPct) / 100;
-  const taxAmount = ((subtotal - discountAmount) * taxPct) / 100;
-  const total = subtotal - discountAmount + taxAmount;
+  const rawSubtotal = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
+  const totals = computeTotals({ subtotal: rawSubtotal, discountType, discountValue, taxPct });
   const quoteNumber = await nextQuoteNumber();
 
   const quotation = await prisma.quotation.create({
@@ -124,11 +136,14 @@ export async function createQuotationAction(_prevState: string | undefined, form
       createdById: user.id,
       validUntil: validUntilRaw ? new Date(validUntilRaw) : undefined,
       notes: notesRaw,
-      subtotal,
-      discountAmount,
-      discountLabel: discountPct > 0 ? `Discount (${discountPct}%)` : null,
-      taxAmount,
-      total,
+      subtotal: totals.subtotal,
+      discountType: totals.discountType,
+      discountValue: totals.discountValue,
+      discountAmount: totals.discountAmount,
+      discountLabel: totals.discountLabel,
+      taxPct: totals.taxPct,
+      taxAmount: totals.taxAmount,
+      total: totals.total,
       lineItems: { create: parsedItems.data },
     },
   });
@@ -137,7 +152,7 @@ export async function createQuotationAction(_prevState: string | undefined, form
     await prisma.inquiry.update({ where: { id: inquiryId }, data: { status: "QUOTED" } });
   }
 
-  await logAudit(user.id, "QUOTATION_CREATED", "Quotation", quotation.id, { total });
+  await logAudit(user.id, "QUOTATION_CREATED", "Quotation", quotation.id, { total: totals.total });
   if (intent === "send") {
     await logAudit(user.id, "QUOTATION_SENT", "Quotation", quotation.id);
     await notifyCustomer(customerId, "QUOTATION_SENT", `Your quotation ${quotation.quoteNumber} is ready for review.`, `/quotations/${quotation.id}`);
@@ -318,33 +333,36 @@ export async function editQuotationAction(quotationId: string, _prevState: strin
   if (parsedItems.data.length === 0) return "Please provide at least one valid line item.";
 
   // One consistent calculation flow, same as createQuotationAction: Line
-  // Items -> Subtotal -> Discount/Tax adjustments -> Grand Total. This form
-  // has no Discount %/Tax % inputs of its own (editing here only changes
-  // line items/validity/notes), so the *rate* this quotation was already
-  // using is derived from its last saved figures and reapplied to the
-  // freshly-computed subtotal — never left stale, and never silently
-  // dropped to a flat leftover amount that stops reflecting the same %.
-  const oldSubtotal = quotation.subtotal != null ? Number(quotation.subtotal) : Number(quotation.total) + Number(quotation.discountAmount) - Number(quotation.taxAmount);
-  const oldDiscountAmount = Number(quotation.discountAmount);
-  const oldAfterDiscount = oldSubtotal - oldDiscountAmount;
-  const discountRate = oldSubtotal > 0 ? oldDiscountAmount / oldSubtotal : 0;
-  const taxRate = oldAfterDiscount > 0 ? Number(quotation.taxAmount) / oldAfterDiscount : 0;
+  // Items -> Subtotal -> Discount/Tax adjustments -> Grand Total, via the
+  // same shared lib/pricing-totals.ts. The Edit Quotation form (Sept 3
+  // correction) now carries its own Discount Type/Value and Tax/VAT
+  // fields, pre-filled with this quotation's current values — a Staff
+  // member can change them here, or leave them untouched, in which case
+  // they fall back to what's already stored. A stored discountType is
+  // reapplied by *type*, not re-derived as a bare rate: a fixed ₱250
+  // discount on a quotation whose line items just changed stays a ₱250
+  // discount (re-capped to the new subtotal if needed), it does not get
+  // silently reinterpreted as "the % that ₱250 happened to be before."
+  const discountType = formData.has("discountType") ? parseDiscountType(formData.get("discountType")) : (quotation.discountType as DiscountType);
+  const discountValue = formData.has("discountValue") ? parseNonNegative(formData.get("discountValue")) : Number(quotation.discountValue);
+  const taxPct = formData.has("taxPct") ? clampPct(formData.get("taxPct")) : Number(quotation.taxPct);
 
-  const subtotal = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
-  const discountAmount = subtotal * discountRate;
-  const afterDiscount = subtotal - discountAmount;
-  const taxAmount = afterDiscount * taxRate;
-  const total = afterDiscount + taxAmount;
+  const rawSubtotal = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
+  const totals = computeTotals({ subtotal: rawSubtotal, discountType, discountValue, taxPct });
 
   await prisma.$transaction([
     prisma.quotationLineItem.deleteMany({ where: { quotationId } }),
     prisma.quotation.update({
       where: { id: quotationId },
       data: {
-        subtotal,
-        discountAmount,
-        taxAmount,
-        total,
+        subtotal: totals.subtotal,
+        discountType: totals.discountType,
+        discountValue: totals.discountValue,
+        discountAmount: totals.discountAmount,
+        discountLabel: totals.discountLabel,
+        taxPct: totals.taxPct,
+        taxAmount: totals.taxAmount,
+        total: totals.total,
         validUntil: validUntilRaw ? new Date(validUntilRaw) : undefined,
         notes: notesRaw,
         lineItems: { create: parsedItems.data },
@@ -352,7 +370,7 @@ export async function editQuotationAction(quotationId: string, _prevState: strin
     }),
   ]);
 
-  await logAudit(user.id, "QUOTATION_EDITED", "Quotation", quotationId, { total });
+  await logAudit(user.id, "QUOTATION_EDITED", "Quotation", quotationId, { total: totals.total });
 
   redirect(`/quotations/${quotationId}`);
 }
@@ -427,7 +445,17 @@ export async function updateQuotationForCustomerAction(quotationId: string, _pre
     updates.push({ id: row.lineItemId, description: row.description, qty: row.qty, unitPrice });
   }
 
-  const total = Math.max(0, subtotal - discountAmount);
+  // This path's discountAmount comes from the pricing engine's own bulk-
+  // tier/promotion discounts (calculatePricing above) — a different, fully
+  // automatic concept from the manual Discount Type/Value a Staff member
+  // sets (untouched here, left exactly as already stored). Tax/VAT *is*
+  // still a manual rate the quotation may already carry, though, and must
+  // be reapplied to the freshly-recomputed taxable amount rather than
+  // silently dropped from the total — see the Sept 3 pricing correction.
+  const taxable = Math.max(0, subtotal - discountAmount);
+  const taxPct = Number(quotation.taxPct);
+  const taxAmount = Math.round(taxable * (taxPct / 100) * 100) / 100;
+  const total = Math.max(0, taxable + taxAmount);
 
   await prisma.$transaction([
     ...updates.map((u) =>
@@ -439,6 +467,7 @@ export async function updateQuotationForCustomerAction(quotationId: string, _pre
         subtotal: quotation.subtotal != null || discountLabels.length > 0 ? subtotal : undefined,
         discountAmount,
         discountLabel: discountLabels.length > 0 ? [...new Set(discountLabels)].join(" + ") : null,
+        taxAmount,
         total,
         notes: notes !== undefined ? notes : quotation.notes,
       },

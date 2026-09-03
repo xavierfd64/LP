@@ -3,9 +3,10 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { DocumentShell, DocumentField, DocumentSection } from "@/components/documents/document-shell";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
+import { DocumentTotals } from "@/components/documents/document-totals";
 
 export default async function JobOrderPrintPage({ params }: PageProps<"/job-orders/[id]/print">) {
   const { id } = await params;
@@ -73,6 +74,18 @@ export default async function JobOrderPrintPage({ params }: PageProps<"/job-orde
           <p className="text-sm text-slate-600">Quantity: {jo.quantity}</p>
         </div>
       </DocumentSection>
+
+      {jo.order.subtotal != null && (
+        <DocumentSection title="Pricing (from Order)">
+          <DocumentTotals
+            subtotal={Number(jo.order.subtotal)}
+            discount={Number(jo.order.discountAmount) > 0 ? Number(jo.order.discountAmount) : undefined}
+            discountLabel={jo.order.discountLabel}
+            rows={Number(jo.order.taxAmount) > 0 ? [{ label: `Tax / VAT (${Number(jo.order.taxPct)}%)`, value: formatCurrency(Number(jo.order.taxAmount)) }] : undefined}
+            grandTotal={Number(jo.order.totalAmount)}
+          />
+        </DocumentSection>
+      )}
 
       <DocumentSection title="Description">
         <p className="text-sm whitespace-pre-wrap text-slate-700">{jo.description || "—"}</p>

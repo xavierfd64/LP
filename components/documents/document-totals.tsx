@@ -3,12 +3,15 @@ import { cn, formatCurrency } from "@/lib/utils";
 export function DocumentTotals({
   subtotal,
   discount,
+  /** e.g. "Discount (10%)" for a percentage discount, or plain "Discount" for a fixed peso amount — see lib/pricing-totals.ts's discountLabel. Falls back to a plain "Discount" label if omitted, matching the prior behavior. */
+  discountLabel,
   rows,
   grandTotalLabel = "Grand Total",
   grandTotal,
 }: {
   subtotal: number;
   discount?: number;
+  discountLabel?: string | null;
   /** Extra rows between the discount line and the grand total — e.g. an Invoice's Amount Paid / Outstanding Balance. */
   rows?: { label: string; value: string; emphasize?: boolean }[];
   grandTotalLabel?: string;
@@ -22,7 +25,7 @@ export function DocumentTotals({
       </div>
       {Boolean(discount) && (
         <div className="flex justify-between text-sm text-slate-600">
-          <span>Discount</span>
+          <span>{discountLabel || "Discount"}</span>
           <span className="tabular-nums">-{formatCurrency(discount!)}</span>
         </div>
       )}

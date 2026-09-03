@@ -37,7 +37,7 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
   const outstanding = Math.max(total - amountPaid, 0);
   const paymentStatus = amountPaid <= 0 ? "UNPAID" : amountPaid >= total ? "PAID" : "PARTIALLY_PAID";
 
-  // An Order's priced breakdown lives on its linked Quotation, if any — a
+  // An Order's line-item detail lives on its linked Quotation, if any — a
   // walk-in order can be created without one, so fall back to a single
   // summary line derived from the order's own total (the only figure that's
   // always known) rather than leaving the items table empty.
@@ -52,7 +52,16 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
   } else {
     items = [{ label: `Order ${order.orderNumber}`, type: order.jobOrders[0]?.productType, qty: 1, unitPrice: total }];
   }
-  const subtotal = items.reduce((sum, i) => sum + i.qty * i.unitPrice, 0);
+  // Pricing breakdown (Sept 3 correction) — an Order created before this
+  // fix, or one with no discount/tax at all, has subtotal == null; falling
+  // back to the line-item sum (or the bare total, matching the fallback
+  // items array above) keeps this page working exactly as before for
+  // those. Orders that DO have a recorded breakdown now show it correctly
+  // instead of a subtotal that silently didn't reconcile with the grand
+  // total whenever a discount or tax had actually been applied.
+  const subtotal = order.subtotal != null ? Number(order.subtotal) : items.reduce((sum, i) => sum + i.qty * i.unitPrice, 0);
+  const discountAmount = Number(order.discountAmount);
+  const taxAmount = Number(order.taxAmount);
 
   const contact = order.customer.email ?? order.customer.contactNumber ?? order.customer.user?.email ?? order.customer.user?.phone ?? null;
   // Unified document identity — this app has no separate persisted
@@ -83,9 +92,12 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
 
       <DocumentTotals
         subtotal={subtotal}
+        discount={discountAmount > 0 ? discountAmount : undefined}
+        discountLabel={order.discountLabel}
         grandTotal={total}
         grandTotalLabel="Total Amount"
         rows={[
+          ...(taxAmount > 0 ? [{ label: `Tax / VAT (${Number(order.taxPct)}%)`, value: formatCurrency(taxAmount) }] : []),
           { label: "Amount Paid", value: formatCurrency(amountPaid) },
           { label: "Outstanding Balance", value: formatCurrency(outstanding), emphasize: outstanding > 0 },
         ]}

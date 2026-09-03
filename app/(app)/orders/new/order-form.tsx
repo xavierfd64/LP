@@ -16,6 +16,7 @@ import { LineItemsEditor, lineItemAmount, emptyLineItem, type LineItem } from ".
 import { LineItemsView, type ViewLineItem } from "@/components/documents/line-items-view";
 import { TotalsPanel } from "@/components/documents/editor-shell";
 import { formatCurrency } from "@/lib/utils";
+import { computeTotals, type DiscountType } from "@/lib/pricing-totals";
 
 type Source = "NEW" | "FROM_QUOTATION";
 
@@ -49,8 +50,11 @@ export function OrderForm({
 
   const [manualCustomer, setManualCustomer] = useState<CustomerSearchResult | null>(null);
   const [items, setItems] = useState<LineItem[]>([{ ...emptyLineItem }]);
-  const [discountPct, setDiscountPct] = useState(0);
-  const [taxPct, setTaxPct] = useState(12);
+  const [discountType, setDiscountType] = useState<DiscountType>("PERCENTAGE");
+  const [discountValue, setDiscountValue] = useState(0);
+  // Tax/VAT correction: was silently defaulting to 12 — new orders now
+  // default to 0% like every other pricing form in this app.
+  const [taxPct, setTaxPct] = useState(0);
 
   const [termType, setTermType] = useState<"STANDARD_PARTIAL" | "APPROVED_TERMS">("STANDARD_PARTIAL");
 
@@ -80,9 +84,10 @@ export function OrderForm({
   }, [pickedQuotation, lockedFromUrl]);
 
   const manualSubtotal = items.reduce((sum, li) => sum + lineItemAmount(li), 0);
-  const manualDiscountAmount = (manualSubtotal * (Number(discountPct) || 0)) / 100;
-  const manualTaxAmount = (manualSubtotal - manualDiscountAmount) * ((Number(taxPct) || 0) / 100);
-  const manualGrandTotal = manualSubtotal - manualDiscountAmount + manualTaxAmount;
+  const manualTotals = computeTotals({ subtotal: manualSubtotal, discountType, discountValue, taxPct });
+  const manualDiscountAmount = manualTotals.discountAmount;
+  const manualTaxAmount = manualTotals.taxAmount;
+  const manualGrandTotal = manualTotals.total;
 
   const effectiveCustomer = source === "FROM_QUOTATION" ? quotationCustomer : manualCustomer;
   const effectiveTotal = source === "FROM_QUOTATION" ? (pickedQuotation ? Number(pickedQuotation.total) : (defaultTotal ?? 0)) : manualGrandTotal;
@@ -92,7 +97,14 @@ export function OrderForm({
     <form action={formAction} className="space-y-5">
       {error && <Alert tone="error">{error}</Alert>}
       <input type="hidden" name="customerId" value={effectiveCustomer?.id ?? ""} />
-      <input type="hidden" name="totalAmount" value={effectiveTotal} />
+      {source === "NEW" && (
+        <>
+          <input type="hidden" name="subtotal" value={manualSubtotal} />
+          <input type="hidden" name="discountType" value={discountType} />
+          <input type="hidden" name="discountValue" value={discountValue} />
+          <input type="hidden" name="taxPct" value={taxPct} />
+        </>
+      )}
       {effectiveQuotationId && <input type="hidden" name="quotationId" value={effectiveQuotationId} />}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -175,17 +187,39 @@ export function OrderForm({
             <TotalsPanel
               rows={[
                 { label: "Subtotal", value: formatCurrency(manualSubtotal) },
-                ...(manualDiscountAmount > 0 ? [{ label: `Discount (${discountPct}%)`, value: formatCurrency(manualDiscountAmount), negative: true }] : []),
+                ...(manualDiscountAmount > 0 ? [{ label: manualTotals.discountLabel ?? "Discount", value: formatCurrency(manualDiscountAmount), negative: true }] : []),
                 ...(manualTaxAmount > 0 ? [{ label: `Tax / VAT (${taxPct}%)`, value: formatCurrency(manualTaxAmount) }] : []),
               ]}
               total={{ label: "Grand Total", value: formatCurrency(manualGrandTotal) }}
             />
             <div className="ml-auto grid w-full grid-cols-2 gap-3 sm:w-80">
               <div>
-                <Label htmlFor="discountPctOrder">Discount (%)</Label>
-                <Input id="discountPctOrder" type="number" min={0} max={100} step="0.01" value={discountPct} onChange={(e) => setDiscountPct(Number(e.target.value))} />
+                <Label htmlFor="discountTypeOrder">Discount Type</Label>
+                <Select
+                  id="discountTypeOrder"
+                  value={discountType}
+                  onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+                >
+                  <option value="PERCENTAGE">Percentage</option>
+                  <option value="FIXED">Fixed Amount</option>
+                </Select>
               </div>
               <div>
+                <Label htmlFor="discountValueOrder">{discountType === "FIXED" ? "Discount (₱)" : "Discount (%)"}</Label>
+                <Input
+                  id="discountValueOrder"
+                  type="number"
+                  min={0}
+                  max={discountType === "PERCENTAGE" ? 100 : undefined}
+                  step="0.01"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(Number(e.target.value))}
+                />
+                {discountType === "FIXED" && discountValue > manualSubtotal && manualSubtotal > 0 && (
+                  <p className="mt-1 text-xs text-amber-600">Capped to the subtotal ({formatCurrency(manualSubtotal)}).</p>
+                )}
+              </div>
+              <div className="col-span-2">
                 <Label htmlFor="taxPctOrder">Tax / VAT (%)</Label>
                 <Input id="taxPctOrder" type="number" min={0} max={100} step="0.01" value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))} />
               </div>
