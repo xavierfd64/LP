@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Permission } from "@/lib/permissions";
 import { updateStaffPermissionsAction } from "@/app/actions/admin-users";
 import { StaffPermissionsForm } from "./staff-permissions-form";
+import { StaffHeaderActions } from "./staff-header-actions";
 
 export default async function StaffPermissionsDetailPage({ params }: PageProps<"/admin/staff-permissions/[userId]">) {
   await requireRole(["ADMIN"]);
@@ -27,12 +28,16 @@ export default async function StaffPermissionsDetailPage({ params }: PageProps<"
         <Link href="/admin/staff-permissions" className="text-sm text-slate-500 underline">
           ← Staff & Permissions
         </Link>
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">{staff.name}</h1>
-          <Badge tone="slate">Staff</Badge>
-          <Badge tone={staff.active ? "green" : "red"}>{staff.active ? "Active" : "Deactivated"}</Badge>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-slate-900">{staff.name}</h1>
+            <Badge tone="slate">Staff</Badge>
+            <Badge tone={staff.active ? "green" : "red"}>{staff.active ? "Active" : "Deactivated"}</Badge>
+          </div>
+          <StaffHeaderActions staffId={staff.id} name={staff.name} email={staff.email} phone={staff.phone} active={staff.active} />
         </div>
         <p className="text-sm text-slate-500">{staff.email}</p>
+        {staff.phone && <p className="text-sm text-slate-500">{staff.phone}</p>}
       </div>
 
       <Card>
