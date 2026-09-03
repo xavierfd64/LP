@@ -6,7 +6,7 @@ import { getCurrentCustomer } from "@/lib/current-customer";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/badge";
+import { StatusBadge, Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
@@ -23,6 +23,7 @@ import { MessageThread } from "@/components/messaging/message-thread";
 import { getOrCreateConversation } from "@/lib/conversations";
 import { getConversationMessagesAction } from "@/app/actions/messages";
 import { RecordPaymentDialog } from "./record-payment-dialog";
+import { RecordOldPaymentDialog } from "./record-old-payment-dialog";
 import { TransactionBrandHeader } from "@/components/branding/transaction-brand-header";
 import { TrackingLinkManager } from "./tracking-link-manager";
 import { findActiveTrackingLink } from "@/lib/order-tracking";
@@ -48,7 +49,7 @@ export default async function OrderDetailPage({
       customer: true,
       quotation: { include: { lineItems: { include: { service: true } } } },
       jobOrders: { include: { workflowTemplate: true }, orderBy: { joNumber: "asc" } },
-      payments: { orderBy: { createdAt: "desc" } },
+      payments: { include: { recordedBy: true }, orderBy: { paymentDate: "desc" } },
       fulfillments: { orderBy: { createdAt: "desc" }, include: { jobOrder: true } },
       cancelledBy: true,
     },
@@ -78,6 +79,7 @@ export default async function OrderDetailPage({
   const canShare = isAdmin || !isStaffLike || (await can(user, "DOCUMENT_SHARE"));
   const canViewCost = isStaffLike && (isAdmin || (await can(user, "COST_VIEW")));
   const canCancel = isAdmin || (await can(user, "ORDER_CANCEL"));
+  const canRecordPaymentHistorical = isAdmin || (await can(user, "PAYMENT_BACKDATE"));
 
   // Cost snapshot (Aug 20 4th update, Part D item 26/34) — an Order created
   // after this update stores the production cost it was quoted at, taken
@@ -174,6 +176,9 @@ export default async function OrderDetailPage({
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={order.status} />
+          {order.isHistorical && (
+            <Badge tone="yellow">{order.historicalOrderType === "ALREADY_RELEASED" ? "Released (Historical)" : "Historical"}</Badge>
+          )}
           <Link href={`/orders/${order.id}/invoice`} target="_blank">
             <Button type="button" variant="outline" size="sm">
               View Invoice
@@ -183,8 +188,22 @@ export default async function OrderDetailPage({
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
-      {justCreated && isStaffLike && (
+      {justCreated && isStaffLike && !order.isHistorical && (
         <Alert tone="success">After creating the order, you can generate a Job Order and proceed with production.</Alert>
+      )}
+      {justCreated && isStaffLike && order.isHistorical && (
+        <Alert tone="success">
+          {order.historicalOrderType === "ALREADY_RELEASED"
+            ? "This historical order was recorded as already released — it will not enter production. Use Record Old Payment to log any payments already collected."
+            : "This historical order was recorded and will go through the normal production workflow — use Add Job Order below when ready."}
+        </Alert>
+      )}
+      {isStaffLike && order.isHistorical && (
+        <Alert tone="info">
+          Encoded via Historical Transaction Encoding — Order Date {formatDate(order.orderDate)}
+          {order.historicalOrderType === "ALREADY_RELEASED" && order.completedAt ? `, Released ${formatDate(order.completedAt)}` : ""}.
+          {order.historicalNotes ? ` ${order.historicalNotes}` : ""}
+        </Alert>
       )}
 
       {order.status === "CANCELLED" && (
@@ -299,14 +318,27 @@ export default async function OrderDetailPage({
                 <span className="text-yellow-700">Awaiting partial payment</span>
               )}
             </p>
-            {isStaffLike && canRecordPayment && !summary.fullyPaid && order.status !== "CANCELLED" && (
-              <RecordPaymentDialog
-                orderId={order.id}
-                orderNumber={order.orderNumber}
-                customerName={order.customer.name}
-                balanceDue={summary.total - summary.confirmed}
-              />
-            )}
+            <div className="flex flex-wrap gap-2">
+              {isStaffLike && canRecordPayment && !summary.fullyPaid && order.status !== "CANCELLED" && (
+                <RecordPaymentDialog
+                  orderId={order.id}
+                  orderNumber={order.orderNumber}
+                  customerName={order.customer.name}
+                  balanceDue={summary.total - summary.confirmed}
+                />
+              )}
+              {isStaffLike && canRecordPaymentHistorical && !summary.fullyPaid && order.status !== "CANCELLED" && (
+                <RecordOldPaymentDialog
+                  defaultOrder={{
+                    id: order.id,
+                    orderNumber: order.orderNumber,
+                    customerName: order.customer.name,
+                    customerPhone: order.customer.contactNumber,
+                    quoteNumber: order.quotation?.quoteNumber ?? null,
+                  }}
+                />
+              )}
+            </div>
             <div className="pt-2 flex flex-col gap-2 items-start">
               {!isStaffLike && !summary.fullyPaid && order.status !== "CANCELLED" && <PaymentProofForm orderId={order.id} />}
               {!isStaffLike && !summary.fullyPaid && order.status !== "CANCELLED" && (
@@ -340,21 +372,31 @@ export default async function OrderDetailPage({
           <Table>
             <THead>
               <TR>
-                <TH>Date</TH>
+                <TH>Payment Date</TH>
                 <TH>Amount</TH>
                 <TH>Method</TH>
                 <TH>Status</TH>
+                <TH>Encoded At / By</TH>
                 <TH>Proof</TH>
               </TR>
             </THead>
             <TBody>
               {order.payments.map((p) => (
                 <TR key={p.id}>
-                  <TD>{formatDateTime(p.createdAt)}</TD>
+                  <TD>
+                    <div className="flex items-center gap-1.5">
+                      {formatDate(p.paymentDate)}
+                      {p.isHistorical && <Badge tone="yellow">Historical</Badge>}
+                    </div>
+                  </TD>
                   <TD>{formatCurrency(p.amount.toString())}</TD>
                   <TD>{p.method.replace(/_/g, " ")}</TD>
                   <TD>
                     <StatusBadge status={p.status} />
+                  </TD>
+                  <TD className="text-xs text-slate-500" suppressHydrationWarning>
+                    {formatDateTime(p.createdAt)}
+                    {p.recordedBy ? ` · ${p.recordedBy.name}` : ""}
                   </TD>
                   <TD>
                     {p.proofFilePath ? (
@@ -375,7 +417,7 @@ export default async function OrderDetailPage({
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Job Orders</CardTitle>
-          {isStaffLike && canModifyOrder && order.status !== "CANCELLED" && (
+          {isStaffLike && canModifyOrder && order.status !== "CANCELLED" && order.historicalOrderType !== "ALREADY_RELEASED" && (
             <AddJobOrderForm
               orderId={order.id}
               templates={templates}
@@ -436,7 +478,15 @@ export default async function OrderDetailPage({
             })}
           </TBody>
         </Table>
-        {order.jobOrders.length === 0 && <EmptyState label="No job orders yet." />}
+        {order.jobOrders.length === 0 && (
+          <EmptyState
+            label={
+              order.historicalOrderType === "ALREADY_RELEASED"
+                ? "This historical order was already released before being encoded — it is not eligible for production."
+                : "No job orders yet."
+            }
+          />
+        )}
       </Card>
 
       {order.fulfillments.length > 0 && (

@@ -35,6 +35,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
   const isStaffLike = user.role === "STAFF" || user.role === "ADMIN";
   if (user.role === "STAFF" && !(await can(user, "ORDER_VIEW"))) redirect("/dashboard");
   const canCreate = user.role === "ADMIN" || (await can(user, "ORDER_CREATE"));
+  const canEncodeHistorical = user.role === "ADMIN" || (await can(user, "ORDER_BACKDATE"));
 
   const sp = await searchParams;
 
@@ -47,7 +48,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
     const orders = await prisma.order.findMany({
       where: { customerId: customer.id },
       include: { customer: true, jobOrders: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: { orderDate: "desc" },
     });
 
     return (
@@ -81,7 +82,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
                   <TD>
                     <StatusBadge status={o.status} />
                   </TD>
-                  <TD>{formatDate(o.createdAt)}</TD>
+                  <TD>{formatDate(o.orderDate)}</TD>
                   <TD className="flex items-center gap-3">
                     <Link href={`/orders/${o.id}`} className="text-sm font-medium text-slate-900 underline">
                       View
@@ -120,7 +121,9 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
     jobOrdersCount: o.jobOrders.length,
     total: o.totalAmount.toString(),
     status: o.status,
-    createdAt: o.createdAt.toISOString(),
+    orderDate: o.orderDate.toISOString(),
+    isHistorical: o.isHistorical,
+    historicalOrderType: o.historicalOrderType,
   }));
 
   return (
@@ -130,7 +133,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
           <h1 className="text-2xl font-bold text-slate-900">Orders</h1>
           <p className="text-sm text-slate-500">Track job orders, payments, and fulfillment.</p>
         </div>
-        {canCreate && <NewOrderTrigger />}
+        {canCreate && <NewOrderTrigger canEncodeHistorical={canEncodeHistorical} />}
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

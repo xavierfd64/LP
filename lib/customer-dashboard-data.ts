@@ -106,8 +106,8 @@ export type CustomerTransactionRow = {
 export async function getCustomerRecentTransactions(customerId: string, limit = 8): Promise<CustomerTransactionRow[]> {
   const [quotations, orders, payments] = await Promise.all([
     prisma.quotation.findMany({ where: { customerId }, orderBy: { createdAt: "desc" }, take: limit }),
-    prisma.order.findMany({ where: { customerId }, orderBy: { createdAt: "desc" }, take: limit }),
-    prisma.payment.findMany({ where: { order: { customerId } }, include: { order: true }, orderBy: { createdAt: "desc" }, take: limit }),
+    prisma.order.findMany({ where: { customerId }, orderBy: { orderDate: "desc" }, take: limit }),
+    prisma.payment.findMany({ where: { order: { customerId } }, include: { order: true }, orderBy: { paymentDate: "desc" }, take: limit }),
   ]);
 
   const rows: CustomerTransactionRow[] = [
@@ -122,7 +122,7 @@ export async function getCustomerRecentTransactions(customerId: string, limit = 
     ...orders.map((o) => ({
       type: "Invoice" as const,
       reference: o.orderNumber,
-      date: o.createdAt,
+      date: o.orderDate,
       amount: Number(o.totalAmount),
       status: o.status,
       href: `/orders/${o.id}`,
@@ -130,7 +130,7 @@ export async function getCustomerRecentTransactions(customerId: string, limit = 
     ...payments.map((p) => ({
       type: "Payment" as const,
       reference: p.order.orderNumber,
-      date: p.createdAt,
+      date: p.paymentDate,
       amount: Number(p.amount),
       status: p.status,
       href: `/orders/${p.orderId}`,

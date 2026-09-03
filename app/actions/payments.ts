@@ -55,7 +55,11 @@ type CreatePaymentResult = { ok: true; orderId: string; paymentId: string } | { 
  * while recordPaymentInPlaceAction does not, for callers (a Dashboard
  * popup) that must stay exactly where they are.
  */
-async function createPaymentRecord(formData: FormData, userId: string): Promise<CreatePaymentResult> {
+async function createPaymentRecord(
+  formData: FormData,
+  userId: string,
+  options?: { isHistorical?: boolean }
+): Promise<CreatePaymentResult> {
   const parsed = recordPaymentSchema.safeParse({
     orderId: formData.get("orderId"),
     amount: formData.get("amount"),
@@ -67,6 +71,53 @@ async function createPaymentRecord(formData: FormData, userId: string): Promise<
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
   const { orderId, amount, method, referenceNumber, paymentDate, notes } = parsed.data;
+  const isHistorical = options?.isHistorical ?? false;
+
+  // Historical Transaction Encoding (Sept 3) — Record Old Payment is a
+  // real payment through the exact same createPaymentRecord every other
+  // path uses (Part 12: "must behave like a normal payment"), just with
+  // two extra guardrails that only apply to this controlled path, so
+  // ordinary Record Payment behavior is completely unchanged.
+  let historicalPaymentDate: Date | undefined;
+  if (isHistorical) {
+    if (!paymentDate) return { ok: false, error: "Actual Payment Date is required for a historical payment." };
+    historicalPaymentDate = new Date(paymentDate);
+    if (Number.isNaN(historicalPaymentDate.getTime())) return { ok: false, error: "Enter a valid Actual Payment Date." };
+    if (historicalPaymentDate.getTime() > Date.now()) return { ok: false, error: "Actual Payment Date cannot be in the future." };
+
+    // Overpayment protection (Part 16) — the existing system has no
+    // credit/overpayment concept for a staff-recorded payment (confirmed:
+    // recordPaymentAction has never validated this), so a historical
+    // payment must not be allowed to silently push a paid total past the
+    // order's grand total. Same remaining-balance check and epsilon
+    // already used by the customer proof-upload path just above.
+    const preSummary = await paymentSummary(orderId);
+    const balanceDue = preSummary.total - preSummary.confirmed;
+    if (balanceDue <= 0.01) return { ok: false, error: "This order has no remaining balance — no payment is needed." };
+    if (amount > balanceDue + 0.01) {
+      return {
+        ok: false,
+        error: `This payment (₱${amount.toFixed(2)}) would exceed the order's outstanding balance (₱${balanceDue.toFixed(2)}). Reduce the amount or verify the order total.`,
+      };
+    }
+
+    // Duplicate-submission protection (Part 26), content-based — the same
+    // approach as encodeHistoricalOrderAction: if this exact historical
+    // payment was already recorded for this order in the last couple of
+    // minutes, treat a resubmit as the retry it almost certainly is
+    // instead of creating a second payment.
+    const recentDuplicate = await prisma.payment.findFirst({
+      where: {
+        orderId,
+        amount,
+        isHistorical: true,
+        paymentDate: historicalPaymentDate,
+        createdAt: { gte: new Date(Date.now() - 2 * 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (recentDuplicate) return { ok: true, orderId, paymentId: recentDuplicate.id };
+  }
 
   // Optional — staff recording a payment they've already verified doesn't
   // require proof the way a customer's self-reported uploadPaymentProofAction
@@ -91,18 +142,20 @@ async function createPaymentRecord(formData: FormData, userId: string): Promise<
       amount,
       method,
       referenceNumber,
-      paymentDate: paymentDate ? new Date(paymentDate) : undefined,
+      paymentDate: historicalPaymentDate ?? (paymentDate ? new Date(paymentDate) : undefined),
       notes,
       status: "CONFIRMED",
       proofFilePath,
       recordedById: userId,
+      isHistorical,
     },
   });
 
-  await logAudit(userId, "PAYMENT_RECORDED", "Payment", payment.id, {
+  await logAudit(userId, isHistorical ? "PAYMENT_HISTORICAL_RECORDED" : "PAYMENT_RECORDED", "Payment", payment.id, {
     orderId,
     amount,
     status: "CONFIRMED",
+    paymentDate: (historicalPaymentDate ?? payment.paymentDate).toISOString(),
   });
   await autoCreateJobOrderIfPaymentSatisfied(orderId, userId);
 
@@ -136,6 +189,26 @@ export async function recordPaymentAction(_prevState: string | undefined, formDa
 export async function recordPaymentInPlaceAction(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const user = await requirePermission("PAYMENT_RECORD");
   const result = await createPaymentRecord(formData, user.id);
+  return result.ok ? undefined : result.error;
+}
+
+/**
+ * Historical Transaction Encoding (Sept 3) — Record Old Payment. Gated by
+ * its own PAYMENT_BACKDATE permission (deliberately independent of
+ * PAYMENT_RECORD — an Admin may want to grant "can backfill old payments
+ * during a data cleanup" without also granting ordinary day-to-day payment
+ * recording, or vice versa). Everything else — the Payment row itself,
+ * balance math, auto-Job-Order-on-payment-satisfied — is the exact same
+ * createPaymentRecord core every other payment path uses (Part 12: this
+ * must be a real payment, never a special record excluded from normal
+ * accounting); the only different behavior is the extra validation
+ * (required, non-future Actual Payment Date; overpayment protection;
+ * content-based duplicate protection) that applies specifically to this
+ * controlled path — see createPaymentRecord's isHistorical branch.
+ */
+export async function recordHistoricalPaymentAction(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
+  const user = await requirePermission("PAYMENT_BACKDATE");
+  const result = await createPaymentRecord(formData, user.id, { isHistorical: true });
   return result.ok ? undefined : result.error;
 }
 

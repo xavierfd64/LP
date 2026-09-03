@@ -8,7 +8,7 @@ import { getBusinessSettings } from "@/lib/business-settings";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
-import { StatusBadge } from "@/components/ui/badge";
+import { StatusBadge, Badge } from "@/components/ui/badge";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { Button } from "@/components/ui/button";
@@ -237,6 +237,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
   const canVerify = isAdmin || (await can(user, "PAYMENT_VERIFY"));
   const canReject = isAdmin || (await can(user, "PAYMENT_REJECT"));
   const canRecord = isAdmin || (await can(user, "PAYMENT_RECORD"));
+  const canRecordHistorical = isAdmin || (await can(user, "PAYMENT_BACKDATE"));
 
   const page = Math.max(1, Number(typeof sp.page === "string" ? sp.page : "1") || 1);
   const q = typeof sp.q === "string" ? sp.q : "";
@@ -256,7 +257,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
     // full order list used to be loaded unconditionally for the old <Select>
     // dropdown; it's now fetched on demand, server-side, by the searchable
     // OrderCombobox (see app/actions/order-search.ts) instead.
-    canRecord && preselectedOrderId
+    (canRecord || canRecordHistorical) && preselectedOrderId
       ? prisma.order.findUnique({ where: { id: preselectedOrderId }, include: { customer: true, quotation: true } })
       : Promise.resolve(null),
     getBusinessSettings(),
@@ -283,7 +284,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
           <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
           <p className="text-sm text-slate-500">Manage and track all customer payments.</p>
         </div>
-        {canRecord && <RecordPaymentModal defaultOrder={defaultOrder} />}
+        <RecordPaymentModal defaultOrder={defaultOrder} canRecord={canRecord} canRecordHistorical={canRecordHistorical} />
       </div>
 
       {errorMsg && <Alert tone="error">{errorMsg}</Alert>}
@@ -337,7 +338,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
                 <TH>Amount</TH>
                 <TH>Method</TH>
                 <TH>Status</TH>
-                <TH>Date</TH>
+                <TH>Payment Date</TH>
                 <TH>Proof</TH>
                 <TH>Actions</TH>
               </TR>
@@ -359,7 +360,12 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
                     <TD>
                       <StatusBadge status={p.status} />
                     </TD>
-                    <TD>{formatDateTime(p.createdAt)}</TD>
+                    <TD>
+                      <div className="flex items-center gap-1.5">
+                        {formatDateTime(p.paymentDate)}
+                        {p.isHistorical && <Badge tone="yellow">Historical</Badge>}
+                      </div>
+                    </TD>
                     <TD>
                       {p.proofFilePath ? (
                         <a href={p.proofFilePath} target="_blank" className="text-sm underline text-slate-600">

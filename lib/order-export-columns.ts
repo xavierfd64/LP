@@ -7,7 +7,7 @@ export const ORDER_EXPORT_COLUMNS = [
   { key: "jobOrders", label: "Job Orders" },
   { key: "total", label: "Total" },
   { key: "status", label: "Status" },
-  { key: "createdAt", label: "Created" },
+  { key: "orderDate", label: "Order Date" },
 ] as const;
 export type OrderExportColumnKey = (typeof ORDER_EXPORT_COLUMNS)[number]["key"];
 export const DEFAULT_ORDER_EXPORT_COLUMNS: OrderExportColumnKey[] = ORDER_EXPORT_COLUMNS.map((c) => c.key);

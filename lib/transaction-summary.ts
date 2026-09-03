@@ -105,6 +105,11 @@ export type TransactionSummaryMetrics = {
 export async function computeTransactionSummary(range: PeriodRange): Promise<TransactionSummaryMetrics> {
   const { start, end } = range;
   const createdInRange = { createdAt: { gte: start, lt: end } };
+  // Orders are scoped by their real business date (orderDate), not createdAt —
+  // a historical order encoded today but dated back in a prior period must
+  // fall into that prior period's Transaction Summary, not today's. See
+  // Order.orderDate's doc comment in prisma/schema.prisma.
+  const orderDateInRange = { orderDate: { gte: start, lt: end } };
 
   const [
     totalInquiries,
@@ -121,7 +126,7 @@ export async function computeTransactionSummary(range: PeriodRange): Promise<Tra
     prisma.inquiry.count({ where: createdInRange }),
     prisma.quotation.count({ where: createdInRange }),
     prisma.order.findMany({
-      where: createdInRange,
+      where: orderDateInRange,
       include: { payments: { where: { status: "CONFIRMED" } } },
     }),
     prisma.payment.findMany({
@@ -136,7 +141,7 @@ export async function computeTransactionSummary(range: PeriodRange): Promise<Tra
     }),
     prisma.order.count({ where: { status: "CANCELLED", updatedAt: { gte: start, lt: end } } }),
     prisma.order.count({ where: { status: "COMPLETED", completedAt: { gte: start, lt: end } } }),
-    prisma.order.groupBy({ by: ["status"], where: createdInRange, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["status"], where: orderDateInRange, _count: { _all: true } }),
     prisma.payment.groupBy({
       by: ["method"],
       where: { status: "CONFIRMED", paymentDate: { gte: start, lt: end } },

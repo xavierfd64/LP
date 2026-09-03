@@ -39,8 +39,8 @@ function resolveCell(key: OrderExportColumnKey, r: OrderExportRow): string | num
       return Math.round(Number(r.totalAmount) * 100) / 100;
     case "status":
       return r.status;
-    case "createdAt":
-      return formatDate(r.createdAt) ?? "";
+    case "orderDate":
+      return formatDate(r.orderDate) ?? "";
   }
 }
 

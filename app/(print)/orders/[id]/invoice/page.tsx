@@ -74,7 +74,7 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
     <DocumentShell title="Invoice" documentNumber={invoiceNumber} qrPath={`/orders/${order.id}`}>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DocumentField label="Invoice Number" value={invoiceNumber} />
-        <DocumentField label="Invoice Date" value={formatDate(order.createdAt)} />
+        <DocumentField label="Invoice Date" value={formatDate(order.orderDate)} />
         <DocumentField label="Due Date" value={null} />
         <DocumentField label="Payment Status" value={<DocumentStatusBadge status={paymentStatus} />} />
       </div>

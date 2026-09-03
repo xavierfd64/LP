@@ -17,7 +17,12 @@ export function buildOrderWhere({ q, status, period }: OrderSearchFilters): Pris
   if (status) where.status = status;
   if (period && period !== "all") {
     const { start, end } = resolvePeriodRange({ type: period });
-    where.createdAt = { gte: start, lt: end };
+    // orderDate (the order's real business date), not createdAt (when the
+    // row was inserted) — an order encoded today via Historical Transaction
+    // Encoding but dated back in July must filter/sort into July, not
+    // "today", everywhere this list is used. See Order.orderDate's doc
+    // comment in prisma/schema.prisma.
+    where.orderDate = { gte: start, lt: end };
   }
   if (q && q.trim()) {
     const query = q.trim();
@@ -42,7 +47,7 @@ export async function getPaginatedOrders(filters: OrderListFilters) {
     prisma.order.findMany({
       where,
       include: { customer: true, jobOrders: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: { orderDate: "desc" },
       skip,
       take: pageSize,
     }),
@@ -59,7 +64,8 @@ export async function getPaginatedOrders(filters: OrderListFilters) {
  */
 export async function getOrdersSummary() {
   const { start, end } = resolvePeriodRange({ type: "monthly" });
-  const monthWhere = { createdAt: { gte: start, lt: end } };
+  // orderDate, not createdAt — see buildOrderWhere's comment above.
+  const monthWhere = { orderDate: { gte: start, lt: end } };
   const [total, open, inProduction, completed] = await Promise.all([
     prisma.order.count({ where: { ...monthWhere, status: { not: "CANCELLED" } } }),
     prisma.order.count({ where: { ...monthWhere, status: "OPEN" } }),
@@ -77,7 +83,7 @@ export async function getOrdersForExport(filters: OrderSearchFilters) {
     prisma.order.findMany({
       where,
       include: { customer: true, jobOrders: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: { orderDate: "desc" },
       take: EXPORT_ROW_CAP,
     }),
     prisma.order.count({ where }),

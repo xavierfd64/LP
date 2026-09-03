@@ -26,8 +26,8 @@ function resolveCell(key: OrderExportColumnKey, r: OrderExportRow): string {
       return formatCurrency(r.totalAmount.toString());
     case "status":
       return r.status;
-    case "createdAt":
-      return formatDate(r.createdAt) ?? "—";
+    case "orderDate":
+      return formatDate(r.orderDate) ?? "—";
   }
 }
 

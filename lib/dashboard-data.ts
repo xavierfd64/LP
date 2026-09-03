@@ -158,13 +158,13 @@ export async function getFinancialOverview(period: FinancialPeriod) {
 
   const [payments, orders] = await Promise.all([
     prisma.payment.findMany({ where: { status: "CONFIRMED", paymentDate: { gte: rangeStart } }, select: { paymentDate: true, amount: true } }),
-    prisma.order.findMany({ where: { createdAt: { gte: rangeStart } }, select: { createdAt: true } }),
+    prisma.order.findMany({ where: { orderDate: { gte: rangeStart } }, select: { orderDate: true } }),
   ]);
 
   const data = buckets.map((b) => ({
     month: b.label,
     revenue: payments.filter((p) => p.paymentDate >= b.start && p.paymentDate < b.end).reduce((sum, p) => sum + Number(p.amount), 0),
-    orders: orders.filter((o) => o.createdAt >= b.start && o.createdAt < b.end).length,
+    orders: orders.filter((o) => o.orderDate >= b.start && o.orderDate < b.end).length,
   }));
 
   const totalRevenue = data.reduce((s, d) => s + d.revenue, 0);
@@ -255,7 +255,7 @@ export async function getReceivableDetails(customerId: string): Promise<Receivab
   const orders = await prisma.order.findMany({
     where: { customerId, status: { not: "CANCELLED" } },
     include: { payments: { where: { status: "CONFIRMED" } } },
-    orderBy: { createdAt: "desc" },
+    orderBy: { orderDate: "desc" },
   });
 
   const now = Date.now();
@@ -272,7 +272,7 @@ export async function getReceivableDetails(customerId: string): Promise<Receivab
       id: o.id,
       type: "Invoice",
       reference: o.orderNumber,
-      date: o.createdAt,
+      date: o.orderDate,
       dueDate: o.dueDate,
       total,
       paid,
@@ -419,7 +419,7 @@ export async function getBusinessInsights() {
     prisma.qCResult.groupBy({ by: ["result"], _count: { _all: true } }),
     prisma.inventoryItem.findMany({ select: { currentQty: true, reorderThreshold: true } }).then((items) => items.filter((i) => i.currentQty <= i.reorderThreshold).length),
     prisma.customer.count({ where: { createdAt: { gte: monthStart } } }),
-    prisma.order.findMany({ where: { createdAt: { gte: monthStart } }, select: { customerId: true }, distinct: ["customerId"] }),
+    prisma.order.findMany({ where: { orderDate: { gte: monthStart } }, select: { customerId: true }, distinct: ["customerId"] }),
     prisma.rewardTransaction.aggregate({ where: { type: "EARN", createdAt: { gte: monthStart } }, _sum: { points: true } }),
     prisma.rewardTransaction.aggregate({ where: { type: "REDEEM", createdAt: { gte: monthStart } }, _sum: { points: true } }),
   ]);
@@ -453,13 +453,13 @@ export async function getRevenueTrend6Months() {
 
   const [payments, orders] = await Promise.all([
     prisma.payment.findMany({ where: { status: "CONFIRMED", paymentDate: { gte: rangeStart } }, select: { paymentDate: true, amount: true } }),
-    prisma.order.findMany({ where: { createdAt: { gte: rangeStart } }, select: { createdAt: true } }),
+    prisma.order.findMany({ where: { orderDate: { gte: rangeStart } }, select: { orderDate: true } }),
   ]);
 
   return months.map((m) => ({
     month: m.label,
     revenue: payments.filter((p) => p.paymentDate >= m.start && p.paymentDate < m.end).reduce((sum, p) => sum + Number(p.amount), 0),
-    orders: orders.filter((o) => o.createdAt >= m.start && o.createdAt < m.end).length,
+    orders: orders.filter((o) => o.orderDate >= m.start && o.orderDate < m.end).length,
   }));
 }
 

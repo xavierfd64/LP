@@ -28,8 +28,11 @@ export type OrderDetailResult =
         id: string;
         orderNumber: string;
         status: string;
-        createdAt: string;
+        orderDate: string;
         dueDate: string | null;
+        isHistorical: boolean;
+        historicalOrderType: "PENDING_PRODUCTION" | "ALREADY_RELEASED" | null;
+        historicalNotes: string | null;
         paymentTermType: string;
         customerName: string;
         customerEmail: string | null;
@@ -94,8 +97,11 @@ export async function getOrderDetailAction(id: string): Promise<OrderDetailResul
       id: order.id,
       orderNumber: order.orderNumber,
       status: order.status,
-      createdAt: order.createdAt.toISOString(),
+      orderDate: order.orderDate.toISOString(),
       dueDate: order.dueDate ? order.dueDate.toISOString() : null,
+      isHistorical: order.isHistorical,
+      historicalOrderType: order.historicalOrderType,
+      historicalNotes: order.historicalNotes,
       paymentTermType: order.paymentTermType,
       customerName: order.customer.name,
       customerEmail: order.customer.email,

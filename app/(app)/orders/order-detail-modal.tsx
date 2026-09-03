@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Modal, ModalHeader, ModalBody, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/badge";
+import { StatusBadge, Badge } from "@/components/ui/badge";
 import { InfoField, TotalsPanel } from "@/components/documents/editor-shell";
 import { LineItemsView } from "@/components/documents/line-items-view";
 import { Alert } from "@/components/ui/alert";
 import { RecordPaymentDialog } from "./[id]/record-payment-dialog";
 import { getOrderDetailAction, type OrderDetailResult } from "@/app/actions/order-detail";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 type Detail = Extract<OrderDetailResult, { ok: true }>["data"];
 
@@ -40,7 +40,16 @@ export function OrderDetailModal({ orderId, onClose }: { orderId: string; onClos
     <Modal open onClose={onClose} maxWidthClassName="max-w-3xl">
       <ModalHeader
         title={<>Order Details {detail && <span className="font-normal text-slate-500">{detail.orderNumber}</span>}</>}
-        badge={detail && <StatusBadge status={detail.status} />}
+        badge={
+          detail && (
+            <div className="flex items-center gap-1.5">
+              <StatusBadge status={detail.status} />
+              {detail.isHistorical && (
+                <Badge tone="yellow">{detail.historicalOrderType === "ALREADY_RELEASED" ? "Released (Historical)" : "Historical"}</Badge>
+              )}
+            </div>
+          )
+        }
         onClose={onClose}
       />
       <ModalBody>
@@ -52,8 +61,18 @@ export function OrderDetailModal({ orderId, onClose }: { orderId: string; onClos
               <InfoField label="Customer" value={detail.customerName} />
               <InfoField label="Payment Terms" value={detail.paymentTermType.replace(/_/g, " ")} />
               <InfoField label="Due Date" value={detail.dueDate ? formatDate(detail.dueDate) : "—"} />
-              <InfoField label="Created" value={formatDateTime(detail.createdAt)} />
+              <InfoField label="Order Date" value={formatDate(detail.orderDate)} />
             </div>
+
+            {detail.isHistorical && (
+              <Alert tone="info">
+                This order was encoded via Historical Transaction Encoding
+                {detail.historicalOrderType === "ALREADY_RELEASED"
+                  ? " as already released — it did not go through production."
+                  : " — it still goes through the normal production workflow."}
+                {detail.historicalNotes && <span className="block mt-1 text-slate-600">{detail.historicalNotes}</span>}
+              </Alert>
+            )}
 
             <section className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-brand-700">Order Items</h3>

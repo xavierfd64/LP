@@ -82,6 +82,21 @@ enum OrderStatus {
   CANCELLED
 }
 
+/**
+ * Historical Transaction Encoding (Sept 3) — which of the two controlled
+ * paths an order encoded after the fact actually took. PENDING_PRODUCTION
+ * means the work still has to go through the normal Job Order/production
+ * lifecycle (nothing about production changes for it); ALREADY_RELEASED
+ * means it was already completed and released before it was entered here,
+ * so it is created directly as COMPLETED and never creates a Job Order —
+ * see Order.isHistorical's doc comment for the full rationale. Null for
+ * every ordinary order, which is not historical at all.
+ */
+enum HistoricalOrderType {
+  PENDING_PRODUCTION
+  ALREADY_RELEASED
+}
+
 enum JobOrderStatus {
   ON_HOLD
   IN_PROGRESS
@@ -213,6 +228,7 @@ enum Permission {
   ORDER_HANDLE_MODIFICATION
   ORDER_UPDATE_STATUS
   ORDER_CANCEL
+  ORDER_BACKDATE
 
   PAYMENT_VIEW
   PAYMENT_RECORD
@@ -220,6 +236,7 @@ enum Permission {
   PAYMENT_REJECT
   PAYMENT_EDIT
   PAYMENT_REFUND
+  PAYMENT_BACKDATE
 
   PRODUCTION_VIEW
   PRODUCTION_UPDATE_STAGE
@@ -619,6 +636,13 @@ model Order {
   // 22 3rd update New Order form) — purely informational, never read by
   // any pricing/production/payment logic.
   notes            String?
+  // Historical Transaction Encoding (Sept 3) — see HistoricalOrderType's
+  // doc comment. isHistorical/historicalOrderType/historicalNotes are only
+  // ever set by the Encode Old Order action; every ordinary order leaves
+  // all three at their defaults (false/null/null).
+  isHistorical        Boolean @default(false)
+  historicalOrderType HistoricalOrderType?
+  historicalNotes     String?
   // Cancel/restore tracking (Aug 25 update 1) — same shape as Inquiry's,
   // for the same reason: restore must return to the exact status the order
   // was cancelled from (OPEN or IN_PRODUCTION), not always OPEN.
@@ -636,6 +660,16 @@ model Order {
   completedAt      DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+  // The date this order actually happened, independent of `createdAt` (the
+  // real moment this row was inserted — Historical Transaction Encoding,
+  // Sept 3). Every ordinary order sets this to the same moment as
+  // createdAt (both default to now()), so nothing about normal order
+  // creation changes; encoding an old order is the only path that ever
+  // sets this to a date in the past while createdAt still correctly
+  // records when it was actually entered into the system. This is the
+  // field every "what date did this order happen" display, sort, and
+  // report filter reads — never createdAt.
+  orderDate        DateTime        @default(now())
 
   // Aug 20 4th update — Part D item 26/34. A cost SNAPSHOT taken once, at
   // Order-creation time, from the linked Quotation's line items as they
@@ -955,6 +989,14 @@ model Payment {
   recordedBy   User          @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
   notes        String?
   createdAt    DateTime      @default(now())
+  // Historical Transaction Encoding (Sept 3) — set only by Record Old
+  // Payment. `paymentDate` above already independently carries the real
+  // business date a normal payment can be backdated to (pre-existing, used
+  // everywhere payments are read); this flag exists purely so a payment
+  // recorded through the controlled historical path is distinguishable in
+  // the audit trail and payment history from an ordinary one, even though
+  // both are otherwise identical, real Payment rows.
+  isHistorical Boolean       @default(false)
 }
 
 model QCResult {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Table, THead, TBody, TR, TH, TD, EmptyState } from "@/components/ui/table";
-import { StatusBadge } from "@/components/ui/badge";
+import { StatusBadge, Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { OrderDetailModal } from "./order-detail-modal";
 
@@ -13,7 +13,9 @@ export type OrderRow = {
   jobOrdersCount: number;
   total: string;
   status: string;
-  createdAt: string;
+  orderDate: string;
+  isHistorical: boolean;
+  historicalOrderType: "PENDING_PRODUCTION" | "ALREADY_RELEASED" | null;
 };
 
 /**
@@ -36,7 +38,7 @@ export function OrdersTable({ orders, isStaffLike }: { orders: OrderRow[]; isSta
             <TH>Job Orders</TH>
             <TH>Total</TH>
             <TH>Status</TH>
-            <TH>Created</TH>
+            <TH>Order Date</TH>
             <TH />
           </TR>
         </THead>
@@ -48,9 +50,14 @@ export function OrdersTable({ orders, isStaffLike }: { orders: OrderRow[]; isSta
               <TD>{o.jobOrdersCount}</TD>
               <TD>{formatCurrency(o.total)}</TD>
               <TD>
-                <StatusBadge status={o.status} />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <StatusBadge status={o.status} />
+                  {o.isHistorical && (
+                    <Badge tone="yellow">{o.historicalOrderType === "ALREADY_RELEASED" ? "Released (Historical)" : "Historical"}</Badge>
+                  )}
+                </div>
               </TD>
-              <TD>{formatDate(o.createdAt)}</TD>
+              <TD>{formatDate(o.orderDate)}</TD>
               <TD>
                 <button type="button" onClick={() => setSelectedId(o.id)} className="text-sm font-medium text-brand-600 underline">
                   View

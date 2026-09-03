@@ -60,7 +60,7 @@ export async function computeStatementOfAccount(
   const [ordersBefore, paymentsBefore, adjustmentsBefore, ordersInRange, paymentsInRange, adjustmentsInRange] =
     await Promise.all([
       prisma.order.findMany({
-        where: { customerId, createdAt: { lt: periodStart }, status: { not: "CANCELLED" } },
+        where: { customerId, orderDate: { lt: periodStart }, status: { not: "CANCELLED" } },
         select: { totalAmount: true },
       }),
       prisma.payment.findMany({
@@ -72,8 +72,8 @@ export async function computeStatementOfAccount(
         select: { type: true, amount: true },
       }),
       prisma.order.findMany({
-        where: { customerId, createdAt: { gte: periodStart, lt: periodEnd }, status: { not: "CANCELLED" } },
-        orderBy: { createdAt: "asc" },
+        where: { customerId, orderDate: { gte: periodStart, lt: periodEnd }, status: { not: "CANCELLED" } },
+        orderBy: { orderDate: "asc" },
       }),
       prisma.payment.findMany({
         where: { status: "CONFIRMED", paymentDate: { gte: periodStart, lt: periodEnd }, order: { customerId } },
@@ -102,7 +102,7 @@ export async function computeStatementOfAccount(
   type RawRow = { date: Date; reference: string; type: SoaTransactionRow["type"]; description: string; charge: number; payment: number };
   const raw: RawRow[] = [
     ...ordersInRange.map((o) => ({
-      date: o.createdAt,
+      date: o.orderDate,
       reference: o.orderNumber,
       type: "ORDER" as const,
       description: `Order ${o.orderNumber}`,
@@ -154,7 +154,7 @@ export function deriveSoaBalanceStatus(orders: { dueDate: Date | null }[]): SoaB
 /** Every customer with a nonzero outstanding balance as of `asOf` — the source list for the Monthly SOA management dashboard. */
 export async function findCustomersWithOutstandingBalance(asOf: Date) {
   const orders = await prisma.order.findMany({
-    where: { createdAt: { lt: asOf }, status: { not: "CANCELLED" } },
+    where: { orderDate: { lt: asOf }, status: { not: "CANCELLED" } },
     include: {
       customer: true,
       payments: { where: { status: "CONFIRMED", paymentDate: { lt: asOf } } },

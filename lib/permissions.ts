@@ -44,6 +44,7 @@ export const PERMISSION_GROUPS = [
       { key: "ORDER_HANDLE_MODIFICATION", label: "Handle modification requests" },
       { key: "ORDER_UPDATE_STATUS", label: "Update order status" },
       { key: "ORDER_CANCEL", label: "Cancel orders" },
+      { key: "ORDER_BACKDATE", label: "Encode historical (old) orders" },
     ],
   },
   {
@@ -55,6 +56,7 @@ export const PERMISSION_GROUPS = [
       { key: "PAYMENT_REJECT", label: "Reject payment" },
       { key: "PAYMENT_EDIT", label: "Edit payment" },
       { key: "PAYMENT_REFUND", label: "Process refund" },
+      { key: "PAYMENT_BACKDATE", label: "Record historical (old) payments" },
     ],
   },
   {
@@ -333,5 +335,9 @@ export const PERMISSION_PRESETS: Record<string, Permission[]> = {
   // this person a Graphic Artist" (that's its own explicit preset above);
   // sweeping it in by accident would route Manager's /dashboard to the
   // narrow Graphic Artist view instead of the rich one it's meant to see.
-  Manager: ALL_PERMISSIONS.filter((p) => !p.startsWith("USER_") && !p.startsWith("DESIGN_")),
+  // *_BACKDATE (Historical Transaction Encoding, Sept 3) is deliberately
+  // excluded from every preset, Manager included — it's a sensitive,
+  // narrowly-scoped capability an Admin should grant individually per
+  // staff member, never swept in automatically by a broad bundle.
+  Manager: ALL_PERMISSIONS.filter((p) => !p.startsWith("USER_") && !p.startsWith("DESIGN_") && !p.endsWith("_BACKDATE")),
 };

@@ -159,6 +159,178 @@ export async function createOrderAction(_prevState: string | undefined, formData
   redirect(`/orders/${order.id}?created=1`);
 }
 
+/**
+ * Historical Transaction Encoding (Sept 3) — the controlled path for
+ * entering an order that actually happened in the past (network/system
+ * downtime, manual/offline handling) but was never entered at the time.
+ * Deliberately a SEPARATE action from createOrderAction above, gated by
+ * its own ORDER_BACKDATE permission, rather than a "just let staff type
+ * any date into the normal form" shortcut — this is a controlled
+ * mechanism for a specific real situation, not general permission to
+ * backdate ordinary transactions.
+ *
+ * The two historicalOrderType branches are not a parallel lifecycle: a
+ * PENDING_PRODUCTION order is created exactly like any other OPEN order
+ * (still eligible for the normal Job Order / production workflow via the
+ * existing "+ Add Job Order" action) — the only difference is `orderDate`
+ * and the historical flags. An ALREADY_RELEASED order is created directly
+ * as COMPLETED with no Job Order at all — since the Production
+ * board/Design queue/Kanban only ever show work that has an actual
+ * JobOrder row, simply never creating one is what keeps it out of
+ * production; createJobOrderAction below additionally refuses to let one
+ * be added to it later, as a second, backend-enforced line of defense.
+ */
+const historicalOrderSchema = z
+  .object({
+    customerId: z.string().min(1, "Please select a customer."),
+    orderDate: z.string().min(1, "Actual Order Date is required."),
+    historicalOrderType: z.enum(["PENDING_PRODUCTION", "ALREADY_RELEASED"]),
+    releaseDate: z.string().optional(),
+    subtotal: z.coerce.number().nonnegative(),
+    discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+    discountValue: z.coerce.number().nonnegative().optional(),
+    taxPct: z.coerce.number().nonnegative().optional(),
+    paymentTermType: z.enum(["STANDARD_PARTIAL", "APPROVED_TERMS"]),
+    requiredPartialPct: z.coerce.number().int().min(0).max(100).default(50),
+    termsApprovedBy: z.string().optional(),
+    termsReason: z.string().optional(),
+    historicalNotes: z.string().max(1000).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const orderDate = new Date(data.orderDate);
+    if (Number.isNaN(orderDate.getTime())) {
+      ctx.addIssue({ code: "custom", path: ["orderDate"], message: "Enter a valid Actual Order Date." });
+      return;
+    }
+    if (orderDate.getTime() > Date.now()) {
+      ctx.addIssue({ code: "custom", path: ["orderDate"], message: "Actual Order Date cannot be in the future." });
+    }
+    if (data.historicalOrderType === "ALREADY_RELEASED") {
+      if (!data.releaseDate) {
+        ctx.addIssue({ code: "custom", path: ["releaseDate"], message: "Actual Release Date is required for an already-released order." });
+        return;
+      }
+      const releaseDate = new Date(data.releaseDate);
+      if (Number.isNaN(releaseDate.getTime())) {
+        ctx.addIssue({ code: "custom", path: ["releaseDate"], message: "Enter a valid Actual Release Date." });
+        return;
+      }
+      if (releaseDate.getTime() > Date.now()) {
+        ctx.addIssue({ code: "custom", path: ["releaseDate"], message: "Actual Release Date cannot be in the future." });
+      }
+      if (releaseDate.getTime() < orderDate.getTime()) {
+        ctx.addIssue({ code: "custom", path: ["releaseDate"], message: "Actual Release Date cannot be before the Actual Order Date." });
+      }
+    }
+  });
+
+export async function encodeHistoricalOrderAction(_prevState: string | undefined, formData: FormData) {
+  const user = await requirePermission("ORDER_BACKDATE");
+
+  const parsed = historicalOrderSchema.safeParse({
+    customerId: formData.get("customerId"),
+    orderDate: formData.get("orderDate"),
+    historicalOrderType: formData.get("historicalOrderType"),
+    releaseDate: formData.get("releaseDate") || undefined,
+    subtotal: formData.get("subtotal"),
+    discountType: formData.get("discountType") || undefined,
+    discountValue: formData.get("discountValue") || undefined,
+    taxPct: formData.get("taxPct") || undefined,
+    paymentTermType: formData.get("paymentTermType"),
+    requiredPartialPct: formData.get("requiredPartialPct") || 50,
+    termsApprovedBy: formData.get("termsApprovedBy") || undefined,
+    termsReason: formData.get("termsReason") || undefined,
+    historicalNotes: formData.get("historicalNotes") || undefined,
+  });
+  if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
+
+  const data = parsed.data;
+  if (data.subtotal <= 0) return "Please provide at least one valid line item.";
+  if (data.paymentTermType === "APPROVED_TERMS" && !data.termsApprovedBy) {
+    return "Approved-terms orders require who authorized the exception.";
+  }
+
+  const orderDate = new Date(data.orderDate);
+  const releaseDate = data.historicalOrderType === "ALREADY_RELEASED" ? new Date(data.releaseDate!) : null;
+
+  const pricing = computeTotals({
+    subtotal: data.subtotal,
+    discountType: (data.discountType as DiscountType) ?? "PERCENTAGE",
+    discountValue: data.discountValue ?? 0,
+    taxPct: data.taxPct ?? 0,
+  });
+
+  // Duplicate-submission protection (Part 26) — a real risk here since this
+  // feature exists specifically for situations where the connection was
+  // unreliable in the first place (a slow first response followed by a
+  // retried click/resubmit). Content-based, not a special marker field: if
+  // this same admin already encoded an order for this exact customer,
+  // business date, type, and total within the last couple of minutes,
+  // treat this submission as the retry it almost certainly is and land on
+  // that existing order instead of creating a second, duplicate one.
+  const recentDuplicate = await prisma.order.findFirst({
+    where: {
+      customerId: data.customerId,
+      isHistorical: true,
+      historicalOrderType: data.historicalOrderType,
+      orderDate,
+      totalAmount: pricing.total,
+      createdAt: { gte: new Date(Date.now() - 2 * 60 * 1000) },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (recentDuplicate) redirect(`/orders/${recentDuplicate.id}?created=1`);
+
+  const orderNumber = await nextOrderNumber();
+
+  const order = await prisma.order.create({
+    data: {
+      orderNumber,
+      customerId: data.customerId,
+      totalAmount: pricing.total,
+      subtotal: pricing.subtotal,
+      discountType: pricing.discountType,
+      discountValue: pricing.discountValue,
+      discountAmount: pricing.discountAmount,
+      discountLabel: pricing.discountLabel,
+      taxPct: pricing.taxPct,
+      taxAmount: pricing.taxAmount,
+      paymentTermType: data.paymentTermType,
+      requiredPartialPct: data.requiredPartialPct,
+      termsApprovedBy: data.paymentTermType === "APPROVED_TERMS" ? data.termsApprovedBy : undefined,
+      termsReason: data.paymentTermType === "APPROVED_TERMS" ? data.termsReason : undefined,
+      // orderDate is the actual historical business date; createdAt (untouched,
+      // always "now") is the real system-encoding timestamp — see the doc
+      // comment on Order.orderDate.
+      orderDate,
+      isHistorical: true,
+      historicalOrderType: data.historicalOrderType,
+      historicalNotes: data.historicalNotes,
+      ...(data.historicalOrderType === "ALREADY_RELEASED"
+        ? { status: "COMPLETED" as const, completedAt: releaseDate }
+        : { status: "OPEN" as const }),
+    },
+  });
+
+  await logAudit(user.id, "ORDER_HISTORICAL_ENCODED", "Order", order.id, {
+    orderNumber,
+    orderDate: orderDate.toISOString(),
+    historicalOrderType: data.historicalOrderType,
+    releaseDate: releaseDate ? releaseDate.toISOString() : null,
+    total: pricing.total,
+  });
+
+  await notifyCustomer(
+    data.customerId,
+    "ORDER_CREATED",
+    `Your order ${orderNumber} (dated ${orderDate.toLocaleDateString()}) has been recorded.`,
+    `/orders/${order.id}`
+  );
+
+  redirect(`/orders/${order.id}?created=1`);
+}
+
 const jobOrderSchema = z.object({
   orderId: z.string().min(1),
   serviceId: z.string().min(1, "Please select a service."),
@@ -193,6 +365,15 @@ export async function createJobOrderAction(_prevState: string | undefined, formD
   // production: no new job order can be added to it.
   const parentOrder = await prisma.order.findUniqueOrThrow({ where: { id: data.orderId } });
   if (parentOrder.status === "CANCELLED") return "This order is cancelled — restore it first to add a job order.";
+
+  // Historical Transaction Encoding (Sept 3) — Part 5's core production-
+  // safety rule, enforced here, not just hidden in the UI: an order
+  // encoded as "Already Released" was already completed and released
+  // before it was ever entered here, and must never enter production
+  // through any path, including a Job Order added after the fact.
+  if (parentOrder.historicalOrderType === "ALREADY_RELEASED") {
+    return "This order was encoded as already released and is not eligible for production — it cannot have a Job Order added to it.";
+  }
 
   const service = await prisma.service.findUnique({ where: { id: data.serviceId } });
   if (!service || !service.active) return "Please select a valid, active service.";
