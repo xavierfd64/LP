@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
-import { PERMISSION_PRESETS } from "../lib/permissions";
+import { PERMISSION_PRESETS, type Permission } from "../lib/permissions";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -23,33 +23,110 @@ async function writeSampleFile(name: string, content: string) {
 
 /**
  * Two independent, fail-closed gates — neither is optional, and both must
- * pass before this script writes a single row. This creates a known set of
- * demo credentials (see the printed block at the end of `main()`), which
- * must never exist in a real deployment:
+ * pass before the demo dataset below writes a single row. This creates a
+ * known set of demo credentials (see the printed block at the end of
+ * `main()`), which must never exist in a real deployment:
  *   1. `NODE_ENV !== "production"` — a hard block that cannot be overridden
  *      by any flag, in case this script is ever invoked from a genuinely
  *      production process.
  *   2. `RUN_SEED === "true"` — an explicit opt-in required even outside
  *      production, so a fresh/staging environment doesn't get seeded just
- *      because nothing happened to set NODE_ENV. Never set this in the
- *      Render production service's environment variables.
+ *      because nothing happened to set NODE_ENV. Never set this in a real
+ *      production service's environment variables.
  * This is deliberately not "gated by developer discipline" — a normal
- * `npx prisma db seed` (or the Dockerfile's startup chain) is a no-op
- * unless RUN_SEED=true is explicitly present in the environment.
+ * `npx prisma db seed` (or the Dockerfile's startup chain) only writes the
+ * demo dataset when RUN_SEED=true is explicitly present in the environment;
+ * anywhere else (Railway included) it falls through to
+ * `ensureProductionAccounts()` below instead of doing nothing.
  */
-function assertSeedingAllowed() {
+function demoSeedingAllowed() {
   if (process.env.NODE_ENV === "production") {
-    console.log("Seeding skipped: NODE_ENV=production. This script never runs in production, regardless of other flags.");
-    process.exit(0);
+    console.log("NODE_ENV=production — demo dataset skipped (this never runs in production, regardless of other flags).");
+    return false;
   }
   if (process.env.RUN_SEED !== "true") {
-    console.log('Seeding skipped: set RUN_SEED="true" in your environment (e.g. .env) to seed this database. This is required even outside production.');
-    process.exit(0);
+    console.log('RUN_SEED is not "true" — demo dataset skipped. Set RUN_SEED="true" in your environment (e.g. .env) to seed the local demo dataset instead.');
+    return false;
   }
+  return true;
+}
+
+/**
+ * The production counterpart to the demo dataset above — runs instead of
+ * it (never alongside: see `main()`) wherever RUN_SEED isn't explicitly
+ * "true", which is exactly every real deployment's default state. Creates
+ * only the two initial accounts a fresh production system needs to be
+ * logged into for the first time, nothing else — no customers, no
+ * transactions, no sample business data. Reads both accounts' email and
+ * password from environment variables rather than any literal in this
+ * file: real production credentials must never be hardcoded into source
+ * or committed to git. Idempotent by design — checks each email first and
+ * leaves an existing account (including its current password) completely
+ * untouched, so this can safely run again on every redeploy without ever
+ * creating a duplicate or silently resetting a password someone already
+ * changed through the app.
+ */
+async function ensureProductionAccount(opts: {
+  label: string;
+  email: string | undefined;
+  password: string | undefined;
+  name: string | undefined;
+  defaultName: string;
+  role: "ADMIN" | "STAFF";
+  permissions?: readonly Permission[];
+}) {
+  const { label, email, password, name, defaultName, role, permissions } = opts;
+  if (!email || !password) {
+    console.log(`${label}: skipped — set its SEED_*_EMAIL and SEED_*_PASSWORD environment variables to create it.`);
+    return;
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    console.log(`${label}: account already exists (${email}) — left as-is.`);
+    return;
+  }
+
+  const user = await prisma.user.create({
+    data: { name: name || defaultName, email, passwordHash: await hash(password), role },
+  });
+  if (permissions && permissions.length > 0) {
+    await prisma.staffPermission.createMany({
+      data: permissions.map((permission) => ({ userId: user.id, permission })),
+    });
+  }
+  console.log(`${label}: created (${email}).`);
+}
+
+async function ensureProductionAccounts() {
+  console.log("Ensuring the required production accounts exist (no demo data)...");
+  await ensureProductionAccount({
+    label: "Main Admin",
+    email: process.env.SEED_ADMIN_EMAIL,
+    password: process.env.SEED_ADMIN_PASSWORD,
+    name: process.env.SEED_ADMIN_NAME,
+    defaultName: "Admin",
+    role: "ADMIN",
+  });
+  await ensureProductionAccount({
+    label: "Cashier",
+    email: process.env.SEED_CASHIER_EMAIL,
+    password: process.env.SEED_CASHIER_PASSWORD,
+    name: process.env.SEED_CASHIER_NAME,
+    defaultName: "Cashier",
+    role: "STAFF",
+    // The existing "Cashier" preset (lib/permissions.ts) — the same named
+    // starting point Admin -> Staff & Permissions offers when adding a
+    // cashier by hand, not a new/parallel permission set invented here.
+    permissions: PERMISSION_PRESETS.Cashier,
+  });
 }
 
 async function main() {
-  assertSeedingAllowed();
+  if (!demoSeedingAllowed()) {
+    await ensureProductionAccounts();
+    return;
+  }
   console.log("Seeding database...");
 
   const existing = await prisma.user.findUnique({ where: { email: "admin@lp.test" } });
