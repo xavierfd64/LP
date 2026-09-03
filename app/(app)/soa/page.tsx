@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { FileSearch } from "lucide-react";
 import { requireRole } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,14 @@ export default async function StatementOfAccountHubPage() {
           <SoaLookup />
         </CardContent>
       </Card>
+
+      <div className="flex flex-col items-center gap-2 py-8 text-center text-slate-400">
+        <FileSearch className="h-8 w-8" />
+        <p className="text-sm font-medium text-slate-500">Select a customer to view their Statement of Account</p>
+        <p className="max-w-sm text-xs text-slate-400">
+          Search for a customer above to view charges, payments, outstanding balances, and transaction history.
+        </p>
+      </div>
     </div>
   );
 }

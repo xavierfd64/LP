@@ -26,6 +26,11 @@ export type SoaTransactionRow = {
   charge: number;
   payment: number;
   runningBalance: number;
+  // Historical Transaction Encoding (Sept 3) — surfaces the SAME
+  // Order.isHistorical/Payment.isHistorical flags already on the source
+  // rows, purely for display (e.g. an "(Old)" badge) — never recomputed,
+  // never affects charge/payment/runningBalance math.
+  isHistorical: boolean;
 };
 
 export type SoaComputation = {
@@ -99,7 +104,7 @@ export async function computeStatementOfAccount(
   const adjustments = netAdjustments(adjustmentsInRange);
   const outstandingBalance = openingBalance + totalCharges - totalPayments + adjustments;
 
-  type RawRow = { date: Date; reference: string; type: SoaTransactionRow["type"]; description: string; charge: number; payment: number };
+  type RawRow = { date: Date; reference: string; type: SoaTransactionRow["type"]; description: string; charge: number; payment: number; isHistorical: boolean };
   const raw: RawRow[] = [
     ...ordersInRange.map((o) => ({
       date: o.orderDate,
@@ -108,6 +113,7 @@ export async function computeStatementOfAccount(
       description: `Order ${o.orderNumber}`,
       charge: Number(o.totalAmount),
       payment: 0,
+      isHistorical: o.isHistorical,
     })),
     ...paymentsInRange.map((p) => ({
       date: p.paymentDate,
@@ -116,6 +122,7 @@ export async function computeStatementOfAccount(
       description: `Payment — ${p.method.replace(/_/g, " ")} (${p.order.orderNumber})`,
       charge: 0,
       payment: Number(p.amount),
+      isHistorical: p.isHistorical,
     })),
     ...adjustmentsInRange.map((a) => ({
       date: a.createdAt,
@@ -124,6 +131,7 @@ export async function computeStatementOfAccount(
       description: a.description,
       charge: a.type === "CHARGE" ? Number(a.amount) : 0,
       payment: a.type === "CREDIT" ? Number(a.amount) : 0,
+      isHistorical: false,
     })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
