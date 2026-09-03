@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions-guard";
-import { resolveSoaPeriod, findCustomersWithOutstandingBalance, type SoaPeriodSelection } from "@/lib/soa";
+import { resolveSoaPeriod, findCustomersWithOutstandingBalance, computeStatementOfAccount, type SoaPeriodSelection } from "@/lib/soa";
 import { createStatementAndNotify } from "@/lib/soa-generate";
 import { notifyCustomer } from "@/lib/notifications";
 import { logAudit } from "@/lib/audit";
@@ -59,6 +59,75 @@ export async function generateStatementForCustomerAndMonthAction(customerId: str
   return { statementId: statement.id };
 }
 
+export type SoaLedgerPreview = {
+  totalCharges: number;
+  totalPayments: number;
+  outstandingBalance: number;
+  rows: {
+    date: string;
+    type: "ORDER" | "PAYMENT" | "ADJUSTMENT";
+    reference: string;
+    description: string;
+    charge: number;
+    payment: number;
+    runningBalance: number;
+    isHistorical: boolean;
+  }[];
+};
+
+/**
+ * SOA dashboard's "Preview on Screen" / "Customer Transaction History"
+ * Quick Actions (SOA UI/UX improvement, Sept 3) — a read-only, on-demand
+ * look at an arbitrary date range WITHOUT persisting a StatementOfAccount
+ * row, so previewing never spams the Previous Statements list. Calls the
+ * exact same computeStatementOfAccount() every other SOA number already
+ * comes from — no separate/parallel calculation.
+ */
+export async function previewStatementOfAccountAction(
+  customerId: string,
+  periodStartIso: string,
+  periodEndIso: string
+): Promise<SoaLedgerPreview> {
+  await requirePermission("SOA_VIEW");
+  const computation = await computeStatementOfAccount(customerId, new Date(periodStartIso), new Date(periodEndIso));
+  return {
+    totalCharges: computation.totalCharges,
+    totalPayments: computation.totalPayments,
+    outstandingBalance: computation.outstandingBalance,
+    rows: computation.rows.map((r) => ({
+      date: r.date.toISOString(),
+      type: r.type,
+      reference: r.reference,
+      description: r.description,
+      charge: r.charge,
+      payment: r.payment,
+      runningBalance: r.runningBalance,
+      isHistorical: r.isHistorical,
+    })),
+  };
+}
+
+/**
+ * SOA dashboard's "View / Print SOA", "Save as PDF", and "Send SOA to
+ * Customer" Quick Actions (Sept 3) — same generation path as
+ * generateStatementAction/generateStatementForCustomerAndMonthAction
+ * (createStatementAndNotify, so numbering/notification/audit never
+ * drift), just for an arbitrary [start, end) range instead of a
+ * monthly/custom-form period, and returning rather than redirecting so
+ * the caller can chain a Send or open a specific document route.
+ */
+export async function generateStatementForRangeAction(customerId: string, periodStartIso: string, periodEndIso: string) {
+  const user = await requirePermission("SOA_GENERATE");
+  const start = new Date(periodStartIso);
+  const end = new Date(periodEndIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    throw new Error("The statement period end must be after its start.");
+  }
+  const statement = await createStatementAndNotify(customerId, { start, end }, user.id);
+  revalidatePath(`/soa/customer/${customerId}`);
+  return { statementId: statement.id };
+}
+
 const adjustmentSchema = z.object({
   type: z.enum(["CHARGE", "CREDIT"]),
   amount: z.coerce.number().positive("Enter an amount greater than zero."),
@@ -96,19 +165,28 @@ export async function addAccountAdjustmentAction(customerId: string, _prevState:
   revalidatePath(`/soa/customer/${customerId}`);
 }
 
-/** "Send/Share" from the Monthly SOA workflow or a statement's own page — generates the statement (if not already) and emails it immediately, distinct from just creating a shareable link. */
-export async function sendStatementEmailAction(statementId: string) {
+/**
+ * "Send/Share" from the Monthly SOA workflow, a statement's own page, or
+ * the SOA dashboard's "Send SOA to Customer" Quick Action — emails the
+ * statement immediately, distinct from just creating a shareable link.
+ * `note` is optional (existing callers keep sending the plain default
+ * message) — the SOA dashboard's Send modal is the only caller that
+ * passes one, appended to the same notifyCustomer message every other
+ * SOA notification already goes through (no separate send channel).
+ */
+export async function sendStatementEmailAction(statementId: string, note?: string) {
   const user = await requirePermission("SOA_SHARE");
   const statement = await prisma.statementOfAccount.findUniqueOrThrow({ where: { id: statementId } });
 
+  const baseMessage = `Your Statement of Account ${statement.statementNumber} has been sent. Outstanding balance: ${formatCurrency(Number(statement.outstandingBalance))}.`;
   await notifyCustomer(
     statement.customerId,
     "SOA_SHARED",
-    `Your Statement of Account ${statement.statementNumber} has been sent. Outstanding balance: ${formatCurrency(Number(statement.outstandingBalance))}.`,
+    note ? `${baseMessage} Note: ${note}` : baseMessage,
     `/soa/view/${statement.id}`
   );
 
-  await logAudit(user.id, "SOA_EMAILED", "StatementOfAccount", statementId, {});
+  await logAudit(user.id, "SOA_EMAILED", "StatementOfAccount", statementId, note ? { note } : {});
   revalidatePath(`/soa/view/${statementId}`);
 }
 

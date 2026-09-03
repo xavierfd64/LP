@@ -1,26 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CreditCard, Clock3, Eye, Download, Send, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
 import { PaymentForm } from "@/app/(app)/payments/payment-form";
 import { HistoricalPaymentForm } from "@/app/(app)/payments/historical-payment-form";
 import { recordPaymentInPlaceAction } from "@/app/actions/payments";
-import { sendStatementEmailAction } from "@/app/actions/soa";
 import { startCustomerConversationAction } from "@/app/actions/messages";
+import { SoaRangePreviewModal } from "./soa-range-preview-modal";
+import { SoaPdfModal } from "./soa-pdf-modal";
+import { SoaSendModal } from "./soa-send-modal";
 import type { OrderSearchResult } from "@/app/actions/order-search";
+import type { SoaDateRangeValue } from "./soa-filters";
 
 /**
  * SOA dashboard's Quick Actions panel (SOA UI/UX improvement, Sept 3) —
  * every action opens the EXISTING form/workflow as a pop-up instead of
- * navigating away, per the spec's explicit requirement. The two payment
- * modals reuse PaymentForm/HistoricalPaymentForm verbatim (same components
- * the Payments page and the Dashboard's Receivable Details modal already
+ * navigating away. Record Payment/Record Old Payment reuse
+ * PaymentForm/HistoricalPaymentForm verbatim (same components the
+ * Payments page and the Dashboard's Receivable Details modal already
  * use) with the same fixed-overlay modal shell as
  * app/(app)/payments/record-payment-modal.tsx — the styling/behavior
- * authority the spec names explicitly, not the attached illustration.
+ * authority named explicitly, not the attached illustration. View/Print
+ * SOA, Save as PDF, Send SOA, and Customer Transaction History are their
+ * own small modals (soa-range-preview-modal/soa-pdf-modal/soa-send-modal)
+ * that all resolve to the SAME generateStatementForRangeAction /
+ * previewStatementOfAccountAction — never a parallel calculation.
  * `router.refresh()` on success re-fetches this Server Component page's
  * data (Financial Summary/Account Balance/Transaction History) without a
  * full browser reload, satisfying "SOA updates immediately."
@@ -28,28 +34,36 @@ import type { OrderSearchResult } from "@/app/actions/order-search";
 export function SoaQuickActions({
   customerId,
   customerName,
+  customerEmail,
+  hasLogin,
   defaultOrder,
-  latestStatementId,
+  currentRange,
+  currentFrom,
+  currentTo,
   canRecord,
   canRecordHistorical,
   canShare,
+  canGenerate,
   canMessage,
 }: {
   customerId: string;
   customerName: string;
+  customerEmail: string | null;
+  hasLogin: boolean;
   defaultOrder: OrderSearchResult | null;
-  latestStatementId: string | null;
+  currentRange: SoaDateRangeValue;
+  currentFrom: string;
+  currentTo: string;
   canRecord: boolean;
   canRecordHistorical: boolean;
   canShare: boolean;
+  canGenerate: boolean;
   canMessage: boolean;
 }) {
   const router = useRouter();
   const [recordOpen, setRecordOpen] = useState(false);
   const [historicalOpen, setHistoricalOpen] = useState(false);
   const [messaging, setMessaging] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
 
   async function handleMessage() {
     setMessaging(true);
@@ -61,62 +75,48 @@ export function SoaQuickActions({
     }
   }
 
-  async function handleSend() {
-    if (!latestStatementId) return;
-    setSending(true);
-    await sendStatementEmailAction(latestStatementId);
-    setSending(false);
-    setSent(true);
-  }
-
   return (
     <div className="space-y-2">
       {canRecord && (
         <Button type="button" className="w-full justify-start" onClick={() => setRecordOpen(true)}>
-          Record Payment
+          <CreditCard className="h-4 w-4" /> Record Payment
         </Button>
       )}
       {canRecordHistorical && (
         <Button type="button" variant="outline" className="w-full justify-start" onClick={() => setHistoricalOpen(true)}>
-          Record Old Payment
+          <Clock3 className="h-4 w-4" /> Record Old Payment
         </Button>
       )}
 
-      {latestStatementId ? (
-        <Link href={`/soa/view/${latestStatementId}`} target="_blank" className="block">
-          <Button type="button" variant="outline" className="w-full justify-start">
-            View / Print SOA
-          </Button>
-        </Link>
-      ) : (
-        <Button type="button" variant="outline" className="w-full justify-start" disabled title="Generate a statement first">
-          View / Print SOA
-        </Button>
+      {canGenerate && (
+        <SoaRangePreviewModal
+          customerId={customerId}
+          buttonLabel="View / Print SOA"
+          buttonIcon={Eye}
+          title="View / Print SOA"
+          subtitle="Generate and view the Statement of Account."
+          allowPdf
+          initialRange={currentRange}
+          initialFrom={currentFrom}
+          initialTo={currentTo}
+        />
       )}
 
-      {latestStatementId ? (
-        <Link href={`/soa/${latestStatementId}/print`} target="_blank" className="block">
-          <Button type="button" variant="outline" className="w-full justify-start">
-            Save as PDF
-          </Button>
-        </Link>
-      ) : (
-        <Button type="button" variant="outline" className="w-full justify-start" disabled title="Generate a statement first">
-          Save as PDF
-        </Button>
+      {canGenerate && (
+        <SoaPdfModal customerId={customerId} buttonIcon={Download} initialRange={currentRange} initialFrom={currentFrom} initialTo={currentTo} />
       )}
 
-      {canShare &&
-        (latestStatementId ? (
-          <Button type="button" variant="outline" className="w-full justify-start" onClick={handleSend} disabled={sending}>
-            {sending ? "Sending…" : "Send SOA to Customer"}
-          </Button>
-        ) : (
-          <Button type="button" variant="outline" className="w-full justify-start" disabled title="Generate a statement first">
-            Send SOA to Customer
-          </Button>
-        ))}
-      {sent && <Alert tone="success">Queued — check the Email Log for delivery status.</Alert>}
+      {canShare && (
+        <SoaSendModal
+          customerId={customerId}
+          customerEmail={customerEmail}
+          hasLogin={hasLogin}
+          buttonIcon={Send}
+          initialRange={currentRange}
+          initialFrom={currentFrom}
+          initialTo={currentTo}
+        />
+      )}
 
       {canMessage && (
         <Button type="button" variant="outline" className="w-full justify-start" onClick={handleMessage} disabled={messaging}>
@@ -124,11 +124,17 @@ export function SoaQuickActions({
         </Button>
       )}
 
-      <Link href={`/customers/${customerId}`} className="block">
-        <Button type="button" variant="outline" className="w-full justify-start">
-          Customer Transaction History
-        </Button>
-      </Link>
+      <SoaRangePreviewModal
+        customerId={customerId}
+        buttonLabel="Customer Transaction History"
+        buttonIcon={History}
+        title="Customer Transaction History"
+        subtitle="View this customer's full transaction history."
+        allowPdf={false}
+        initialRange="all"
+        initialFrom=""
+        initialTo=""
+      />
 
       {recordOpen && (
         <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center bg-black/40 p-4">

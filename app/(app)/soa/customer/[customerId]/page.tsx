@@ -94,7 +94,6 @@ export default async function CustomerSoaPage({
     return true;
   });
 
-  const latestStatementId = statements[0]?.id ?? null;
   const defaultOrder: OrderSearchResult | null =
     receivable && receivable.transactions.length === 1
       ? {
@@ -153,6 +152,29 @@ export default async function CustomerSoaPage({
         </div>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SoaQuickActions
+                customerId={customerId}
+                customerName={customer.name}
+                customerEmail={customer.email}
+                hasLogin={!!customer.userId}
+                defaultOrder={defaultOrder}
+                currentRange={range}
+                currentFrom={from}
+                currentTo={to}
+                canRecord={canRecord}
+                canRecordHistorical={canRecordHistorical}
+                canShare={canShare}
+                canGenerate={canGenerate}
+                canMessage={canMessage}
+              />
+            </CardContent>
+          </Card>
+
           <Card className="border-l-4 border-l-brand-600">
             <CardHeader>
               <CardTitle>Account Balance</CardTitle>
@@ -163,24 +185,6 @@ export default async function CustomerSoaPage({
               <BalanceRow label="Outstanding Balance" value={formatCurrency(Math.max(totalOutstanding, 0))} emphasize />
               <BalanceRow label="Current (Not Yet Due)" value={formatCurrency(currentNotYetDue)} />
               <BalanceRow label="Overdue" value={formatCurrency(overdueAmount)} tone={overdueAmount > 0 ? "red" : undefined} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SoaQuickActions
-                customerId={customerId}
-                customerName={customer.name}
-                defaultOrder={defaultOrder}
-                latestStatementId={latestStatementId}
-                canRecord={canRecord}
-                canRecordHistorical={canRecordHistorical}
-                canShare={canShare}
-                canMessage={canMessage}
-              />
             </CardContent>
           </Card>
         </div>
