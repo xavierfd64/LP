@@ -129,11 +129,16 @@ export default auth((req) => {
 // but app/api/logout/route.ts's own explicit deletions can touch this
 // response's cookies.
 export const config = {
-  // branding/loading is excluded alongside the other static asset paths —
-  // the login loading screen's printer/icon assets (Aug 29 corrective
-  // update) must render during the window before the session cookie
-  // exists (the loading screen appears the instant the login form
-  // submits, ahead of the auth response), so they can never sit behind
-  // the auth() check the way the rest of the app correctly does.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|uploads|branding/loading|api/logout).*)"],
+  // The whole branding/ folder is excluded alongside the other static asset
+  // paths — not just branding/loading (the login loading screen's
+  // printer/icon assets, Aug 29 corrective update) but also
+  // branding/favicon-default.ico (Sep 3 favicon fix): the favicon and the
+  // login-loading-screen assets are the same class of thing, a public
+  // static image that must render before any session cookie exists —
+  // logged-out visitors on /login still need a working tab icon, and the
+  // browser requests it long before an auth() check could ever apply. Any
+  // future branding/* asset should default to being public too, since
+  // there's no case where a bare static image under this folder needs
+  // authentication.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|uploads|branding/|api/logout).*)"],
 };

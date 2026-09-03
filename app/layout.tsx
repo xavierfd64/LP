@@ -27,11 +27,16 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: `${settings.businessName} — Business Management`,
     description: settings.description ?? "Printing business management system",
-    icons: settings.faviconPath
-      ? [{ url: settings.faviconPath }]
-      : settings.logoPath
-        ? [{ url: settings.logoPath }]
-        : undefined,
+    // This is the single, authoritative favicon declaration for the app —
+    // there must be no app/favicon.ico (or app/icon.*) file alongside it.
+    // Next's App Router treats a static app/favicon.ico as a special
+    // convention file and unconditionally splices it in as the *first*
+    // <link rel="icon">, ahead of whatever's returned here, which silently
+    // defeated Admin's Business Settings favicon upload no matter what was
+    // configured or redeployed. /branding/favicon-default.ico is a plain
+    // public/ asset (not a convention file), so it's never auto-prioritized
+    // — it only appears here, as the last-resort fallback.
+    icons: [{ url: settings.faviconPath ?? settings.logoPath ?? "/branding/favicon-default.ico" }],
   };
 }
 
