@@ -103,6 +103,8 @@ function InvoiceBody({
   let items: DocumentLineItem[];
   if (invoice.quotation && invoice.quotation.lineItems.length > 0) {
     items = invoice.quotation.lineItems.map((li) => ({ label: li.description, type: li.productType, qty: li.qty, unitPrice: Number(li.unitPrice) }));
+  } else if (invoice.lineItems.length > 0) {
+    items = invoice.lineItems.map((li) => ({ label: li.description, type: li.productType, qty: li.qty, unitPrice: Number(li.unitPrice) }));
   } else {
     items = [{ label: `Order ${invoice.orderNumber}`, qty: 1, unitPrice: total }];
   }

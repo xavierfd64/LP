@@ -20,6 +20,7 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
     include: {
       customer: { include: { user: true } },
       quotation: { include: { lineItems: true } },
+      lineItems: true,
       jobOrders: true,
     },
   });
@@ -37,13 +38,22 @@ export default async function InvoicePrintPage({ params }: PageProps<"/orders/[i
   const outstanding = Math.max(total - amountPaid, 0);
   const paymentStatus = amountPaid <= 0 ? "UNPAID" : amountPaid >= total ? "PAID" : "PARTIALLY_PAID";
 
-  // An Order's line-item detail lives on its linked Quotation, if any — a
-  // walk-in order can be created without one, so fall back to a single
-  // summary line derived from the order's own total (the only figure that's
-  // always known) rather than leaving the items table empty.
+  // An Order's line-item detail lives on its linked Quotation, if any, else
+  // on the Order's OWN persisted line items (Sept 4 correction — see
+  // OrderLineItem's schema doc comment); only an order that genuinely
+  // predates that fix and has neither falls back to a single summary line
+  // derived from the order's own total, rather than leaving the items
+  // table empty.
   let items: DocumentLineItem[];
   if (order.quotation && order.quotation.lineItems.length > 0) {
     items = order.quotation.lineItems.map((li) => ({
+      label: li.description,
+      type: li.productType,
+      qty: li.qty,
+      unitPrice: Number(li.unitPrice),
+    }));
+  } else if (order.lineItems.length > 0) {
+    items = order.lineItems.map((li) => ({
       label: li.description,
       type: li.productType,
       qty: li.qty,

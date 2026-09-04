@@ -11,6 +11,83 @@ import { notifyCustomer } from "@/lib/notifications";
 import { estimateCostForLines } from "@/lib/service-cost";
 import { computeTotals, type DiscountType } from "@/lib/pricing-totals";
 
+const orderLineItemsSchema = z.array(
+  z.object({
+    serviceId: z.string().optional(),
+    productType: z.string().optional().default(""),
+    description: z.string().optional().default(""),
+    qty: z.coerce.number().int().positive(),
+    unit: z.string().max(40).optional(),
+    unitPrice: z.coerce.number().nonnegative(),
+    specs: z.record(z.string(), z.string()).optional(),
+  })
+);
+
+type ParsedOrderLineItem = {
+  serviceId?: string;
+  productType: string;
+  description: string;
+  qty: number;
+  unit?: string;
+  unitPrice: number;
+  specs?: Record<string, string>;
+};
+
+/**
+ * Parses the `lineItemsJson` blob LineItemsEditor already submits for a
+ * manual (no-quotation) New Order or an Encode Old Order (Sept 4
+ * correction) — both forms were already collecting and sending real
+ * per-item detail; createOrderAction/encodeHistoricalOrderAction just
+ * never read it, only the summed `subtotal`, which is why every such
+ * order's detail view and documents collapsed to one generic "Order"
+ * line. Deliberately NOT parseLineItems from quotations.ts: that one
+ * requires a real, active serviceId for every row (Quotations' stricter,
+ * catalog-only standard) — a manual/historical order has always allowed
+ * a freeform row with no linked Service, and requiring one now would
+ * reject submissions that previously worked. When a serviceId IS given,
+ * productType is still re-derived from the live Service (never trusted
+ * from the client, same as Quotations); when it's absent, the row's own
+ * description becomes its product label if no product name was typed —
+ * using the staff's own real input, never a fabricated placeholder.
+ */
+async function parseOrderLineItems(
+  formData: FormData
+): Promise<{ success: true; data: ParsedOrderLineItem[] } | { success: false; message: string }> {
+  const raw = formData.get("lineItemsJson");
+  let rawItems: unknown;
+  try {
+    rawItems = raw ? JSON.parse(raw as string) : [];
+  } catch {
+    return { success: false, message: "Invalid line items." };
+  }
+
+  const parsed = orderLineItemsSchema.safeParse(rawItems);
+  if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? "Invalid line items." };
+
+  const serviceIds = [...new Set(parsed.data.map((li) => li.serviceId).filter((id): id is string => !!id))];
+  const services = serviceIds.length > 0 ? await prisma.service.findMany({ where: { id: { in: serviceIds }, active: true } }) : [];
+  const serviceMap = new Map(services.map((s) => [s.id, s]));
+
+  const items: ParsedOrderLineItem[] = [];
+  for (const li of parsed.data) {
+    if (li.serviceId) {
+      const service = serviceMap.get(li.serviceId);
+      if (!service) return { success: false, message: "One or more selected services are invalid or inactive." };
+      items.push({ serviceId: service.id, productType: service.name, description: li.description, qty: li.qty, unit: li.unit, unitPrice: li.unitPrice, specs: li.specs });
+    } else {
+      items.push({
+        productType: li.productType.trim() || li.description.trim() || "Item",
+        description: li.description,
+        qty: li.qty,
+        unit: li.unit,
+        unitPrice: li.unitPrice,
+        specs: li.specs,
+      });
+    }
+  }
+  return { success: true, data: items };
+}
+
 const orderSchema = z.object({
   customerId: z.string().min(1),
   quotationId: z.string().optional(),
@@ -75,6 +152,12 @@ export async function createOrderAction(_prevState: string | undefined, formData
   // always recomputed here via the same shared computeTotals() every other
   // pricing form uses — the client's own total is never trusted directly.
   let pricing: ReturnType<typeof computeTotals>;
+  // Sept 4 correction: a manual (no-quotation) order's own line items —
+  // null when quotationId is set (that path keeps reading items from the
+  // Quotation, untouched). See OrderLineItem's schema doc comment and
+  // parseOrderLineItems above for why this validates/re-derives
+  // differently than Quotations' stricter parseLineItems.
+  let manualLineItems: ParsedOrderLineItem[] | null = null;
   if (data.quotationId) {
     const quotation = await prisma.quotation.findUnique({
       where: { id: data.quotationId },
@@ -100,8 +183,16 @@ export async function createOrderAction(_prevState: string | undefined, formData
       pricing = computeTotals({ subtotal: 0, discountType: "PERCENTAGE", discountValue: 0, taxPct: 0 });
     }
   } else {
+    const parsedItems = await parseOrderLineItems(formData);
+    if (!parsedItems.success) return parsedItems.message;
+    if (parsedItems.data.length === 0) return "Please provide at least one valid line item.";
+    manualLineItems = parsedItems.data;
+    // The real line items are the source of truth for subtotal — never the
+    // client-submitted `subtotal` hidden field (kept only as the form's own
+    // running-total display, not trusted here).
+    const realSubtotal = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
     pricing = computeTotals({
-      subtotal: data.subtotal ?? 0,
+      subtotal: realSubtotal,
       discountType: (data.discountType as DiscountType) ?? "PERCENTAGE",
       discountValue: data.discountValue ?? 0,
       taxPct: data.taxPct ?? 0,
@@ -135,6 +226,21 @@ export async function createOrderAction(_prevState: string | undefined, formData
       estimatedProductionCostSnapshot: costSnapshot?.fullyConfigured ? costSnapshot.totalCost : null,
       costSnapshotFullyConfigured: costSnapshot?.fullyConfigured ?? false,
       costSnapshotTakenAt: costSnapshot ? new Date() : null,
+      ...(manualLineItems
+        ? {
+            lineItems: {
+              create: manualLineItems.map((li) => ({
+                productType: li.productType,
+                serviceId: li.serviceId,
+                description: li.description,
+                qty: li.qty,
+                unit: li.unit,
+                unitPrice: li.unitPrice,
+                specs: li.specs,
+              })),
+            },
+          }
+        : {}),
     },
   });
 
@@ -245,7 +351,16 @@ export async function encodeHistoricalOrderAction(_prevState: string | undefined
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Invalid input.";
 
   const data = parsed.data;
-  if (data.subtotal <= 0) return "Please provide at least one valid line item.";
+  // Sept 4 correction: the real submitted line items are the source of
+  // truth for subtotal, never the client's own running-total hidden field
+  // — see parseOrderLineItems and OrderLineItem's schema doc comment for
+  // why every previously-encoded historical order collapsed to one
+  // generic "Order" line (the items were being sent but never read/saved).
+  const parsedItems = await parseOrderLineItems(formData);
+  if (!parsedItems.success) return parsedItems.message;
+  if (parsedItems.data.length === 0) return "Please provide at least one valid line item.";
+  const realSubtotal = parsedItems.data.reduce((sum, li) => sum + li.qty * li.unitPrice, 0);
+  if (realSubtotal <= 0) return "Please provide at least one valid line item.";
   if (data.paymentTermType === "APPROVED_TERMS" && !data.termsApprovedBy) {
     return "Approved-terms orders require who authorized the exception.";
   }
@@ -254,7 +369,7 @@ export async function encodeHistoricalOrderAction(_prevState: string | undefined
   const releaseDate = data.historicalOrderType === "ALREADY_RELEASED" ? new Date(data.releaseDate!) : null;
 
   const pricing = computeTotals({
-    subtotal: data.subtotal,
+    subtotal: realSubtotal,
     discountType: (data.discountType as DiscountType) ?? "PERCENTAGE",
     discountValue: data.discountValue ?? 0,
     taxPct: data.taxPct ?? 0,
@@ -310,6 +425,17 @@ export async function encodeHistoricalOrderAction(_prevState: string | undefined
       ...(data.historicalOrderType === "ALREADY_RELEASED"
         ? { status: "COMPLETED" as const, completedAt: releaseDate }
         : { status: "OPEN" as const }),
+      lineItems: {
+        create: parsedItems.data.map((li) => ({
+          productType: li.productType,
+          serviceId: li.serviceId,
+          description: li.description,
+          qty: li.qty,
+          unit: li.unit,
+          unitPrice: li.unitPrice,
+          specs: li.specs,
+        })),
+      },
     },
   });
 
@@ -319,6 +445,7 @@ export async function encodeHistoricalOrderAction(_prevState: string | undefined
     historicalOrderType: data.historicalOrderType,
     releaseDate: releaseDate ? releaseDate.toISOString() : null,
     total: pricing.total,
+    itemCount: parsedItems.data.length,
   });
 
   await notifyCustomer(

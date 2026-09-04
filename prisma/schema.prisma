@@ -596,6 +596,37 @@ model QuotationLineItem {
   notes       String?
 }
 
+/**
+ * An Order's own persisted line items (Sept 4 correction) — same shape as
+ * QuotationLineItem, but for the two paths that never had a Quotation to
+ * hold them: a manually-created ("walk-in") New Order and an Encode Old
+ * Order. Both forms already collect real per-item detail (service/
+ * product, description, qty, unit, unit price) via the same
+ * LineItemsEditor Quotations use, and were already submitting it as the
+ * `lineItemsJson` form field — it just had nowhere to be saved, so every
+ * order-detail/document view fell back to one generic "Order" summary
+ * line instead of the real items. serviceId is nullable (unlike
+ * QuotationLineItem's, which is also nullable but always populated in
+ * practice): a manual/historical order's line item is allowed to be
+ * genuinely freeform, not tied to a Service Master entry. An Order
+ * created FROM a Quotation is unaffected by this model entirely — it
+ * keeps reading its items from quotation.lineItems exactly as before.
+ */
+model OrderLineItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productType String
+  serviceId   String?
+  service     Service? @relation(fields: [serviceId], references: [id])
+  specs       Json?
+  description String
+  qty         Int
+  unit        String?
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  notes       String?
+}
+
 model Order {
   id               String          @id @default(cuid())
   quotationId      String?
@@ -691,6 +722,10 @@ model Order {
   trackingLinks OrderTrackingLink[]
   adjustments   AccountAdjustment[]
   customerForms CustomerForm[]
+  // The Order's own line items (Sept 4 correction) — only ever populated
+  // for a manual/historical order (no linked Quotation); see
+  // OrderLineItem's doc comment.
+  lineItems     OrderLineItem[]
   formOrderAdditions CustomerFormOrder[]
 }
 
@@ -756,6 +791,7 @@ model Service {
 
   inquiries  Inquiry[]
   lineItems  QuotationLineItem[]
+  orderLineItems OrderLineItem[]
   jobOrders  JobOrder[]
   pricingTiers Pricelist[]
   promotions   Promotion[]

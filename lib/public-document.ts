@@ -24,7 +24,12 @@ function loadQuotation(id: string) {
 function loadInvoice(id: string) {
   return prisma.order.findUnique({
     where: { id },
-    include: { customer: true, quotation: { include: { lineItems: true } }, payments: { where: { status: "CONFIRMED" } } },
+    include: {
+      customer: true,
+      quotation: { include: { lineItems: true } },
+      lineItems: true,
+      payments: { where: { status: "CONFIRMED" } },
+    },
   });
 }
 

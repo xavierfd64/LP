@@ -16,10 +16,13 @@ import { paymentSummary } from "@/lib/workflow";
  * itself already enforces.
  *
  * Order items mirror the exact same derivation the Invoice print view
- * already uses (app/(print)/orders/[id]/invoice) — the linked Quotation's
- * line items when one exists, else a single summary line from the
- * Order's own total — never a second, different definition of "what this
- * order contains".
+ * already uses (app/(print)/orders/[id]/invoice): the linked Quotation's
+ * line items when one exists, else the Order's OWN persisted line items
+ * (Sept 4 correction — a manual/historical order now saves these; see
+ * OrderLineItem's schema doc comment), else — only for an order that
+ * genuinely predates that fix and has neither — a single summary line
+ * derived from the Order's own total. Never a second, different
+ * definition of "what this order contains".
  */
 export type OrderDetailResult =
   | {
@@ -37,7 +40,7 @@ export type OrderDetailResult =
         customerName: string;
         customerEmail: string | null;
         customerContact: string | null;
-        items: { id: string; productType: string; description: string; qty: number; unitPrice: string }[];
+        items: { id: string; productType: string; description: string; qty: number; unit: string | null; unitPrice: string }[];
         totalAmount: string;
         confirmedPaid: string;
         balanceDue: string;
@@ -57,6 +60,7 @@ export async function getOrderDetailAction(id: string): Promise<OrderDetailResul
     include: {
       customer: true,
       quotation: { include: { lineItems: true } },
+      lineItems: true,
       jobOrders: { orderBy: { joNumber: "asc" } },
     },
   });
@@ -79,17 +83,28 @@ export async function getOrderDetailAction(id: string): Promise<OrderDetailResul
           productType: li.productType,
           description: li.description,
           qty: li.qty,
+          unit: li.unit,
           unitPrice: li.unitPrice.toString(),
         }))
-      : [
-          {
-            id: order.id,
-            productType: order.jobOrders[0]?.productType ?? "Order",
-            description: `Order ${order.orderNumber}`,
-            qty: 1,
-            unitPrice: order.totalAmount.toString(),
-          },
-        ];
+      : order.lineItems.length > 0
+        ? order.lineItems.map((li) => ({
+            id: li.id,
+            productType: li.productType,
+            description: li.description,
+            qty: li.qty,
+            unit: li.unit,
+            unitPrice: li.unitPrice.toString(),
+          }))
+        : [
+            {
+              id: order.id,
+              productType: order.jobOrders[0]?.productType ?? "Order",
+              description: `Order ${order.orderNumber}`,
+              qty: 1,
+              unit: null,
+              unitPrice: order.totalAmount.toString(),
+            },
+          ];
 
   return {
     ok: true,

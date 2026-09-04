@@ -48,6 +48,7 @@ export default async function OrderDetailPage({
     include: {
       customer: true,
       quotation: { include: { lineItems: { include: { service: true } } } },
+      lineItems: { include: { service: true } },
       jobOrders: { include: { workflowTemplate: true }, orderBy: { joNumber: "asc" } },
       payments: { include: { recordedBy: true }, orderBy: { paymentDate: "desc" } },
       fulfillments: { orderBy: { createdAt: "desc" }, include: { jobOrder: true } },
@@ -124,7 +125,11 @@ export default async function OrderDetailPage({
   // "Encode once, carry forward": prefill a new Job Order from the Order's
   // Quotation so staff don't retype the Service, specs, and quantity that
   // were already captured — still fully editable/overridable in the form.
-  const carryOverLineItem = order.quotation?.lineItems[0];
+  // Sept 4 correction: falls back to the Order's own persisted line items
+  // (manual/historical orders have no Quotation, but now DO have their own
+  // OrderLineItem rows — see that model's schema doc comment) so those
+  // orders get the same prefill benefit instead of an empty form.
+  const carryOverLineItem = order.quotation?.lineItems[0] ?? order.lineItems[0];
   const defaultJoService = carryOverLineItem?.service
     ? {
         id: carryOverLineItem.service.id,
