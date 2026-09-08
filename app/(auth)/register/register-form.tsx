@@ -1,13 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { registerAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { PasswordRequirementsList } from "@/components/auth/password-requirements-list";
 
 export function RegisterForm({ callbackUrl }: { callbackUrl?: string }) {
   const [error, formAction, pending] = useActionState(registerAction, undefined);
+  const [password, setPassword] = useState("");
 
   return (
     <form action={formAction} className="space-y-4">
@@ -31,11 +33,21 @@ export function RegisterForm({ callbackUrl }: { callbackUrl?: string }) {
       </div>
       <div>
         <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" required minLength={6} placeholder="At least 6 characters" />
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          required
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="At least 8 characters"
+        />
       </div>
+      {password && <PasswordRequirementsList password={password} />}
       <div>
         <Label htmlFor="confirmPassword">Confirm password</Label>
-        <Input id="confirmPassword" name="confirmPassword" type="password" required minLength={6} placeholder="Re-enter your password" />
+        <Input id="confirmPassword" name="confirmPassword" type="password" required minLength={8} placeholder="Re-enter your password" />
       </div>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Creating account..." : "Create account"}

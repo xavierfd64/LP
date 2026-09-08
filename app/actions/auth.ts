@@ -8,6 +8,8 @@ import { z } from "zod";
 import { linkOrCreateCustomerForUser } from "@/lib/customer-linking";
 import { safeRedirectPath } from "@/lib/safe-redirect";
 import { isRateLimited, clientIp } from "@/lib/rate-limit";
+import { validatePasswordPolicy } from "@/lib/password-policy";
+import { verifyCaptcha } from "@/lib/captcha";
 
 // IP-keyed: the primary brake on a single credential-stuffing source —
 // generous enough that a normal user mistyping their password a few times,
@@ -28,6 +30,10 @@ export async function loginAction(_prevState: string | undefined, formData: Form
   const password = String(formData.get("password") ?? "");
   const redirectTo = safeRedirectPath(formData.get("callbackUrl") as string | null) ?? "/";
 
+  // Rate limit checked first (before CAPTCHA) so a captcha-guessing script
+  // is bounded by the exact same counters as a credential-guessing one —
+  // both count as "an attempt" against this IP/email regardless of which
+  // check ends up failing it.
   const ip = await clientIp();
   const ipLimited = isRateLimited("login-ip", ip, LOGIN_IP_LIMIT, LOGIN_IP_WINDOW_MS);
   const emailLimited = email ? isRateLimited("login-email", email.toLowerCase(), LOGIN_EMAIL_LIMIT, LOGIN_EMAIL_WINDOW_MS) : false;
@@ -36,6 +42,18 @@ export async function loginAction(_prevState: string | undefined, formData: Form
     // exposed to the client, and this can't be used to probe whether an
     // email is registered.
     return "Invalid email or password.";
+  }
+
+  // CAPTCHA is verified server-side before the real credential check — a
+  // missing/tampered/expired token or a wrong answer is rejected here
+  // regardless of what the frontend does or doesn't render, so a direct
+  // call to this action (bypassing the login page's own UI entirely)
+  // can't skip it either.
+  const captchaToken = String(formData.get("captchaToken") ?? "");
+  const captchaAnswerRaw = formData.get("captchaAnswer");
+  const captchaAnswer = captchaAnswerRaw === null || captchaAnswerRaw === "" ? NaN : Number(captchaAnswerRaw);
+  if (!captchaToken || Number.isNaN(captchaAnswer) || !verifyCaptcha(captchaToken, captchaAnswer)) {
+    return "Incorrect answer to the security check. Please try again.";
   }
 
   try {
@@ -57,14 +75,17 @@ const registerSchema = z
   .object({
     name: z.string().min(2, "Name is required"),
     email: z.string().email("Enter a valid email"),
-    password: z.string().min(6, "Password must be at least 6 characters"),
+    password: z.string(),
     confirmPassword: z.string(),
     companyName: z.string().optional(),
     phone: z.string().optional(),
   })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match.",
-    path: ["confirmPassword"],
+  .superRefine((data, ctx) => {
+    const policyError = validatePasswordPolicy(data.password);
+    if (policyError) ctx.addIssue({ code: "custom", path: ["password"], message: policyError });
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: "Passwords do not match." });
+    }
   });
 
 // IP-keyed only — registration has no existing account to key by, and

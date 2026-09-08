@@ -76,15 +76,16 @@ export function EditStaffModal({
 
                 <div className="border-t border-slate-100 pt-3">
                   <p className="mb-2 text-xs text-slate-500">
-                    Leave both password fields blank to keep the current password unchanged.
+                    Leave both password fields blank to keep the current password unchanged. At least 8 characters, with
+                    uppercase, lowercase, a number, and a special character.
                   </p>
                   <div>
                     <Label htmlFor="es-new-password">New Password</Label>
-                    <Input id="es-new-password" name="newPassword" type="password" autoComplete="new-password" minLength={6} />
+                    <Input id="es-new-password" name="newPassword" type="password" autoComplete="new-password" minLength={8} />
                   </div>
                   <div className="mt-3">
                     <Label htmlFor="es-confirm-password">Confirm New Password</Label>
-                    <Input id="es-confirm-password" name="confirmPassword" type="password" autoComplete="new-password" minLength={6} />
+                    <Input id="es-confirm-password" name="confirmPassword" type="password" autoComplete="new-password" minLength={8} />
                   </div>
                 </div>
 

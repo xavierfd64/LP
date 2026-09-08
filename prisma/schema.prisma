@@ -292,6 +292,7 @@ enum Permission {
   USER_EDIT
   USER_ACTIVATE_DEACTIVATE
   USER_MANAGE_PERMISSIONS
+  USER_RESET_PASSWORD
 
   DOCUMENT_VIEW
   DOCUMENT_SHARE
@@ -341,6 +342,15 @@ model User {
   title        String?
   active       Boolean   @default(true)
   lastActiveAt DateTime?
+  // Set whenever an authorized admin/staff force-resets this account's
+  // password (a brand-new admin-created account starts with this true too
+  // — see createUserAction). requireUser() (lib/session.ts) redirects any
+  // request from this account to /change-password until it's cleared,
+  // enforced server-side on every page/action, not just the frontend —
+  // see that file's doc comment for why. Never true for a normal
+  // self-service password change/reset (those already produce a working
+  // password the user themselves chose).
+  mustChangePassword Boolean @default(false)
   // Bumped on every logout (see app/api/logout/route.ts) and compared
   // against the value embedded in each JWT on every request (lib/auth.ts's
   // jwt callback) — the only way to make logout unconditionally effective

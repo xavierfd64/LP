@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmailEvent } from "@/lib/email";
 import { logAudit } from "@/lib/audit";
 import { createPasswordResetToken, checkPasswordResetToken } from "@/lib/password-reset";
+import { validatePasswordPolicy } from "@/lib/password-policy";
 import { isRateLimited, clientIp } from "@/lib/rate-limit";
 
 const GENERIC_MESSAGE = "If an account exists for that email, we've sent a password reset link.";
@@ -76,10 +77,16 @@ export async function requestPasswordResetAction(_prevState: string | undefined,
 const resetSchema = z
   .object({
     token: z.string().min(1),
-    password: z.string().min(6, "Password must be at least 6 characters"),
+    password: z.string(),
     confirmPassword: z.string(),
   })
-  .refine((d) => d.password === d.confirmPassword, { message: "Passwords do not match.", path: ["confirmPassword"] });
+  .superRefine((d, ctx) => {
+    const policyError = validatePasswordPolicy(d.password);
+    if (policyError) ctx.addIssue({ code: "custom", path: ["password"], message: policyError });
+    if (d.password !== d.confirmPassword) {
+      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: "Passwords do not match." });
+    }
+  });
 
 export async function resetPasswordAction(_prevState: string | undefined, formData: FormData) {
   const parsed = resetSchema.safeParse({

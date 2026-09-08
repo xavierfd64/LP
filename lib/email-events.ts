@@ -46,6 +46,8 @@ export const EMAIL_EVENTS = {
   SOA_SHARED: { label: "Statement of Account Shared", category: "Statement of Account" },
   SOA_PAYMENT_REMINDER: { label: "SOA Payment Reminder", category: "Statement of Account" },
   PASSWORD_RESET: { label: "Password Reset Requested", category: "Account" },
+  ADMIN_PASSWORD_RESET: { label: "Password Reset by Administrator", category: "Account" },
+  USER_ACCOUNT_CREATED: { label: "Account Created by Administrator", category: "Account" },
   FORM_LINK_SENT: { label: "Customer Form Link Sent", category: "Customer Form" },
   FORM_SUBMITTED: { label: "Customer Form Submitted", category: "Customer Form" },
   FORM_REOPENED: { label: "Customer Form Reopened", category: "Customer Form" },
@@ -85,6 +87,7 @@ export const EMAIL_VARIABLES = [
   "soa_link",
   "form_link",
   "reset_link",
+  "temporary_password",
   "business_name",
   "business_phone",
   "business_email",
@@ -107,6 +110,10 @@ export function defaultSubjectFor(key: EmailEventKey): string {
       return "Payment Reminder – Outstanding Balance";
     case "PASSWORD_RESET":
       return "Reset Your Password – {{business_name}}";
+    case "ADMIN_PASSWORD_RESET":
+      return "Your Password Has Been Reset – {{business_name}}";
+    case "USER_ACCOUNT_CREATED":
+      return "Your Account Has Been Created – {{business_name}}";
     case "BALANCE_REMINDER":
       return "Payment Reminder – {{order_number}}";
     default:
@@ -154,6 +161,34 @@ export function defaultBodyFor(key: EmailEventKey): string {
         "[ Reset Your Password ]({{reset_link}})",
         "",
         "This link expires in 1 hour. If you didn't request this, you can safely ignore this email.",
+        "",
+        "Thank you,",
+        "{{business_name}}",
+      ].join("\n");
+    case "ADMIN_PASSWORD_RESET":
+      return [
+        "Hello {{customer_name}},",
+        "",
+        "Your password has been reset by an authorized administrator.",
+        "",
+        "Temporary Password: {{temporary_password}}",
+        "",
+        "Please log in and change this temporary password immediately — you will be required to set a new password before you can continue.",
+        "",
+        "If you did not expect this, please contact us right away.",
+        "",
+        "Thank you,",
+        "{{business_name}}",
+      ].join("\n");
+    case "USER_ACCOUNT_CREATED":
+      return [
+        "Hello {{customer_name}},",
+        "",
+        "An account has been created for you at {{business_name}}.",
+        "",
+        "Temporary Password: {{temporary_password}}",
+        "",
+        "Please log in and change this temporary password immediately — you will be required to set a new password before you can continue.",
         "",
         "Thank you,",
         "{{business_name}}",

@@ -150,6 +150,7 @@ export const PERMISSION_GROUPS = [
       { key: "USER_EDIT", label: "Edit users" },
       { key: "USER_ACTIVATE_DEACTIVATE", label: "Activate/deactivate users" },
       { key: "USER_MANAGE_PERMISSIONS", label: "Manage Staff permissions" },
+      { key: "USER_RESET_PASSWORD", label: "Reset user passwords" },
     ],
   },
   {

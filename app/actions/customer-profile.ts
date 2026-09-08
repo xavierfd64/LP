@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/session";
 import { getCurrentCustomer } from "@/lib/current-customer";
 import { logAudit } from "@/lib/audit";
+import { validatePasswordPolicy } from "@/lib/password-policy";
 import { signIn } from "@/lib/auth";
 import { OAUTH_CONNECT_INTENT_COOKIE } from "@/lib/oauth-connect-intent";
 
@@ -59,10 +60,16 @@ export async function updateOwnProfileAction(_prevState: string | undefined, for
 
 const setPasswordSchema = z
   .object({
-    password: z.string().min(6, "Password must be at least 6 characters"),
+    password: z.string(),
     confirmPassword: z.string(),
   })
-  .refine((d) => d.password === d.confirmPassword, { message: "Passwords do not match.", path: ["confirmPassword"] });
+  .superRefine((d, ctx) => {
+    const policyError = validatePasswordPolicy(d.password);
+    if (policyError) ctx.addIssue({ code: "custom", path: ["password"], message: policyError });
+    if (d.password !== d.confirmPassword) {
+      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: "Passwords do not match." });
+    }
+  });
 
 /** Lets an OAuth-only account (passwordHash null) add email/password as a second sign-in method — spec item 14, "customer later chooses to establish a normal password." Not a "change password" flow — refuses if a password already exists (use Forgot Password for that). */
 export async function setPasswordAction(_prevState: string | undefined, formData: FormData) {
