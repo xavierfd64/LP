@@ -141,19 +141,29 @@ export function navForRole(role: string, staffPermissions?: Set<Permission>): Na
           { label: "Plugins", href: "/admin/plugins" },
           { label: "System Updates", href: "/admin/system-updates" },
         ]) },
+        { section: "ACCOUNT", items: withIcons([{ label: "My Profile", href: "/account/profile" }]) },
       ];
     case "STAFF": {
       const allowed = STAFF_NAV_RULES.filter((item) => !item.permission || staffPermissions?.has(item.permission));
       const sections = ["MAIN", "DESIGN", "OPERATIONS", "FINANCE", "CUSTOMERS", "MANAGEMENT", "SYSTEM"];
-      return sections
-        .map((section) => ({ section, items: withIcons(allowed.filter((i) => i.section === section)) }))
-        .filter((s) => s.items.length > 0);
+      // "My Profile" is unconditional — every Staff account can see and
+      // manage its own profile regardless of what's been granted, so it
+      // deliberately isn't run through STAFF_NAV_RULES' permission filter.
+      return [
+        ...sections
+          .map((section) => ({ section, items: withIcons(allowed.filter((i) => i.section === section)) }))
+          .filter((s) => s.items.length > 0),
+        { section: "ACCOUNT", items: withIcons([{ label: "My Profile", href: "/account/profile" }]) },
+      ];
     }
     case "PRODUCTION":
-      return [{ section: "MAIN", items: withIcons([
-        { label: "Production Queue", href: "/production" },
-        { label: "Inventory", href: "/inventory" },
-      ]) }];
+      return [
+        { section: "MAIN", items: withIcons([
+          { label: "Production Queue", href: "/production" },
+          { label: "Inventory", href: "/inventory" },
+        ]) },
+        { section: "ACCOUNT", items: withIcons([{ label: "My Profile", href: "/account/profile" }]) },
+      ];
     case "CUSTOMER":
       // Grouped per spec item 9. "Invoices" and "Statement of Account" are
       // deliberately separate labels over the same real routes as their

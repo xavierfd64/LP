@@ -48,6 +48,7 @@ export const EMAIL_EVENTS = {
   PASSWORD_RESET: { label: "Password Reset Requested", category: "Account" },
   ADMIN_PASSWORD_RESET: { label: "Password Reset by Administrator", category: "Account" },
   USER_ACCOUNT_CREATED: { label: "Account Created by Administrator", category: "Account" },
+  SECURITY_ACCOUNT_BLOCKED: { label: "Security Alert — Account Blocked", category: "Account" },
   FORM_LINK_SENT: { label: "Customer Form Link Sent", category: "Customer Form" },
   FORM_SUBMITTED: { label: "Customer Form Submitted", category: "Customer Form" },
   FORM_REOPENED: { label: "Customer Form Reopened", category: "Customer Form" },
@@ -114,6 +115,8 @@ export function defaultSubjectFor(key: EmailEventKey): string {
       return "Your Password Has Been Reset – {{business_name}}";
     case "USER_ACCOUNT_CREATED":
       return "Your Account Has Been Created – {{business_name}}";
+    case "SECURITY_ACCOUNT_BLOCKED":
+      return "Security Alert: Account Blocked – {{business_name}}";
     case "BALANCE_REMINDER":
       return "Payment Reminder – {{order_number}}";
     default:
@@ -191,6 +194,16 @@ export function defaultBodyFor(key: EmailEventKey): string {
         "Please log in and change this temporary password immediately — you will be required to set a new password before you can continue.",
         "",
         "Thank you,",
+        "{{business_name}}",
+      ].join("\n");
+    case "SECURITY_ACCOUNT_BLOCKED":
+      return [
+        "Hello {{customer_name}},",
+        "",
+        "{{message}}",
+        "",
+        "[ View Security History ]({{document_link}})",
+        "",
         "{{business_name}}",
       ].join("\n");
     case "DOCUMENT_SHARED":

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 
 // A genuine Route Handler, deliberately NOT a React Server Action — see
 // LogoutButton. Logout is security-sensitive, so it needs the browser's
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
   const session = await auth();
   if (session?.user?.id) {
     await prisma.user.update({ where: { id: session.user.id }, data: { sessionVersion: { increment: 1 } } });
+    await logAudit(session.user.id, "LOGOUT", "User", session.user.id, {});
   }
 
   const jar = await cookies();

@@ -365,6 +365,25 @@ model User {
   // convention: once bumped, every token minted before it is rejected on
   // its very next use, in-flight or not.
   sessionVersion Int     @default(0)
+  // Progressive failed-login lockout state (Sept 8 — User Profile/
+  // Progressive Lockout/Security History improvement). See
+  // lib/login-lockout.ts for the exact escalation rules; enforced inside
+  // lib/auth.ts's Credentials authorize() callback — the one place every
+  // credential check flows through regardless of caller — so it can't be
+  // bypassed by hitting a different URL, tab, device, or the auth API
+  // directly. failedLoginCount counts consecutive wrong-password attempts
+  // since the last stage change; lockoutStage is 0 (normal), 1/2/3 (has
+  // served a 30-min/1-hour/5-hour timed lock and is now within its next
+  // 2-attempt window or, for stage 3, its one final attempt), or 4 (the
+  // terminal 24-hour block). lockedUntil is the timestamp the current
+  // timed lock/block ends; null when not currently locked. A successful
+  // login, a self-service token-based password reset, or an authorized
+  // admin password reset all clear this back to (0, 0, null) — see those
+  // action files for why each is treated as strong-enough proof of
+  // legitimate ownership to lift the block early.
+  failedLoginCount Int       @default(0)
+  lockoutStage     Int       @default(0)
+  lockedUntil      DateTime?
   /// Set (and refreshed) whenever this account signs in via that provider —
   /// drives the "Login & Security" connected-methods display. No separate
   /// Account/adapter table (see lib/auth.ts) since email is the only join

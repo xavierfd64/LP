@@ -11,6 +11,10 @@ import { resolveOAuthUser, type OAuthProvider } from "@/lib/oauth-resolve";
 import { OAUTH_CONNECT_INTENT_COOKIE } from "@/lib/oauth-connect-intent";
 import { getBusinessSettings } from "@/lib/business-settings";
 import { decryptSecret } from "@/lib/email-crypto";
+import { clientIpFromRequest } from "@/lib/rate-limit";
+import { parseDeviceInfo, formatDeviceLabel } from "@/lib/device-info";
+import { isCurrentlyLocked, nextStateAfterFailedLogin, resetLockoutState } from "@/lib/login-lockout";
+import { notifyStaff } from "@/lib/notifications";
 
 /**
  * Google/Facebook credentials: the Admin "Authentication Settings" page
@@ -77,7 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
           email: { label: "Email", type: "email" },
           password: { label: "Password", type: "password" },
         },
-        async authorize(credentials) {
+        async authorize(credentials, request) {
           const email = credentials?.email as string | undefined;
           const password = credentials?.password as string | undefined;
           if (!email || !password) return null;
@@ -85,18 +89,84 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
           const user = await prisma.user.findUnique({ where: { email } });
           if (!user) return null;
           if (!user.active) return null;
+
+          // Progressive lockout — the one place every credential check
+          // flows through (a direct call to this app's own /api/auth
+          // endpoint hits this exact function too), so it can't be
+          // bypassed by a different browser/device/tab, refresh, back/
+          // forward, or calling the auth API directly: the block is a
+          // fresh DB read on this account row, not anything session- or
+          // client-side. See lib/login-lockout.ts for the escalation
+          // rules. Checked before the password is even compared — a
+          // locked account is rejected regardless of whether the
+          // password submitted is actually correct.
+          const now = new Date();
+          const ip = clientIpFromRequest(request);
+          const device = parseDeviceInfo(request.headers.get("user-agent"));
+          const lockoutState = { failedLoginCount: user.failedLoginCount, lockoutStage: user.lockoutStage, lockedUntil: user.lockedUntil };
+
+          if (isCurrentlyLocked(lockoutState, now)) {
+            await logAudit(null, "LOGIN_BLOCKED_LOCKOUT_ACTIVE", "User", user.id, { ip, device: formatDeviceLabel(device), userAgent: device.userAgent, stage: user.lockoutStage });
+            return null;
+          }
+
           if (!user.passwordHash) return null; // OAuth-only account — no password to check against
 
           const valid = await bcrypt.compare(password, user.passwordHash);
-          if (!valid) return null;
 
-          return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            sessionVersion: user.sessionVersion,
-          };
+          if (valid) {
+            if (user.lockoutStage !== 0 || user.failedLoginCount !== 0 || user.lockedUntil) {
+              await prisma.user.update({ where: { id: user.id }, data: resetLockoutState() });
+            }
+            await logAudit(user.id, "LOGIN_SUCCESS", "User", user.id, { ip, device: formatDeviceLabel(device), userAgent: device.userAgent });
+            return {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              sessionVersion: user.sessionVersion,
+            };
+          }
+
+          // Wrong password — advance the escalation state machine and
+          // persist it before returning null, so the rejection is backed
+          // by a real, unconditional DB fact regardless of what happens
+          // to the response after this.
+          const { state: newState, event } = nextStateAfterFailedLogin(lockoutState, now);
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { failedLoginCount: newState.failedLoginCount, lockoutStage: newState.lockoutStage, lockedUntil: newState.lockedUntil },
+          });
+
+          const auditAction =
+            event === "LOCKOUT_30M" ? "ACCOUNT_LOCKED_30M" :
+            event === "LOCKOUT_1H" ? "ACCOUNT_LOCKED_1H" :
+            event === "LOCKOUT_5H" ? "ACCOUNT_LOCKED_5H" :
+            event === "BLOCKED_24H" ? "ACCOUNT_BLOCKED_24H" :
+            "LOGIN_FAILED";
+          await logAudit(null, auditAction, "User", user.id, { ip, device: formatDeviceLabel(device), userAgent: device.userAgent });
+
+          if (event === "BLOCKED_24H") {
+            const alertLink = `/admin/users/${user.id}/security-history`;
+            const alertMessage = [
+              "SECURITY ALERT",
+              `User: ${user.name}`,
+              `Email: ${user.email}`,
+              "Event: Account blocked after repeated failed login attempts",
+              `Time: ${now.toLocaleString("en-US")}`,
+              `IP: ${ip}`,
+              `Device: ${formatDeviceLabel(device)}`,
+            ].join("\n");
+            // Existing "notify all Staff/Admin" broadcast (lib/notifications.ts)
+            // — reused as-is rather than inventing an admin-only channel.
+            // notifyStaff already fans this out to both the in-app bell
+            // AND, per each recipient's own email settings, an email built
+            // from the SECURITY_ACCOUNT_BLOCKED template below — no
+            // separate email-sending loop needed here.
+            await notifyStaff("SECURITY_ACCOUNT_BLOCKED", alertMessage, alertLink);
+          }
+
+          return null;
         },
       }),
       ...oauthProviders,

@@ -109,8 +109,15 @@ export async function resetPasswordAction(_prevState: string | undefined, formDa
   // session minted before it — including one an attacker captured — must
   // stop working immediately, the same way logout does (see
   // User.sessionVersion's doc comment in schema.prisma). Without this, a
-  // hijacked session would keep working right through the "fix".
-  await prisma.user.update({ where: { id: check.userId }, data: { passwordHash, sessionVersion: { increment: 1 } } });
+  // hijacked session would keep working right through the "fix". A
+  // successful token-based reset is also strong-enough proof of
+  // legitimate ownership (a signed, time-limited emailed link) to clear
+  // any failed-login lockout early too — the same reasoning an admin-
+  // initiated reset already gets in app/actions/admin-users.ts.
+  await prisma.user.update({
+    where: { id: check.userId },
+    data: { passwordHash, sessionVersion: { increment: 1 }, failedLoginCount: 0, lockoutStage: 0, lockedUntil: null },
+  });
   // Marks this token AND any other still-outstanding one for this user used
   // — a stale second link from an earlier request can't be replayed later.
   await prisma.passwordResetToken.updateMany({

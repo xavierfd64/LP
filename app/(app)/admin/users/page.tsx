@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { History } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/permissions-guard";
 import { Card } from "@/components/ui/card";
@@ -98,6 +100,11 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
                         />
                       )}
                       {canResetThis && <ResetPasswordModal userId={u.id} name={u.name} email={u.email} />}
+                      <Link href={`/admin/users/${u.id}/security-history`}>
+                        <Button type="button" variant="outline" size="sm">
+                          <History className="h-3.5 w-3.5" /> History
+                        </Button>
+                      </Link>
                       {canActivateDeactivate && u.id !== user.id && (
                         <form action={toggle}>
                           <Button type="submit" size="sm" variant={u.active ? "destructive" : "outline"}>

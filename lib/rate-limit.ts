@@ -45,11 +45,25 @@ export function isRateLimited(bucket: string, key: string, limit: number, window
  * with no proxy in front) — everyone shares one bucket in that case, which
  * is fine for a dev environment.
  */
-export async function clientIp(): Promise<string> {
-  const h = await headers();
+function extractIp(h: Headers): string {
   const forwarded = h.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0].trim();
   const real = h.get("x-real-ip");
   if (real) return real;
   return "unknown";
+}
+
+export async function clientIp(): Promise<string> {
+  const h = await headers();
+  return extractIp(h);
+}
+
+/**
+ * Same header precedence as clientIp(), but for call sites that already
+ * hold a raw Request object instead of running inside a context where
+ * next/headers() works — specifically lib/auth.ts's Credentials
+ * authorize(), which Auth.js hands the original Request directly.
+ */
+export function clientIpFromRequest(request: Request): string {
+  return extractIp(request.headers);
 }

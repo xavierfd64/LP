@@ -1,6 +1,7 @@
 "use server";
 
 import { AuthError } from "next-auth";
+import { headers } from "next/headers";
 import { signIn } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
@@ -10,6 +11,9 @@ import { safeRedirectPath } from "@/lib/safe-redirect";
 import { isRateLimited, clientIp } from "@/lib/rate-limit";
 import { validatePasswordPolicy } from "@/lib/password-policy";
 import { verifyCaptcha } from "@/lib/captcha";
+import { logAudit } from "@/lib/audit";
+import { parseDeviceInfo, formatDeviceLabel } from "@/lib/device-info";
+import { isCurrentlyLocked, lockoutMessage } from "@/lib/login-lockout";
 
 // IP-keyed: the primary brake on a single credential-stuffing source —
 // generous enough that a normal user mistyping their password a few times,
@@ -53,6 +57,17 @@ export async function loginAction(_prevState: string | undefined, formData: Form
   const captchaAnswerRaw = formData.get("captchaAnswer");
   const captchaAnswer = captchaAnswerRaw === null || captchaAnswerRaw === "" ? NaN : Number(captchaAnswerRaw);
   if (!captchaToken || Number.isNaN(captchaAnswer) || !verifyCaptcha(captchaToken, captchaAnswer)) {
+    // Logged for security-history visibility only — deliberately never
+    // counted toward the progressive account-lockout escalation (see
+    // lib/login-lockout.ts's doc comment): a wrong CAPTCHA answer proves
+    // nothing about whether the password was even attempted, and if it
+    // counted toward lockout, anyone who merely knows a victim's email
+    // could lock that account out just by submitting bad CAPTCHA answers
+    // — easier than guessing a password. Governed only by the IP/email
+    // rate limits already checked above.
+    const target = email ? await prisma.user.findUnique({ where: { email }, select: { id: true } }) : null;
+    const device = parseDeviceInfo((await headers()).get("user-agent"));
+    await logAudit(null, "CAPTCHA_FAILED", "User", target?.id ?? (email || "unknown"), { ip, device: formatDeviceLabel(device), userAgent: device.userAgent });
     return "Incorrect answer to the security check. Please try again.";
   }
 
@@ -61,8 +76,21 @@ export async function loginAction(_prevState: string | undefined, formData: Form
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {
-        case "CredentialsSignin":
+        case "CredentialsSignin": {
+          // authorize() (lib/auth.ts) already persisted any lockout-state
+          // change caused by THIS attempt before rejecting it — re-read
+          // it fresh here purely to compose the right user-facing
+          // message; the actual enforcement already happened there
+          // regardless of whether this re-read succeeds.
+          const target = await prisma.user.findUnique({
+            where: { email },
+            select: { lockoutStage: true, lockedUntil: true },
+          });
+          if (target?.lockedUntil && isCurrentlyLocked({ failedLoginCount: 0, lockoutStage: target.lockoutStage, lockedUntil: target.lockedUntil })) {
+            return lockoutMessage(target.lockoutStage, target.lockedUntil);
+          }
           return "Invalid email or password.";
+        }
         default:
           return "Something went wrong. Please try again.";
       }

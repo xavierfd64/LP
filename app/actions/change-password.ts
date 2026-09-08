@@ -68,12 +68,18 @@ export async function forceChangePasswordAction(_prevState: string | undefined, 
     return "Current password is incorrect.";
   }
 
+  const wasForced = dbUser.mustChangePassword;
   const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
   await prisma.user.update({
     where: { id: user.id },
     data: { passwordHash, mustChangePassword: false, sessionVersion: { increment: 1 } },
   });
-  await logAudit(user.id, "PASSWORD_CHANGE_FORCED_COMPLETED", "User", user.id, {});
+  // Distinguishes an actually-forced completion (temp password issued by
+  // an admin reset or a brand-new account) from this same action reused
+  // as the voluntary "change my password" flow on the Profile page (My
+  // Profile -> Password) — both call this one action, never a second
+  // password-change mechanism, only the audit label differs.
+  await logAudit(user.id, wasForced ? "PASSWORD_CHANGE_FORCED_COMPLETED" : "PASSWORD_CHANGE_SELF_SERVICE", "User", user.id, {});
 
   try {
     await signIn("credentials", { email: dbUser.email, password: parsed.data.newPassword, redirectTo: roleHomePath(dbUser.role) });

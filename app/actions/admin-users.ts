@@ -382,13 +382,25 @@ export async function resetUserPasswordAction(userId: string): Promise<ResetPass
   const tempPassword = generateTemporaryPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 10);
 
+  // An authorized admin/staff reset is strong-enough proof to lift any
+  // failed-login lockout early too — the account must not remain
+  // unnecessarily locked after this (spec: "the account must not remain
+  // unnecessarily locked after an authorized administrative reset").
+  const lockoutWasActive = target.lockoutStage !== 0 || target.lockedUntil !== null;
   await prisma.user.update({
     where: { id: userId },
-    data: { passwordHash, mustChangePassword: true, sessionVersion: { increment: 1 } },
+    data: {
+      passwordHash,
+      mustChangePassword: true,
+      sessionVersion: { increment: 1 },
+      failedLoginCount: 0,
+      lockoutStage: 0,
+      lockedUntil: null,
+    },
   });
 
   const ip = await clientIp();
-  await logAudit(actor.id, "USER_PASSWORD_RESET_BY_ADMIN", "User", userId, { targetEmail: target.email, ip });
+  await logAudit(actor.id, "USER_PASSWORD_RESET_BY_ADMIN", "User", userId, { targetEmail: target.email, ip, lockoutCleared: lockoutWasActive });
 
   let emailed = false;
   const settings = await getBusinessSettings();
