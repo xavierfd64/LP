@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { findCustomersWithOutstandingBalance, type SoaBalanceStatus } from "@/lib/soa";
+import { computeServiceCostBreakdown, computeRecommendedSellingPrice } from "@/lib/service-costing";
+import { computeFinancialFoundation } from "@/lib/financial-summary";
+import { resolvePeriodRange } from "@/lib/transaction-summary";
 
 function startOfToday() {
   const d = new Date();
@@ -473,4 +476,273 @@ export async function getStatusCharts() {
     ordersByStatus: ordersByStatusRaw.map((s) => ({ status: s.status, count: s._count._all })),
     productionStatus: jobOrdersByStatus.map((s) => ({ status: s.status, count: s._count._all })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Whiskey dashboard (Image 2 reference) — volume KPIs, weekly analytics,
+// service revenue ranking, service cost breakdown, P&L, payment methods,
+// stock levels, and a tabbed recent-transactions list. Every figure below
+// reuses an existing authoritative calculation (the same count/sum fields
+// read everywhere else, computeServiceCostBreakdown, computeFinancialFoundation)
+// — never a second calculation engine for a number that already has one.
+
+function weekBuckets(n: number) {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return Array.from({ length: n }, (_, i) => {
+    const offsetEnd = (n - 1 - i) * 7;
+    const bucketEnd = new Date(end.getTime() - offsetEnd * 24 * 60 * 60 * 1000);
+    const bucketStart = new Date(bucketEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+    return { start: bucketStart, end: bucketEnd, label: bucketStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }) };
+  });
+}
+
+export type VolumeKpi = { value: number; changePct: number | null; weekly: number[] };
+
+/**
+ * The 5 "Total X" KPIs from the Whiskey dashboard reference (this-month
+ * totals, vs-last-month trend %, and a 6-week sparkline series). Every
+ * count/sum is the same field the rest of the app already reads —
+ * Inquiry/Quotation/Order counts, confirmed Payment sum, InventoryItem
+ * count — never a parallel definition of any of these.
+ */
+export async function getVolumeKpis(): Promise<{
+  inquiries: VolumeKpi;
+  quotations: VolumeKpi;
+  orders: VolumeKpi;
+  payments: VolumeKpi;
+  inventoryItems: VolumeKpi;
+}> {
+  const monthStart = startOfMonth();
+  const lastMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
+  const weeks = weekBuckets(6);
+  const earliestWeekStart = weeks[0].start;
+
+  const [
+    inquiriesThis, inquiriesLast, inquiriesWeekly,
+    quotationsThis, quotationsLast, quotationsWeekly,
+    ordersThis, ordersLast, ordersWeekly,
+    paymentsThisAgg, paymentsLastAgg, paymentsWeekly,
+    inventoryItemsAll,
+  ] = await Promise.all([
+    prisma.inquiry.count({ where: { createdAt: { gte: monthStart } } }),
+    prisma.inquiry.count({ where: { createdAt: { gte: lastMonthStart, lt: monthStart } } }),
+    prisma.inquiry.findMany({ where: { createdAt: { gte: earliestWeekStart } }, select: { createdAt: true } }),
+    prisma.quotation.count({ where: { createdAt: { gte: monthStart } } }),
+    prisma.quotation.count({ where: { createdAt: { gte: lastMonthStart, lt: monthStart } } }),
+    prisma.quotation.findMany({ where: { createdAt: { gte: earliestWeekStart } }, select: { createdAt: true } }),
+    prisma.order.count({ where: { orderDate: { gte: monthStart } } }),
+    prisma.order.count({ where: { orderDate: { gte: lastMonthStart, lt: monthStart } } }),
+    prisma.order.findMany({ where: { orderDate: { gte: earliestWeekStart } }, select: { orderDate: true } }),
+    prisma.payment.aggregate({ where: { status: "CONFIRMED", paymentDate: { gte: monthStart } }, _sum: { amount: true } }),
+    prisma.payment.aggregate({ where: { status: "CONFIRMED", paymentDate: { gte: lastMonthStart, lt: monthStart } }, _sum: { amount: true } }),
+    prisma.payment.findMany({ where: { status: "CONFIRMED", paymentDate: { gte: earliestWeekStart } }, select: { paymentDate: true, amount: true } }),
+    prisma.inventoryItem.findMany({ select: { createdAt: true } }),
+  ]);
+
+  const pctChange = (thisVal: number, lastVal: number): number | null =>
+    lastVal > 0 ? Math.round(((thisVal - lastVal) / lastVal) * 100) : thisVal > 0 ? 100 : null;
+  const weeklyCounts = (dates: Date[]) => weeks.map((w) => dates.filter((d) => d >= w.start && d < w.end).length);
+  const weeklySum = (rows: { date: Date; amount: number }[]) =>
+    weeks.map((w) => rows.filter((r) => r.date >= w.start && r.date < w.end).reduce((s, r) => s + r.amount, 0));
+
+  const inventoryItemsCount = inventoryItemsAll.length;
+  const inventoryCountBeforeMonth = inventoryItemsAll.filter((i) => i.createdAt < monthStart).length;
+  // Inventory Items is a point-in-time stock count, not a flow — its
+  // sparkline tracks the running item count as of each week's end rather
+  // than a per-week "volume," since that's the only honest reading of
+  // "trend" for a catalog count.
+  const inventoryCumulative = weeks.map((w) => inventoryItemsAll.filter((i) => i.createdAt < w.end).length);
+
+  return {
+    inquiries: { value: inquiriesThis, changePct: pctChange(inquiriesThis, inquiriesLast), weekly: weeklyCounts(inquiriesWeekly.map((r) => r.createdAt)) },
+    quotations: { value: quotationsThis, changePct: pctChange(quotationsThis, quotationsLast), weekly: weeklyCounts(quotationsWeekly.map((r) => r.createdAt)) },
+    orders: { value: ordersThis, changePct: pctChange(ordersThis, ordersLast), weekly: weeklyCounts(ordersWeekly.map((r) => r.orderDate)) },
+    payments: {
+      value: Number(paymentsThisAgg._sum.amount ?? 0),
+      changePct: pctChange(Number(paymentsThisAgg._sum.amount ?? 0), Number(paymentsLastAgg._sum.amount ?? 0)),
+      weekly: weeklySum(paymentsWeekly.map((p) => ({ date: p.paymentDate, amount: Number(p.amount) }))),
+    },
+    inventoryItems: { value: inventoryItemsCount, changePct: pctChange(inventoryItemsCount, inventoryCountBeforeMonth), weekly: inventoryCumulative },
+  };
+}
+
+export type SalesOverviewWeek = { week: string; totalSales: number; payments: number; outstanding: number };
+
+/**
+ * "Sales Overview" grouped bar (Image 2) — Total Sales is each week's
+ * Order totals, Payments is confirmed Payment amounts that week, and
+ * Outstanding is simply their difference floored at 0. That subtraction
+ * is a display-only rollup for the chart, not a new per-order balance
+ * calculation — the per-order balance itself is still only ever computed
+ * by lib/workflow.ts's paymentSummary, never re-derived here.
+ */
+export async function getSalesOverviewWeekly(weekCount = 4): Promise<SalesOverviewWeek[]> {
+  const weeks = weekBuckets(weekCount);
+  const earliestStart = weeks[0].start;
+
+  const [orders, payments] = await Promise.all([
+    prisma.order.findMany({ where: { orderDate: { gte: earliestStart } }, select: { orderDate: true, totalAmount: true } }),
+    prisma.payment.findMany({ where: { status: "CONFIRMED", paymentDate: { gte: earliestStart } }, select: { paymentDate: true, amount: true } }),
+  ]);
+
+  return weeks.map((w) => {
+    const totalSales = orders.filter((o) => o.orderDate >= w.start && o.orderDate < w.end).reduce((s, o) => s + Number(o.totalAmount), 0);
+    const paid = payments.filter((p) => p.paymentDate >= w.start && p.paymentDate < w.end).reduce((s, p) => s + Number(p.amount), 0);
+    return { week: w.label, totalSales, payments: paid, outstanding: Math.max(totalSales - paid, 0) };
+  });
+}
+
+export type TopServiceRevenue = { serviceId: string; name: string; revenue: number };
+
+/** "Top Services by Revenue" ranked bar (Image 2), subtitle "Based on confirmed orders" — a plain sum of real OrderLineItem qty × unitPrice, grouped by Service, for orders that were not cancelled. */
+export async function getTopServicesByRevenue(limit = 5): Promise<TopServiceRevenue[]> {
+  const monthStart = startOfMonth();
+  const lines = await prisma.orderLineItem.findMany({
+    where: { order: { status: { not: "CANCELLED" }, orderDate: { gte: monthStart } }, serviceId: { not: null } },
+    select: { serviceId: true, qty: true, unitPrice: true, service: { select: { name: true } } },
+  });
+
+  const totals = new Map<string, { name: string; revenue: number }>();
+  for (const line of lines) {
+    if (!line.serviceId || !line.service) continue;
+    const revenue = line.qty * Number(line.unitPrice);
+    const existing = totals.get(line.serviceId);
+    totals.set(line.serviceId, { name: line.service.name, revenue: (existing?.revenue ?? 0) + revenue });
+  }
+
+  return Array.from(totals.entries())
+    .map(([serviceId, v]) => ({ serviceId, name: v.name, revenue: v.revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, limit);
+}
+
+export type ServiceCostBreakdownDashboard = {
+  serviceName: string;
+  qty: number;
+  unit: string | null;
+  materialCost: number;
+  laborCost: number;
+  overheadCost: number;
+  profitMargin: number | null;
+  totalEstimatedCost: number;
+  suggestedPrice: number | null;
+} | null;
+
+/**
+ * "Service Cost Breakdown" pie (Image 2), e.g. "Example: Tarpaulin
+ * Printing (1 sqm)" — picks the highest-revenue service that actually has
+ * a fully configured cost breakdown and reuses computeServiceCostBreakdown
+ * (the same function the Service Costing admin page reads) rather than a
+ * second costing calculation. Returns null when no service is fully
+ * costed yet — never a fabricated example.
+ */
+export async function getServiceCostBreakdownForDashboard(): Promise<ServiceCostBreakdownDashboard> {
+  const ranked = await getTopServicesByRevenue(20);
+  for (const candidate of ranked) {
+    const breakdown = await computeServiceCostBreakdown(candidate.serviceId, 1);
+    if (breakdown.status !== "CONFIGURED" || breakdown.totalCost == null) continue;
+
+    const service = await prisma.service.findUnique({ where: { id: candidate.serviceId }, select: { targetMarginPct: true } }).catch(() => null);
+    const materialCost = breakdown.materialLines.reduce((s, l) => s + (l.amount ?? 0), 0);
+    const laborCost = breakdown.componentLines.filter((l) => l.category === "LABOR").reduce((s, l) => s + (l.amount ?? 0), 0);
+    const overheadCost = breakdown.componentLines.filter((l) => l.category !== "LABOR").reduce((s, l) => s + (l.amount ?? 0), 0);
+    const targetMarginPct = service?.targetMarginPct != null ? Number(service.targetMarginPct) : null;
+    const suggestedPrice = computeRecommendedSellingPrice(breakdown.totalCost, targetMarginPct);
+    const profitMargin = suggestedPrice != null ? Math.max(suggestedPrice - breakdown.totalCost, 0) : null;
+
+    return {
+      serviceName: candidate.name,
+      qty: 1,
+      unit: null,
+      materialCost,
+      laborCost,
+      overheadCost,
+      profitMargin,
+      totalEstimatedCost: breakdown.totalCost,
+      suggestedPrice,
+    };
+  }
+  return null;
+}
+
+export type MonthlyPL = { revenue: number; productionCost: number; operatingExpenses: number; netProfit: number | null };
+
+/** "Monthly Profit & Loss" bar (Image 2) — reuses computeFinancialFoundation exactly, the one authoritative P&L calculation (lib/financial-summary.ts) also used by the Profit & Loss report. Production Cost is that function's real combined `cogs` figure — it is never split into Material/Labor here because the authoritative calculation doesn't split it either, and inventing that split would be a second costing engine. */
+export async function getMonthlyPL(): Promise<MonthlyPL> {
+  const range = resolvePeriodRange({ type: "monthly" });
+  const fin = await computeFinancialFoundation(range);
+  return { revenue: fin.revenue, productionCost: fin.cogs, operatingExpenses: fin.operatingExpenses, netProfit: fin.netProfit };
+}
+
+export type PaymentMethodShare = { method: string; total: number; pct: number };
+
+/** "Payment Methods" donut (Image 2) — confirmed Payment amounts this month, grouped by the same PaymentMethod enum used everywhere else. */
+export async function getPaymentMethodsBreakdown(): Promise<PaymentMethodShare[]> {
+  const monthStart = startOfMonth();
+  const rows = await prisma.payment.groupBy({
+    by: ["method"],
+    where: { status: "CONFIRMED", paymentDate: { gte: monthStart } },
+    _sum: { amount: true },
+  });
+  const total = rows.reduce((s, r) => s + Number(r._sum.amount ?? 0), 0);
+  return rows
+    .map((r) => ({ method: r.method, total: Number(r._sum.amount ?? 0), pct: total > 0 ? Math.round((Number(r._sum.amount ?? 0) / total) * 100) : 0 }))
+    .sort((a, b) => b.total - a.total);
+}
+
+export type StockLevelRow = { id: string; sku: string; name: string; unit: string; currentQty: number; reorderThreshold: number; low: boolean };
+
+/** "Inventory Stock Levels" table (Image 2) — the 5 real items closest to (or under) their reorder threshold, the same InventoryItem fields the Inventory page itself reads. No fabricated "category" column: InventoryItem has no category field, so it is omitted rather than invented. */
+export async function getInventoryStockLevelsTop5(): Promise<StockLevelRow[]> {
+  const items = await prisma.inventoryItem.findMany({ select: { id: true, sku: true, name: true, unit: true, currentQty: true, reorderThreshold: true } });
+  return items
+    .map((i) => ({ ...i, low: i.currentQty <= i.reorderThreshold, margin: i.currentQty - i.reorderThreshold }))
+    .sort((a, b) => a.margin - b.margin)
+    .slice(0, 5)
+    .map(({ margin, ...rest }) => rest);
+}
+
+export type RecentTransactionRow = {
+  id: string;
+  date: Date;
+  type: "Inquiry" | "Quotation" | "Order" | "Payment";
+  reference: string;
+  customer: string;
+  amount: number | null;
+  status: string;
+  href: string;
+};
+
+/** "Recent Transactions" tabbed table (Image 2) — same merged-row shape as getTodaysActivity, just windowed to the most recent N overall (not "today only") so the dashboard always has rows to show, plus the per-type lists the reference's tabs need. */
+export async function getRecentTransactionsTabbed(limit = 8): Promise<{
+  all: RecentTransactionRow[];
+  inquiries: RecentTransactionRow[];
+  quotations: RecentTransactionRow[];
+  orders: RecentTransactionRow[];
+  payments: RecentTransactionRow[];
+}> {
+  const [inquiries, quotations, orders, payments] = await Promise.all([
+    prisma.inquiry.findMany({ orderBy: { createdAt: "desc" }, take: limit, include: { customer: true } }),
+    prisma.quotation.findMany({ orderBy: { createdAt: "desc" }, take: limit, include: { customer: true } }),
+    prisma.order.findMany({ orderBy: { orderDate: "desc" }, take: limit, include: { customer: true } }),
+    prisma.payment.findMany({ orderBy: { paymentDate: "desc" }, take: limit, include: { order: { include: { customer: true } } } }),
+  ]);
+
+  const inquiryRows: RecentTransactionRow[] = inquiries.map((i) => ({
+    id: `inq-${i.id}`, date: i.createdAt, type: "Inquiry", reference: i.desiredProduct, customer: i.customer.name, amount: null, status: i.status, href: `/inquiries/${i.id}`,
+  }));
+  const quotationRows: RecentTransactionRow[] = quotations.map((q) => ({
+    id: `quo-${q.id}`, date: q.createdAt, type: "Quotation", reference: q.quoteNumber, customer: q.customer.name, amount: Number(q.total), status: q.status, href: `/quotations/${q.id}`,
+  }));
+  const orderRows: RecentTransactionRow[] = orders.map((o) => ({
+    id: `ord-${o.id}`, date: o.orderDate, type: "Order", reference: o.orderNumber, customer: o.customer.name, amount: Number(o.totalAmount), status: o.status, href: `/orders/${o.id}`,
+  }));
+  const paymentRows: RecentTransactionRow[] = payments.map((p) => ({
+    id: `pay-${p.id}`, date: p.paymentDate, type: "Payment", reference: p.order.orderNumber, customer: p.order.customer.name, amount: Number(p.amount), status: p.status, href: `/orders/${p.orderId}`,
+  }));
+
+  const all = [...inquiryRows, ...quotationRows, ...orderRows, ...paymentRows].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, limit);
+
+  return { all, inquiries: inquiryRows, quotations: quotationRows, orders: orderRows, payments: paymentRows };
 }

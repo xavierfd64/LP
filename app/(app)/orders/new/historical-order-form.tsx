@@ -129,7 +129,7 @@ export function HistoricalOrderForm({ onCancel }: { onCancel?: () => void }) {
             </FormSectionCard>
           </div>
 
-          <FormSectionCard number={4} title="Services / Line Items">
+          <FormSectionCard number={4} title="Services / Line Items" tone="purple">
             <LineItemsEditor items={items} onChange={setItems} />
             <TotalsPanel
               rows={[
@@ -205,7 +205,7 @@ export function HistoricalOrderForm({ onCancel }: { onCancel?: () => void }) {
               </div>
             </FormSectionCard>
 
-            <FormSectionCard number={6} title="Additional Information">
+            <FormSectionCard number={6} title="Additional Information" tone="orange">
               <Label htmlFor="historicalNotes">Notes</Label>
               <Textarea
                 id="historicalNotes"

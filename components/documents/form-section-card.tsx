@@ -2,24 +2,25 @@ import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const TONE_CLASSES: Record<string, string> = {
-  purple: "bg-purple-600",
-  blue: "bg-blue-600",
-  green: "bg-green-600",
-  orange: "bg-orange-500",
+  purple: "bg-accent-600",
+  blue: "bg-info-600",
+  green: "bg-success-600",
+  orange: "bg-warning-600",
 };
 
 /**
  * Numbered section card shared by the New Inquiry/Quotation/Order forms
- * (Aug 22 3rd update; extended Sept 9 — Unified Modal Design System) so
- * every large transaction form "feels like one system" — a colored
- * circle + step number, a title, and an optional short description ahead
- * of the section content, matching the New Quotation/New Order reference
- * illustrations exactly (those show every circle in the SAME blue, plus
- * a one-line helper sentence under each title — `tone` defaults to
- * "blue" now for that reason; the other tones remain available for a
- * caller with a deliberate reason to differ, but new callers should just
- * use the default). `action` renders a section-header-right slot (e.g.
- * "+ Add New Customer") for forms that need one.
+ * (Aug 22 3rd update; extended Sept 9 Unified Modal Design System; tones
+ * corrected Sept 9 Whiskey strict-replication pass) so every large
+ * transaction form "feels like one system" — a colored circle + step
+ * number, a title, and an optional short description ahead of the
+ * section content. The Whiskey New Quotation reference shows each
+ * section circle in a DIFFERENT color, not a single uniform blue:
+ * Customer Information/Quotation Information = blue, Services/Line
+ * Items = purple, Notes/Terms = orange — every call site now passes an
+ * explicit `tone` matching that pattern instead of relying on the
+ * default. `action` renders a section-header-right slot (e.g. "+ Add
+ * New Customer") for forms that need one.
  */
 export function FormSectionCard({
   number,

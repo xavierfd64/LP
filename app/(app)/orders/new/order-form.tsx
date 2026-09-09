@@ -153,7 +153,7 @@ export function OrderForm({
         </div>
       </FormSectionCard>
 
-      <FormSectionCard number={3} title="Services / Line Items" description="Add the products or services for this order.">
+      <FormSectionCard number={3} title="Services / Line Items" description="Add the products or services for this order." tone="purple">
         {source === "FROM_QUOTATION" ? (
           <>
             {loadingQuotation && <p className="text-sm text-slate-400">Loading quotation…</p>}
@@ -270,7 +270,7 @@ export function OrderForm({
           </div>
         </FormSectionCard>
 
-        <FormSectionCard number={5} title="Notes / Requirements" description="Add any additional notes or instructions.">
+        <FormSectionCard number={5} title="Notes / Requirements" description="Add any additional notes or instructions." tone="orange">
           <Textarea id="notes" name="notes" rows={5} maxLength={1000} placeholder="Enter notes, terms, conditions, or special instructions here..." />
         </FormSectionCard>
       </div>

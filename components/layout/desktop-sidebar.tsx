@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Printer } from "lucide-react";
 import { SidebarNav } from "./sidebar-nav";
 import { NavSection } from "./nav-config";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,11 @@ export function DesktopSidebar({
   return (
     <aside
       className={cn(
-        "hidden shrink-0 flex-col border-r border-[var(--color-sidebar-border)] bg-[var(--color-sidebar-bg)] px-3 py-4 transition-[width] duration-150 md:flex",
+        // sticky + h-screen (Whiskey reference: the sidebar and its bottom
+        // promo panel stay in view rather than scrolling away with a long
+        // page) — safe here because Shell's root is a plain flex row with
+        // no height constraint of its own on this child.
+        "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-[var(--color-sidebar-border)] bg-[var(--color-sidebar-bg)] px-3 py-4 transition-[width] duration-150 md:flex",
         collapsed ? "w-[68px]" : "w-60"
       )}
     >
@@ -54,6 +58,19 @@ export function DesktopSidebar({
       <div className="flex-1 overflow-y-auto">
         <SidebarNav sections={sections} collapsed={collapsed} />
       </div>
+      {/* Decorative brand panel (Whiskey dashboard reference) — reuses the
+          real businessName/tagline already passed into this component
+          rather than inventing separate marketing copy, so nothing here
+          is fabricated content. Hidden collapsed (no room for its text). */}
+      {!collapsed && tagline && (
+        <div className="mb-2 rounded-lg bg-gradient-to-br from-brand-600 to-brand-800 p-3 text-white">
+          <div className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-white/15">
+            <Printer className="h-4 w-4" />
+          </div>
+          <p className="text-sm font-bold leading-tight">{businessName}</p>
+          <p className="mt-0.5 text-xs text-white/80">{tagline}</p>
+        </div>
+      )}
       <button
         type="button"
         onClick={toggle}

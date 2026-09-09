@@ -36,7 +36,23 @@ export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  // "/" focuses global search (Whiskey reference's search-box hint) —
+  // ignored while the user is already typing in any other field, so it
+  // never steals a literal "/" character from another input/textarea.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -97,6 +113,7 @@ export function GlobalSearch() {
       <div className="relative min-w-0 flex-1">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
+          ref={inputRef}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -123,8 +140,13 @@ export function GlobalSearch() {
             }
           }}
           placeholder="Search customers, quotations, orders, invoices…"
-          className="pl-8"
+          className="pl-8 pr-7"
         />
+        {!query && (
+          <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-400">
+            /
+          </kbd>
+        )}
       </div>
       {/* A true sibling flex item, not an overlay on top of the input — the
           QR button gets its own fixed, dedicated width so it can never

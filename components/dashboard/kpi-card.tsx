@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { KpiSparkline } from "./kpi-sparkline";
 import { cn } from "@/lib/utils";
 
 const ICON_TONE_CLASSES: Record<string, string> = {
@@ -8,6 +9,15 @@ const ICON_TONE_CLASSES: Record<string, string> = {
   orange: "bg-warning-100 text-warning-600",
   purple: "bg-accent-100 text-accent-600",
   green: "bg-success-100 text-success-600",
+};
+
+/** Same tone→token mapping as ICON_TONE_CLASSES above, but as a CSS custom property for the sparkline's SVG stroke/fill (Tailwind classes can't drive recharts' stroke/fill props). */
+const SPARK_COLOR_VAR: Record<string, string> = {
+  blue: "var(--color-info-600)",
+  red: "var(--color-error-600)",
+  orange: "var(--color-warning-600)",
+  purple: "var(--color-accent-600)",
+  green: "var(--color-success-600)",
 };
 
 /**
@@ -28,6 +38,7 @@ export function KpiCard({
   tone,
   icon: Icon,
   iconTone = "blue",
+  spark,
 }: {
   label: string;
   value: string | number;
@@ -36,7 +47,10 @@ export function KpiCard({
   tone?: "attention" | "default";
   icon?: React.ComponentType<{ className?: string }>;
   iconTone?: "blue" | "red" | "orange" | "purple" | "green";
+  /** Optional weekly trend series (Whiskey dashboard reference) — a small filled sparkline rendered under the value/trend text, colored to match `iconTone`. Omit for KPI cards that don't have a real trend series to show. */
+  spark?: number[];
 }) {
+  const sparkColor = SPARK_COLOR_VAR[iconTone];
   const content = (
     // min-w-0 is the actual overflow fix: a CSS grid item defaults to
     // min-width: auto, which lets an unbroken string like a peso-formatted
@@ -59,6 +73,7 @@ export function KpiCard({
         <p className="truncate text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
         <p className="mt-1 break-words text-xl font-bold text-slate-900 sm:text-2xl lg:text-3xl">{value}</p>
         {sub && <p className={cn("mt-0.5 break-words text-xs", tone === "attention" ? "font-medium text-red-600" : "text-slate-400")}>{sub}</p>}
+        {spark && spark.length > 1 && <KpiSparkline data={spark} color={sparkColor} />}
       </CardContent>
     </Card>
   );

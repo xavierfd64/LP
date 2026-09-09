@@ -314,6 +314,15 @@ export default async function OrderDetailPage({
               <span className="text-slate-500">Confirmed: </span>
               {formatCurrency(summary.confirmed)}
             </p>
+            {/* Highlighted Balance row (Whiskey View Order reference) —
+                same summary.total/summary.confirmed already computed above,
+                never a second balance calculation. */}
+            {summary.total - summary.confirmed > 0 && (
+              <div className="-mx-1.5 flex items-center justify-between rounded-md bg-error-100 px-1.5 py-1">
+                <span className="text-sm font-medium text-error-800">Balance</span>
+                <span className="text-sm font-bold text-error-800">{formatCurrency(summary.total - summary.confirmed)}</span>
+              </div>
+            )}
             <p className="font-medium">
               {summary.fullyPaid ? (
                 <span className="text-green-700">Fully paid</span>

@@ -38,7 +38,7 @@ export function InquiryForm({
         <ServicePicker name="serviceId" canAddService={false} onSelect={setService} />
       </FormSectionCard>
 
-      <FormSectionCard number={3} title="Requirements">
+      <FormSectionCard number={3} title="Requirements" tone="orange">
         <div className="space-y-4">
           {service && <SpecFieldsEditor name="specs" fields={service.specFields} />}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

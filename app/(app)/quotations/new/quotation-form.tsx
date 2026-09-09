@@ -68,7 +68,7 @@ export function QuotationForm({
         </div>
       </FormSectionCard>
 
-      <FormSectionCard number={3} title="Services / Line Items" description="Add the products or services for this quotation.">
+      <FormSectionCard number={3} title="Services / Line Items" description="Add the products or services for this quotation." tone="purple">
         <LineItemsEditor items={items} onChange={setItems} />
         <TotalsPanel
           rows={[
@@ -123,7 +123,7 @@ export function QuotationForm({
         </div>
       </FormSectionCard>
 
-      <FormSectionCard number={4} title="Notes / Terms" description="Add any additional notes, terms, or special instructions.">
+      <FormSectionCard number={4} title="Notes / Terms" description="Add any additional notes, terms, or special instructions." tone="orange">
         <Textarea id="notes" name="notes" rows={3} maxLength={1000} placeholder="Enter notes, terms, conditions, or special instructions here..." />
       </FormSectionCard>
 

@@ -67,6 +67,18 @@ export async function Shell({
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
             {showChatWidget && <ChatButton />}
             <NotificationBell notifications={notifications} unreadCount={unreadCount} />
+            {/* Initials avatar (Whiskey reference shows a circular avatar
+                next to the name) — no photo-upload field exists on User,
+                so this derives real initials from the real name rather
+                than inventing a profile photo. */}
+            <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700 sm:flex">
+              {name
+                .split(" ")
+                .map((p) => p[0])
+                .slice(0, 2)
+                .join("")
+                .toUpperCase()}
+            </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium text-slate-900">{name}</p>
               <Badge tone="slate">{role}</Badge>
