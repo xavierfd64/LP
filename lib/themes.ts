@@ -99,6 +99,42 @@ export const THEMES: Record<string, ThemeManifest> = {
       fontFamily: "montserrat",
     },
   },
+  whiskey: {
+    slug: "whiskey",
+    name: "Whiskey",
+    version: "1.0.0",
+    author: "Let's Print",
+    description: "Premium, calm business theme — white sidebar with a solid red active pill, refined dark-navy headings, and a clearer separation between the primary action color and error/danger red than the classic 2026 palette.",
+    defaultTokens: {
+      primary: "#dc2626",
+      secondary: "#111827",
+      accent: "#6b7280",
+      success: "#10b981",
+      warning: "#f59e0b",
+      // Deliberately NOT the same hex as `primary` (see app/globals.css's
+      // own doc note that 2026/nextgen's brand-600 and error-600 are
+      // visually indistinguishable today) — a lighter, distinct red so a
+      // destructive/error state never looks like just another primary
+      // button or badge.
+      error: "#ef4444",
+      info: "#3b82f6",
+      fontFamily: "inter",
+    },
+    sidebarTokens: {
+      // A WHITE sidebar (unlike ProLine's dark navy) — sidebarTokens'
+      // presence still switches the active nav item to a solid brand-600
+      // pill with white text (buildThemeOverrideCss below), which is
+      // exactly the look the Whiskey reference illustrations show: a
+      // light sidebar with one solid red highlighted item, not a light
+      // tinted pill.
+      background: "#ffffff",
+      border: "#e5e7eb",
+      heading: "#111827",
+      text: "#374151",
+      textMuted: "#9ca3af",
+      hoverBg: "#f3f4f6",
+    },
+  },
   proline: {
     slug: "proline",
     name: "ProLine",

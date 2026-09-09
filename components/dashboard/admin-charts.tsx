@@ -16,32 +16,40 @@ import {
   Pie,
 } from "recharts";
 
-/** Mirrors components/ui/badge.tsx's STATUS_TONE mapping so chart colors match the status badges used everywhere else. */
+/**
+ * Mirrors components/ui/badge.tsx's STATUS_TONE mapping so chart colors
+ * match the status badges used everywhere else. Values are CSS custom
+ * properties (the same theme tokens every other component reads — see
+ * app/globals.css/lib/themes.ts), not literal hex, so these charts recolor
+ * automatically with the active theme/admin color customization instead of
+ * always rendering the 2026 defaults regardless of theme (SVG presentation
+ * attributes like `fill` resolve var() the same way any CSS property does).
+ */
 const STATUS_COLORS: Record<string, string> = {
-  NEW: "#3b82f6",
-  OPEN: "#3b82f6",
-  SENT: "#3b82f6",
-  SCHEDULED: "#3b82f6",
-  BOOKED: "#3b82f6",
-  QUOTED: "#a855f7",
-  IN_PRODUCTION: "#a855f7",
-  FULFILLING: "#a855f7",
-  IN_PROGRESS: "#a855f7",
-  IN_TRANSIT: "#a855f7",
-  COMPLETED: "#16a34a",
-  APPROVED: "#16a34a",
-  CONFIRMED: "#16a34a",
-  DELIVERED: "#16a34a",
-  READY: "#16a34a",
-  CANCELLED: "#dc2626",
-  REJECTED: "#dc2626",
-  ON_HOLD: "#ca8a04",
-  PENDING: "#ca8a04",
-  REVISION_REQUESTED: "#ca8a04",
-  CLOSED: "#64748b",
-  DRAFT: "#64748b",
+  NEW: "var(--color-info-600)",
+  OPEN: "var(--color-info-600)",
+  SENT: "var(--color-info-600)",
+  SCHEDULED: "var(--color-info-600)",
+  BOOKED: "var(--color-info-600)",
+  QUOTED: "var(--color-accent-600)",
+  IN_PRODUCTION: "var(--color-accent-600)",
+  FULFILLING: "var(--color-accent-600)",
+  IN_PROGRESS: "var(--color-accent-600)",
+  IN_TRANSIT: "var(--color-accent-600)",
+  COMPLETED: "var(--color-success-600)",
+  APPROVED: "var(--color-success-600)",
+  CONFIRMED: "var(--color-success-600)",
+  DELIVERED: "var(--color-success-600)",
+  READY: "var(--color-success-600)",
+  CANCELLED: "var(--color-error-600)",
+  REJECTED: "var(--color-error-600)",
+  ON_HOLD: "var(--color-warning-600)",
+  PENDING: "var(--color-warning-600)",
+  REVISION_REQUESTED: "var(--color-warning-600)",
+  CLOSED: "var(--color-secondary-600)",
+  DRAFT: "var(--color-secondary-600)",
 };
-const DEFAULT_COLOR = "#dc2626";
+const DEFAULT_COLOR = "var(--color-brand-600)";
 
 const axisTick = { fontSize: 11, fill: "#64748b" };
 const tooltipStyle = { fontSize: 12, borderRadius: 8, borderColor: "#e2e8f0" };
@@ -137,8 +145,8 @@ export function RevenueTrendChart({ data }: { data: { month: string; revenue: nu
           contentStyle={tooltipStyle}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar yAxisId="orders" dataKey="orders" name="Orders" fill="#fecaca" radius={[4, 4, 0, 0]} />
-        <Line yAxisId="revenue" type="monotone" dataKey="revenue" name="Revenue" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} />
+        <Bar yAxisId="orders" dataKey="orders" name="Orders" fill="var(--color-brand-100)" radius={[4, 4, 0, 0]} />
+        <Line yAxisId="revenue" type="monotone" dataKey="revenue" name="Revenue" stroke="var(--color-brand-600)" strokeWidth={2} dot={{ r: 3 }} />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -159,7 +167,7 @@ export function PaymentsByMethodChart({ data }: { data: { method: string; total:
           tickFormatter={(v: number) => (v >= 1000 ? `₱${Math.round(v / 1000)}k` : `₱${v}`)}
         />
         <Tooltip formatter={(value) => [`₱${Number(value).toLocaleString()}`, "Total"]} labelFormatter={(v) => label(String(v))} contentStyle={tooltipStyle} />
-        <Bar dataKey="total" radius={[4, 4, 0, 0]} fill="#dc2626" />
+        <Bar dataKey="total" radius={[4, 4, 0, 0]} fill="var(--color-brand-600)" />
       </BarChart>
     </ResponsiveContainer>
   );
