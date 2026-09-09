@@ -61,7 +61,7 @@ export function QuickActionMenu({ actions, canSend }: { actions: QuickAction[]; 
 
       <NewQuotationModal open={activeModal === "quotation"} onClose={() => setActiveModal(null)} canSend={canSend} />
       <NewOrderModal open={activeModal === "order"} onClose={() => setActiveModal(null)} />
-      <Modal open={activeModal === "payment"} onClose={() => setActiveModal(null)} maxWidthClassName="max-w-md">
+      <Modal open={activeModal === "payment"} onClose={() => setActiveModal(null)} maxWidthClassName="max-w-2xl">
         <ModalHeader title="Record Payment" onClose={() => setActiveModal(null)} />
         <ModalBody>
           <PaymentForm redirectTo="/dashboard" submitLabel="Record Payment" onCancel={() => setActiveModal(null)} />

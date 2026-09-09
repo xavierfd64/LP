@@ -7,6 +7,7 @@ import { Input, Label, Textarea, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { OrderCombobox } from "./order-combobox";
 import type { OrderSearchResult } from "@/app/actions/order-search";
+import { BalancePreviewPanel, useOrderBalance } from "@/components/payments/balance-preview-panel";
 
 /**
  * Shared by the standalone Payments-page modal and (going forward) any
@@ -27,6 +28,13 @@ import type { OrderSearchResult } from "@/app/actions/order-search";
  * action never redirects, so success can only be detected here by
  * watching `pending` fall back to false with no error, which is exactly
  * what the effect below does.
+ *
+ * The live Balance Preview (Sept 9 — "Record Payment" balance-preview
+ * improvement) reuses the exact same BalancePreviewPanel/useOrderBalance
+ * pair HistoricalPaymentForm already used — one shared calculation
+ * (getOrderBalanceAction -> paymentSummary()), not a second one, so this
+ * form's preview can never show a different number than the Old Payment
+ * form or the backend itself would compute.
  */
 export function PaymentForm({
   defaultOrder,
@@ -45,6 +53,8 @@ export function PaymentForm({
 }) {
   const [error, formAction, pending] = useActionState(action, undefined);
   const [orderId, setOrderId] = useState(defaultOrder?.id ?? "");
+  const [amount, setAmount] = useState<number>(0);
+  const balance = useOrderBalance(orderId);
   const wasPending = useRef(false);
 
   useEffect(() => {
@@ -56,47 +66,63 @@ export function PaymentForm({
     <form action={formAction} className="space-y-4">
       {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
       {error && <Alert tone="error">{error}</Alert>}
-      <div>
-        <Label htmlFor="orderId">Order</Label>
-        <OrderCombobox name="orderId" defaultOrder={defaultOrder} onSelectionChange={setOrderId} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="orderId">Order</Label>
+            <OrderCombobox name="orderId" defaultOrder={defaultOrder} onSelectionChange={setOrderId} />
+          </div>
+          <div>
+            <Label htmlFor="amount">Amount (PHP)</Label>
+            <Input
+              id="amount"
+              name="amount"
+              type="number"
+              min={0.01}
+              step="0.01"
+              required
+              value={amount || ""}
+              onChange={(e) => setAmount(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="method">Payment method</Label>
+            <Select id="method" name="method" defaultValue="CASH">
+              <option value="CASH">Cash</option>
+              <option value="BANK_TRANSFER">Bank Transfer</option>
+              <option value="GCASH">GCash</option>
+              <option value="MAYA">Maya</option>
+              <option value="CHEQUE">Cheque</option>
+              <option value="OTHER">Other</option>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="referenceNumber">Reference Number (optional)</Label>
+            <Input id="referenceNumber" name="referenceNumber" placeholder="e.g. GCash ref #, Check #, Bank Ref #" />
+          </div>
+          <div>
+            <Label htmlFor="paymentDate">Payment Date</Label>
+            <Input id="paymentDate" name="paymentDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
+          </div>
+          <div>
+            <Label htmlFor="proofFile">Payment Proof (optional)</Label>
+            <input
+              id="proofFile"
+              name="proofFile"
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-50"
+            />
+          </div>
+          <div>
+            <Label htmlFor="notes">Notes (optional)</Label>
+            <Textarea id="notes" name="notes" rows={2} placeholder="Add any notes about this payment..." />
+          </div>
+        </div>
+
+        <BalancePreviewPanel orderId={orderId} amount={amount} balance={balance} />
       </div>
-      <div>
-        <Label htmlFor="amount">Amount (PHP)</Label>
-        <Input id="amount" name="amount" type="number" min={0.01} step="0.01" required />
-      </div>
-      <div>
-        <Label htmlFor="method">Payment method</Label>
-        <Select id="method" name="method" defaultValue="CASH">
-          <option value="CASH">Cash</option>
-          <option value="BANK_TRANSFER">Bank Transfer</option>
-          <option value="GCASH">GCash</option>
-          <option value="MAYA">Maya</option>
-          <option value="CHEQUE">Cheque</option>
-          <option value="OTHER">Other</option>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="referenceNumber">Reference Number (optional)</Label>
-        <Input id="referenceNumber" name="referenceNumber" placeholder="e.g. GCash ref #, Check #, Bank Ref #" />
-      </div>
-      <div>
-        <Label htmlFor="paymentDate">Payment Date</Label>
-        <Input id="paymentDate" name="paymentDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
-      </div>
-      <div>
-        <Label htmlFor="proofFile">Payment Proof (optional)</Label>
-        <input
-          id="proofFile"
-          name="proofFile"
-          type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
-          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-50"
-        />
-      </div>
-      <div>
-        <Label htmlFor="notes">Notes (optional)</Label>
-        <Textarea id="notes" name="notes" rows={2} placeholder="Add any notes about this payment..." />
-      </div>
+
       <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>

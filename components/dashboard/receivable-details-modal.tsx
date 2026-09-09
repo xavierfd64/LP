@@ -261,7 +261,7 @@ export function ReceivableDetailsModal({
               role="dialog"
               aria-modal="true"
             >
-              <div className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-y-auto rounded-lg bg-white shadow-xl">
+              <div className="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-y-auto rounded-lg bg-white shadow-xl">
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold uppercase tracking-wide text-brand-700">Record Payment</p>

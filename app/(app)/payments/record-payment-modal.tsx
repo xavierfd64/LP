@@ -84,7 +84,7 @@ export function RecordPaymentModal({
         </div>
       )}
 
-      <Modal open={normalOpen} onClose={() => setNormalOpen(false)} maxWidthClassName="max-w-md">
+      <Modal open={normalOpen} onClose={() => setNormalOpen(false)} maxWidthClassName="max-w-2xl">
         <ModalHeader icon={<Wallet className="h-5 w-5" />} title="Record Payment" onClose={() => setNormalOpen(false)} />
         <ModalBody>
           <PaymentForm

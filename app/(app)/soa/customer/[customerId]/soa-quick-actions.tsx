@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, Clock3, Eye, Download, Send, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Modal, ModalHeader, ModalBody } from "@/components/ui/modal";
 import { PaymentForm } from "@/app/(app)/payments/payment-form";
 import { HistoricalPaymentForm } from "@/app/(app)/payments/historical-payment-form";
 import { recordPaymentInPlaceAction } from "@/app/actions/payments";
@@ -136,56 +137,39 @@ export function SoaQuickActions({
         initialTo=""
       />
 
-      {recordOpen && (
-        <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[90dvh] w-full max-w-md flex-col rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <h2 className="text-sm font-semibold text-slate-900">Record Payment</h2>
-              <button type="button" onClick={() => setRecordOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="Close">
-                ✕
-              </button>
-            </div>
-            <div className="overflow-y-auto px-5 py-4">
-              <PaymentForm
-                defaultOrder={defaultOrder}
-                action={recordPaymentInPlaceAction}
-                submitLabel="Record Payment"
-                onCancel={() => setRecordOpen(false)}
-                onSuccess={() => {
-                  setRecordOpen(false);
-                  router.refresh();
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={recordOpen} onClose={() => setRecordOpen(false)} maxWidthClassName="max-w-2xl">
+        <ModalHeader title="Record Payment" onClose={() => setRecordOpen(false)} />
+        <ModalBody>
+          <PaymentForm
+            defaultOrder={defaultOrder}
+            action={recordPaymentInPlaceAction}
+            submitLabel="Record Payment"
+            onCancel={() => setRecordOpen(false)}
+            onSuccess={() => {
+              setRecordOpen(false);
+              router.refresh();
+            }}
+          />
+        </ModalBody>
+      </Modal>
 
-      {historicalOpen && (
-        <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl">
-            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Record Old Payment</h2>
-                <p className="text-xs text-slate-500">Record a payment {customerName} already made but was never entered into LP System.</p>
-              </div>
-              <button type="button" onClick={() => setHistoricalOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="Close">
-                ✕
-              </button>
-            </div>
-            <div className="overflow-y-auto px-5 py-4">
-              <HistoricalPaymentForm
-                defaultOrder={defaultOrder}
-                onCancel={() => setHistoricalOpen(false)}
-                onSuccess={() => {
-                  setHistoricalOpen(false);
-                  router.refresh();
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={historicalOpen} onClose={() => setHistoricalOpen(false)} maxWidthClassName="max-w-2xl">
+        <ModalHeader
+          title="Record Old Payment"
+          subtitle={`Record a payment ${customerName} already made but was never entered into LP System.`}
+          onClose={() => setHistoricalOpen(false)}
+        />
+        <ModalBody>
+          <HistoricalPaymentForm
+            defaultOrder={defaultOrder}
+            onCancel={() => setHistoricalOpen(false)}
+            onSuccess={() => {
+              setHistoricalOpen(false);
+              router.refresh();
+            }}
+          />
+        </ModalBody>
+      </Modal>
     </div>
   );
 }

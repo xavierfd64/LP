@@ -2,13 +2,12 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { recordHistoricalPaymentAction } from "@/app/actions/payments";
-import { getOrderBalanceAction, type OrderBalanceResult } from "@/app/actions/order-search";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { OrderCombobox } from "./order-combobox";
 import type { OrderSearchResult } from "@/app/actions/order-search";
-import { formatCurrency } from "@/lib/utils";
+import { BalancePreviewPanel, useOrderBalance } from "@/components/payments/balance-preview-panel";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -35,26 +34,13 @@ export function HistoricalPaymentForm({
   const [error, formAction, pending] = useActionState(recordHistoricalPaymentAction, undefined);
   const [orderId, setOrderId] = useState(defaultOrder?.id ?? "");
   const [amount, setAmount] = useState<number>(0);
-  const [balance, setBalance] = useState<OrderBalanceResult | null>(null);
+  const balance = useOrderBalance(orderId);
   const wasPending = useRef(false);
 
   useEffect(() => {
     if (wasPending.current && !pending && !error) onSuccess?.();
     wasPending.current = pending;
   }, [pending, error, onSuccess]);
-
-  useEffect(() => {
-    if (!orderId) {
-      setBalance(null);
-      return;
-    }
-    getOrderBalanceAction(orderId).then(setBalance);
-  }, [orderId]);
-
-  const totalPaidBefore = balance?.ok ? balance.confirmedPaid : 0;
-  const orderTotal = balance?.ok ? balance.total : 0;
-  const totalPaidAfter = totalPaidBefore + (amount || 0);
-  const balanceAfter = Math.max(orderTotal - totalPaidAfter, 0);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -103,42 +89,12 @@ export function HistoricalPaymentForm({
           </div>
         </div>
 
-        <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Balance Preview</p>
-          {!orderId ? (
-            <p className="text-sm text-slate-400">Select an order to see its balance.</p>
-          ) : !balance ? (
-            <p className="text-sm text-slate-400">Loading…</p>
-          ) : !balance.ok ? (
-            <p className="text-sm text-red-600">{balance.error}</p>
-          ) : (
-            <dl className="space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Order Total</dt>
-                <dd className="font-medium text-slate-900">{formatCurrency(orderTotal)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Total Paid (Before)</dt>
-                <dd className="font-medium text-slate-900">{formatCurrency(totalPaidBefore)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">This Payment</dt>
-                <dd className="font-medium text-slate-900">{formatCurrency(amount || 0)}</dd>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                <dt className="text-slate-500">Total Paid (After)</dt>
-                <dd className="font-medium text-slate-900">{formatCurrency(totalPaidAfter)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Balance</dt>
-                <dd className={`font-semibold ${balanceAfter > 0 ? "text-yellow-700" : "text-green-700"}`}>{formatCurrency(balanceAfter)}</dd>
-              </div>
-            </dl>
-          )}
-          <Alert tone="info" className="text-xs">
-            Payment Date is the actual date when the customer paid. This payment will affect receivables and SOA based on the payment date.
-          </Alert>
-        </div>
+        <BalancePreviewPanel
+          orderId={orderId}
+          amount={amount}
+          balance={balance}
+          infoText="Payment Date is the actual date when the customer paid. This payment will affect receivables and SOA based on the payment date."
+        />
       </div>
 
       <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
