@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Modal, ModalHeader, ModalBody } from "@/components/ui/modal";
 import { PaymentForm } from "./payment-form";
 import { HistoricalPaymentForm } from "./historical-payment-form";
 import type { OrderSearchResult } from "@/app/actions/order-search";
@@ -83,52 +84,36 @@ export function RecordPaymentModal({
         </div>
       )}
 
-      {normalOpen && (
-        <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[90dvh] w-full max-w-md flex-col rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <h2 className="text-sm font-semibold text-slate-900">Record Payment</h2>
-              <button type="button" onClick={() => setNormalOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="Close">
-                ✕
-              </button>
-            </div>
-            <div className="overflow-y-auto px-5 py-4">
-              <PaymentForm
-                defaultOrder={defaultOrder}
-                redirectTo="/payments"
-                submitLabel="Record Payment"
-                onCancel={() => setNormalOpen(false)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={normalOpen} onClose={() => setNormalOpen(false)} maxWidthClassName="max-w-md">
+        <ModalHeader icon={<Wallet className="h-5 w-5" />} title="Record Payment" onClose={() => setNormalOpen(false)} />
+        <ModalBody>
+          <PaymentForm
+            defaultOrder={defaultOrder}
+            redirectTo="/payments"
+            submitLabel="Record Payment"
+            onCancel={() => setNormalOpen(false)}
+          />
+        </ModalBody>
+      </Modal>
 
-      {historicalOpen && (
-        <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Record Old Payment</h2>
-                <p className="text-xs text-slate-500">Record a payment the customer already made but was never entered into LP System.</p>
-              </div>
-              <button type="button" onClick={() => setHistoricalOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="Close">
-                ✕
-              </button>
-            </div>
-            <div className="overflow-y-auto px-5 py-4">
-              <HistoricalPaymentForm
-                defaultOrder={defaultOrder}
-                onCancel={() => setHistoricalOpen(false)}
-                onSuccess={() => {
-                  setHistoricalOpen(false);
-                  router.refresh();
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={historicalOpen} onClose={() => setHistoricalOpen(false)} maxWidthClassName="max-w-2xl">
+        <ModalHeader
+          icon={<Wallet className="h-5 w-5" />}
+          title="Record Old Payment"
+          subtitle="Record a payment the customer already made but was never entered into LP System."
+          onClose={() => setHistoricalOpen(false)}
+        />
+        <ModalBody>
+          <HistoricalPaymentForm
+            defaultOrder={defaultOrder}
+            onCancel={() => setHistoricalOpen(false)}
+            onSuccess={() => {
+              setHistoricalOpen(false);
+              router.refresh();
+            }}
+          />
+        </ModalBody>
+      </Modal>
     </>
   );
 }

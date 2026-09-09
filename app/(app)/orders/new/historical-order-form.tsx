@@ -58,7 +58,7 @@ export function HistoricalOrderForm({ onCancel }: { onCancel?: () => void }) {
       <input type="hidden" name="discountValue" value={discountValue} />
       <input type="hidden" name="taxPct" value={taxPct} />
 
-      <FormSectionCard number={1} title="Select Type" tone="purple">
+      <FormSectionCard number={1} title="Select Type">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"
@@ -94,7 +94,7 @@ export function HistoricalOrderForm({ onCancel }: { onCancel?: () => void }) {
       {type && (
         <>
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <FormSectionCard number={2} title="Customer Information" tone="purple">
+            <FormSectionCard number={2} title="Customer Information">
               <CustomerPicker name="_customerDisplay" required={false} initialCustomer={customer} onSelect={setCustomer} />
             </FormSectionCard>
 
@@ -129,7 +129,7 @@ export function HistoricalOrderForm({ onCancel }: { onCancel?: () => void }) {
             </FormSectionCard>
           </div>
 
-          <FormSectionCard number={4} title="Services / Line Items" tone="purple">
+          <FormSectionCard number={4} title="Services / Line Items">
             <LineItemsEditor items={items} onChange={setItems} />
             <TotalsPanel
               rows={[
@@ -170,7 +170,7 @@ export function HistoricalOrderForm({ onCancel }: { onCancel?: () => void }) {
           </FormSectionCard>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <FormSectionCard number={5} title="Payment Terms" tone="orange">
+            <FormSectionCard number={5} title="Payment Terms">
               <div className="space-y-3">
                 <div>
                   <Label htmlFor="historicalPaymentTermType">Payment Terms</Label>
@@ -205,7 +205,7 @@ export function HistoricalOrderForm({ onCancel }: { onCancel?: () => void }) {
               </div>
             </FormSectionCard>
 
-            <FormSectionCard number={6} title="Additional Information" tone="green">
+            <FormSectionCard number={6} title="Additional Information">
               <Label htmlFor="historicalNotes">Notes</Label>
               <Textarea
                 id="historicalNotes"

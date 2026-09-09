@@ -1,5 +1,6 @@
 "use client";
 
+import { FileText } from "lucide-react";
 import { Modal, ModalHeader, ModalBody } from "@/components/ui/modal";
 import { OrderForm } from "./new/order-form";
 
@@ -13,7 +14,12 @@ import { OrderForm } from "./new/order-form";
 export function NewOrderModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Modal open={open} onClose={onClose} maxWidthClassName="max-w-4xl">
-      <ModalHeader title="New Order" subtitle="Create a new order. You can create an order from an approved quotation." onClose={onClose} />
+      <ModalHeader
+        icon={<FileText className="h-5 w-5" />}
+        title="New Order"
+        subtitle="Create a new order. You can create an order from an approved quotation."
+        onClose={onClose}
+      />
       <ModalBody>
         <OrderForm onCancel={onClose} />
       </ModalBody>

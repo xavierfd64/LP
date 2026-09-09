@@ -23,7 +23,7 @@ export function InquiryForm({
     <form action={formAction} className="space-y-5">
       {error && <Alert tone="error">{error}</Alert>}
 
-      <FormSectionCard number={1} title="Customer Information" tone="purple">
+      <FormSectionCard number={1} title="Customer Information">
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
           <p className="text-sm font-medium text-slate-900">{customer.name}</p>
           <p className="text-xs text-slate-500">
@@ -34,11 +34,11 @@ export function InquiryForm({
         </div>
       </FormSectionCard>
 
-      <FormSectionCard number={2} title="Service / Product" tone="purple">
+      <FormSectionCard number={2} title="Service / Product">
         <ServicePicker name="serviceId" canAddService={false} onSelect={setService} />
       </FormSectionCard>
 
-      <FormSectionCard number={3} title="Requirements" tone="purple">
+      <FormSectionCard number={3} title="Requirements">
         <div className="space-y-4">
           {service && <SpecFieldsEditor name="specs" fields={service.specFields} />}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -65,7 +65,7 @@ export function InquiryForm({
         </div>
       </FormSectionCard>
 
-      <FormSectionCard number={4} title="Summary" tone="green">
+      <FormSectionCard number={4} title="Summary">
         <Alert tone="info">This inquiry will be reviewed by our team and a quotation will be provided.</Alert>
       </FormSectionCard>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { FileText } from "lucide-react";
 import { Modal, ModalHeader, ModalBody } from "@/components/ui/modal";
 import { QuotationForm } from "./new/quotation-form";
 
@@ -15,7 +16,12 @@ import { QuotationForm } from "./new/quotation-form";
 export function NewQuotationModal({ open, onClose, canSend }: { open: boolean; onClose: () => void; canSend: boolean }) {
   return (
     <Modal open={open} onClose={onClose} maxWidthClassName="max-w-4xl">
-      <ModalHeader title="New Quotation" subtitle="Prepare a quotation for customer approval." onClose={onClose} />
+      <ModalHeader
+        icon={<FileText className="h-5 w-5" />}
+        title="New Quotation"
+        subtitle="Prepare a quotation for customer approval. Fill in the details below."
+        onClose={onClose}
+      />
       <ModalBody>
         <QuotationForm canSend={canSend} onCancel={onClose} />
       </ModalBody>

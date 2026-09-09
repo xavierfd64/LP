@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
-import { X } from "lucide-react";
 import { removeBOMMaterialAction, removeCostComponentAction } from "@/app/actions/service-costing";
 import { Button } from "@/components/ui/button";
+import { Modal, ModalHeader, ModalBody, ModalFooter } from "@/components/ui/modal";
 
-/** Real confirmation dialog before removing a BOM line — matches this app's established pattern for every other delete action. */
+/** Real confirmation dialog before removing a BOM line — using the shared Modal (Sept 9 — Unified Modal Design System). */
 export function DeleteBomLineButton({ kind, id, label }: { kind: "material" | "component"; id: string; label: string }) {
   const [open, setOpen] = useState(false);
   const action = kind === "material" ? removeBOMMaterialAction.bind(null, id) : removeCostComponentAction.bind(null, id);
@@ -16,33 +15,25 @@ export function DeleteBomLineButton({ kind, id, label }: { kind: "material" | "c
       <button type="button" onClick={() => setOpen(true)} className="text-sm font-medium text-red-600 hover:underline">
         Remove
       </button>
-      {open &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="fixed inset-x-0 top-0 h-[100dvh] z-50 flex items-center justify-center bg-slate-900/40 p-4">
-            <div className="w-full max-w-sm max-h-[85dvh] overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-base font-semibold text-slate-900">Remove {kind === "material" ? "Material" : "Cost"}?</h3>
-                <button type="button" onClick={() => setOpen(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Close">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="text-sm text-slate-600">
-                Remove <span className="font-medium text-slate-900">{label}</span> from this service&apos;s production
-                costing? This only affects future cost calculations — historical Orders keep their own cost snapshot.
-              </p>
-              <form action={action} className="mt-4 flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="destructive">
-                  Remove
-                </Button>
-              </form>
-            </div>
-          </div>,
-          document.body
-        )}
+      <Modal open={open} onClose={() => setOpen(false)} maxWidthClassName="max-w-sm">
+        <ModalHeader title={`Remove ${kind === "material" ? "Material" : "Cost"}?`} onClose={() => setOpen(false)} />
+        <form action={action}>
+          <ModalBody>
+            <p className="text-sm text-slate-600">
+              Remove <span className="font-medium text-slate-900">{label}</span> from this service&apos;s production
+              costing? This only affects future cost calculations — historical Orders keep their own cost snapshot.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="destructive">
+              Remove
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </>
   );
 }

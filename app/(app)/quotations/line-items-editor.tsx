@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -100,6 +100,7 @@ export function LineItemsEditor({ items, onChange }: { items: LineItem[]; onChan
         <Table className="table-fixed">
           <THead>
             <TR>
+              <TH className="w-8">#</TH>
               <TH className="w-56">Service / Item</TH>
               <TH>Description</TH>
               <TH className="w-20">Qty</TH>
@@ -112,6 +113,7 @@ export function LineItemsEditor({ items, onChange }: { items: LineItem[]; onChan
           <TBody>
             {items.map((li, i) => (
               <TR key={i}>
+                <TD className="text-slate-400">{i + 1}</TD>
                 <TD>
                   <ServicePicker name={`serviceId-${i}`} initialService={toServiceResult(li)} onSelect={(s) => selectService(i, s)} canAddService={false} />
                   {li.specFields && li.specFields.length > 0 && (
@@ -209,9 +211,13 @@ export function LineItemsEditor({ items, onChange }: { items: LineItem[]; onChan
         ))}
       </div>
 
-      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, { ...emptyLineItem }])}>
-        + Add Line Item
-      </Button>
+      <button
+        type="button"
+        onClick={() => onChange([...items, { ...emptyLineItem }])}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-500 hover:border-brand-400 hover:text-brand-600"
+      >
+        <Plus className="h-4 w-4" /> Add Another Line Item
+      </button>
     </div>
   );
 }

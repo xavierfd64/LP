@@ -39,23 +39,36 @@ export function ModalHeader({
   title,
   subtitle,
   badge,
+  icon,
   onClose,
 }: {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   badge?: React.ReactNode;
+  /**
+   * Optional leading icon in a rounded, tinted square (Sept 9 — Unified
+   * Modal Design System) — matching the "New Quotation"/"New Order"
+   * reference illustrations. Omit for compact/confirmation dialogs, which
+   * don't use one in those same illustrations.
+   */
+  icon?: React.ReactNode;
   onClose: () => void;
 }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-          {badge}
+      <div className="flex min-w-0 items-start gap-3">
+        {icon && (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">{icon}</span>
+        )}
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className={cn("font-semibold text-slate-900", icon ? "text-lg" : "text-sm")}>{title}</h2>
+            {badge}
+          </div>
+          {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
         </div>
-        {subtitle && <p className="mt-0.5 truncate text-xs text-slate-500">{subtitle}</p>}
       </div>
-      <button type="button" onClick={onClose} className="shrink-0 text-slate-400 hover:text-slate-700" aria-label="Close">
+      <button type="button" onClick={onClose} className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">
         ✕
       </button>
     </div>

@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
+import { Send } from "lucide-react";
 import { createOrderAction } from "@/app/actions/orders";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import { FormSectionCard } from "@/components/documents/form-section-card";
 import { LineItemsEditor, lineItemAmount, emptyLineItem, type LineItem } from "../../quotations/line-items-editor";
 import { LineItemsView, type ViewLineItem } from "@/components/documents/line-items-view";
 import { TotalsPanel } from "@/components/documents/editor-shell";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { computeTotals, type DiscountType } from "@/lib/pricing-totals";
 
 type Source = "NEW" | "FROM_QUOTATION";
@@ -107,51 +108,52 @@ export function OrderForm({
       )}
       {effectiveQuotationId && <input type="hidden" name="quotationId" value={effectiveQuotationId} />}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <FormSectionCard number={1} title="Customer Information" tone="purple">
-          {source === "FROM_QUOTATION" ? (
-            effectiveCustomer ? (
-              <div className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2">
-                <p className="text-sm font-medium text-slate-900">
-                  {effectiveCustomer.name}
-                  {effectiveCustomer.companyName ? ` (${effectiveCustomer.companyName})` : ""}
-                </p>
-                <p className="text-xs text-slate-500">Locked from the source quotation</p>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">Select a quotation to load its customer.</p>
-            )
+      <FormSectionCard number={1} title="Customer Information" description="Select an existing customer or add a new one.">
+        {source === "FROM_QUOTATION" ? (
+          effectiveCustomer ? (
+            <div className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2">
+              <p className="text-sm font-medium text-slate-900">
+                {effectiveCustomer.name}
+                {effectiveCustomer.companyName ? ` (${effectiveCustomer.companyName})` : ""}
+              </p>
+              <p className="text-xs text-slate-500">Locked from the source quotation</p>
+            </div>
           ) : (
+            <p className="text-sm text-slate-400">Select a quotation to load its customer.</p>
+          )
+        ) : (
+          <>
             <CustomerPicker name="_customerDisplay" required={false} initialCustomer={manualCustomer} onSelect={setManualCustomer} />
-          )}
-        </FormSectionCard>
+            <Alert tone="info">Select a customer to automatically fill in their details and apply any special pricing.</Alert>
+          </>
+        )}
+      </FormSectionCard>
 
-        <FormSectionCard number={2} title="Order Information" tone="blue">
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="source">Source</Label>
-              <Select
-                id="source"
-                value={source}
-                disabled={lockedFromUrl}
-                onChange={(e) => setSource(e.target.value as Source)}
-              >
-                <option value="NEW">Create New Order</option>
-                <option value="FROM_QUOTATION">From Quotation</option>
-              </Select>
-            </div>
-            {source === "FROM_QUOTATION" && !lockedFromUrl && (
-              <QuotationPicker name="_quotationDisplay" initialQuotation={pickedQuotation} onSelect={setPickedQuotation} />
-            )}
-            <div>
-              <Label htmlFor="orderDate">Order Date</Label>
-              <Input id="orderDate" type="date" disabled defaultValue={new Date().toISOString().slice(0, 10)} />
-            </div>
+      <FormSectionCard number={2} title="Order Information" description="Set the order source and date.">
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="source">Source</Label>
+            <Select
+              id="source"
+              value={source}
+              disabled={lockedFromUrl}
+              onChange={(e) => setSource(e.target.value as Source)}
+            >
+              <option value="NEW">Create New Order</option>
+              <option value="FROM_QUOTATION">From Quotation</option>
+            </Select>
           </div>
-        </FormSectionCard>
-      </div>
+          {source === "FROM_QUOTATION" && !lockedFromUrl && (
+            <QuotationPicker name="_quotationDisplay" initialQuotation={pickedQuotation} onSelect={setPickedQuotation} />
+          )}
+          <div>
+            <Label htmlFor="orderDate">Order Date</Label>
+            <Input id="orderDate" type="date" disabled defaultValue={new Date().toISOString().slice(0, 10)} />
+          </div>
+        </div>
+      </FormSectionCard>
 
-      <FormSectionCard number={3} title="Services / Line Items" tone="purple">
+      <FormSectionCard number={3} title="Services / Line Items" description="Add the products or services for this order.">
         {source === "FROM_QUOTATION" ? (
           <>
             {loadingQuotation && <p className="text-sm text-slate-400">Loading quotation…</p>}
@@ -229,7 +231,7 @@ export function OrderForm({
       </FormSectionCard>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <FormSectionCard number={4} title="Payment Terms" tone="orange">
+        <FormSectionCard number={4} title="Payment Terms" description="Set the required payment arrangement.">
           <div className="space-y-3">
             <div>
               <Label htmlFor="paymentTermType">Payment Terms</Label>
@@ -268,15 +270,17 @@ export function OrderForm({
           </div>
         </FormSectionCard>
 
-        <FormSectionCard number={5} title="Notes / Requirements" tone="green">
-          <Textarea id="notes" name="notes" rows={5} maxLength={1000} placeholder="Add notes or special instructions for this order..." />
+        <FormSectionCard number={5} title="Notes / Requirements" description="Add any additional notes or instructions.">
+          <Textarea id="notes" name="notes" rows={5} maxLength={1000} placeholder="Enter notes, terms, conditions, or special instructions here..." />
         </FormSectionCard>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button type="submit" size="lg" disabled={pending || !effectiveCustomer}>
-          {pending ? "Creating..." : "Create Order"}
-        </Button>
+      <div
+        className={cn(
+          "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end",
+          onCancel && "sticky bottom-0 -mx-5 -mb-4 border-t border-slate-100 bg-white px-5 py-4"
+        )}
+      >
         {onCancel ? (
           <Button type="button" variant="outline" size="lg" className="w-full sm:w-auto" onClick={onCancel}>
             Cancel
@@ -288,6 +292,9 @@ export function OrderForm({
             </Button>
           </Link>
         )}
+        <Button type="submit" size="lg" disabled={pending || !effectiveCustomer}>
+          <Send className="h-4 w-4" /> {pending ? "Creating..." : "Create Order"}
+        </Button>
       </div>
     </form>
   );
